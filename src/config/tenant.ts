@@ -4,7 +4,7 @@
  */
 
 // Tenant identification
-export const TENANT_CODE = process.env.NEXT_PUBLIC_TENANT_CODE || 'swarg';
+export const TENANT_CODE = process.env.NEXT_PUBLIC_TENANT_CODE || 'sv';
 export const TENANT_NAME = process.env.NEXT_PUBLIC_TENANT_NAME || 'Swarg Desi Cow Milk';
 
 // API Configuration
