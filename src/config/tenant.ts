@@ -11,17 +11,9 @@ export const TENANT_NAME = process.env.NEXT_PUBLIC_TENANT_NAME || 'Swarg Desi Co
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://node.desicowmilk.com';
 
 // Build the API URL with tenant code
-// Special case: 'swarg' uses /api (backward compatibility)
-// Other tenants use /api/{tenant_code}
+// All tenants now use /api/{tenant_code} - configured in multiapp admin
 export const getApiUrl = (): string => {
     const baseUrl = API_BASE_URL.replace(/\/$/, ''); // Remove trailing slash
-
-    // For Swarg tenant, use original /api endpoint (backward compatibility)
-    if (TENANT_CODE === 'swarg') {
-        return `${baseUrl}/api`;
-    }
-
-    // For other tenants, use /api/{tenant_code}
     return `${baseUrl}/api/${TENANT_CODE}`;
 };
 
