@@ -119,6 +119,7 @@ export default function AdminUsersPage() {
     const stats = {
         total: adminUsers.length,
         active: adminUsers.filter(u => u.status === 1).length,
+        superAdmins: adminUsers.filter(u => u.role?.[0]?.role_id === 1).length,
         admins: adminUsers.filter(u => u.role?.[0]?.role_id === 2).length,
         subAdmins: adminUsers.filter(u => u.role?.[0]?.role_id === 3).length,
     };
@@ -141,12 +142,12 @@ export default function AdminUsersPage() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="glass rounded-xl p-4">
                     <div className="flex items-center gap-3">
                         <UserCog className="w-8 h-8 text-purple-400" />
                         <div>
-                            <p className="text-sm text-slate-400">Total Admins</p>
+                            <p className="text-sm text-slate-400">Total</p>
                             <p className="text-2xl font-bold text-white">{stats.total}</p>
                         </div>
                     </div>
@@ -154,6 +155,10 @@ export default function AdminUsersPage() {
                 <div className="glass rounded-xl p-4">
                     <p className="text-sm text-slate-400">Active</p>
                     <p className="text-2xl font-bold text-green-400">{stats.active}</p>
+                </div>
+                <div className="glass rounded-xl p-4">
+                    <p className="text-sm text-slate-400">Super Admins</p>
+                    <p className="text-2xl font-bold text-purple-400">{stats.superAdmins}</p>
                 </div>
                 <div className="glass rounded-xl p-4">
                     <p className="text-sm text-slate-400">Admins</p>

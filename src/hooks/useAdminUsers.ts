@@ -26,17 +26,22 @@ export interface Role {
     created_at?: string;
 }
 
-// Fetch admin users (role 2 = Admin, role 3 = SubAdmin)
+// Fetch admin users (role 1 = Super Admin, role 2 = Admin, role 3 = SubAdmin)
 export function useAdminUsers() {
     return useQuery({
         queryKey: ['admin-users'],
         queryFn: async () => {
-            // Fetch admins (role 2) and sub-admins (role 3)
-            const [admins, subAdmins] = await Promise.all([
+            // Fetch all admin types: Super Admin (1), Admin (2), Sub-Admin (3)
+            const [superAdmins, admins, subAdmins] = await Promise.all([
+                GET<AdminUser[]>('/get_user/role/1'),
                 GET<AdminUser[]>('/get_user/role/2'),
                 GET<AdminUser[]>('/get_user/role/3'),
             ]);
-            const combined = [...(admins.data || []), ...(subAdmins.data || [])];
+            const combined = [
+                ...(superAdmins.data || []),
+                ...(admins.data || []),
+                ...(subAdmins.data || [])
+            ];
             return combined;
         },
     });
