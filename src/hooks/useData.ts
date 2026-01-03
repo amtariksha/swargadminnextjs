@@ -42,7 +42,8 @@ export function useDrivers() {
     return useQuery({
         queryKey: ['drivers'],
         queryFn: async () => {
-            const response = await GET<Driver[]>('/get_delivery_boy');
+            // Role 4 = Delivery Partners
+            const response = await GET<Driver[]>('/get_user/role/4');
             return response.data || [];
         },
     });

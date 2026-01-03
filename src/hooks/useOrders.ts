@@ -56,7 +56,8 @@ export function useDeliveryList(date: string) {
     return useQuery({
         queryKey: ['delivery-list', date],
         queryFn: async () => {
-            const response = await GET<DeliveryItem[]>(`/get_delivery_list/${date}`);
+            // This endpoint returns generated order list for a specific date
+            const response = await GET<DeliveryItem[]>(`/get_genrated_order_list/${date}`);
             return response.data || [];
         },
     });
@@ -93,5 +94,36 @@ export function useCalendarOrders(date: string) {
             const response = await GET<CalendarOrder[]>(`/orders_for_calendar/${date}`);
             return response.data || [];
         },
+    });
+}
+
+// Delivery Report
+export interface DeliveryReportItem {
+    id: number;
+    order_id: number;
+    entry_user_id: number;
+    name: string;
+    s_phone: string;
+    title: string;
+    qty: number;
+    qty_text: string;
+    date: string;
+    order_amount: number;
+    pincode: string;
+    subscription_type: number;
+    order_type: number;
+    mark_delivered_time_stamp: string;
+    created_at: string;
+}
+
+export function useDeliveryReport(startDate: string, endDate: string, driverId?: number) {
+    return useQuery({
+        queryKey: ['delivery-report', startDate, endDate, driverId],
+        queryFn: async () => {
+            const driverPath = driverId ? `/${driverId}` : '';
+            const response = await GET<DeliveryReportItem[]>(`/get_report/delivery/${startDate}/${endDate}${driverPath}`);
+            return response.data || [];
+        },
+        enabled: !!startDate && !!endDate,
     });
 }

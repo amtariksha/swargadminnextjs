@@ -175,6 +175,16 @@ const navItems: NavItem[] = [
         href: '/upcoming-orders',
         icon: <Package className="w-5 h-5" />,
     },
+    {
+        name: 'Admin Users',
+        href: '/admin-users',
+        icon: <Users className="w-5 h-5" />,
+    },
+    {
+        name: 'Roles & Permissions',
+        href: '/roles',
+        icon: <Settings className="w-5 h-5" />,
+    },
 ];
 
 interface SidebarProps {
