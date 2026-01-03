@@ -34,9 +34,27 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
     (response) => response,
     (error: AxiosError) => {
+        // Only redirect to login for genuine authentication failures
+        // Check if it's an auth-related 401 (token expired/invalid)
         if (error.response?.status === 401) {
-            // Token expired or invalid - redirect to login
-            if (typeof window !== 'undefined') {
+            const errorData = error.response.data as { message?: string; error?: string } | undefined;
+            const errorMessage = errorData?.message || errorData?.error || '';
+
+            // Only logout if the error message indicates an actual auth failure
+            const isAuthFailure =
+                errorMessage.toLowerCase().includes('token') ||
+                errorMessage.toLowerCase().includes('unauthorized') ||
+                errorMessage.toLowerCase().includes('authentication') ||
+                errorMessage.toLowerCase().includes('jwt') ||
+                errorMessage.toLowerCase().includes('expired') ||
+                errorMessage.toLowerCase().includes('invalid');
+
+            // Also check if we're already on the login page to prevent loops
+            const isLoginPage = typeof window !== 'undefined' &&
+                window.location.pathname.includes('/login');
+
+            if (isAuthFailure && !isLoginPage && typeof window !== 'undefined') {
+                console.warn('Auth failure detected, redirecting to login:', errorMessage);
                 sessionStorage.removeItem('admin');
                 window.location.href = '/login';
             }
