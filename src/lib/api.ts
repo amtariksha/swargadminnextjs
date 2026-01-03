@@ -19,10 +19,15 @@ apiClient.interceptors.request.use(
                     const parsed = JSON.parse(admin);
                     if (parsed?.token) {
                         config.headers.Authorization = `Bearer ${parsed.token}`;
+                        console.log('[API] Token attached to request:', config.url);
+                    } else {
+                        console.warn('[API] No token in admin object for:', config.url);
                     }
-                } catch {
-                    // Invalid JSON in sessionStorage
+                } catch (e) {
+                    console.error('[API] Failed to parse admin from sessionStorage:', e);
                 }
+            } else {
+                console.warn('[API] No admin in sessionStorage for:', config.url);
             }
         }
         return config;
@@ -35,28 +40,36 @@ apiClient.interceptors.response.use(
     (response) => response,
     (error: AxiosError) => {
         // Only redirect to login for genuine authentication failures
-        // Check if it's an auth-related 401 (token expired/invalid)
         if (error.response?.status === 401) {
             const errorData = error.response.data as { message?: string; error?: string } | undefined;
-            const errorMessage = errorData?.message || errorData?.error || '';
+            const errorMessage = (errorData?.message || errorData?.error || '').toLowerCase();
 
-            // Only logout if the error message indicates an actual auth failure
-            const isAuthFailure =
-                errorMessage.toLowerCase().includes('token') ||
-                errorMessage.toLowerCase().includes('unauthorized') ||
-                errorMessage.toLowerCase().includes('authentication') ||
-                errorMessage.toLowerCase().includes('jwt') ||
-                errorMessage.toLowerCase().includes('expired') ||
-                errorMessage.toLowerCase().includes('invalid');
+            console.warn('[API] 401 Error:', errorMessage, 'for:', error.config?.url);
 
-            // Also check if we're already on the login page to prevent loops
+            // Check if token was actually in the request
+            const hadToken = error.config?.headers?.Authorization?.toString().startsWith('Bearer ');
+
+            // Only logout if:
+            // 1. Token WAS sent but was invalid/expired
+            // 2. NOT when token is simply missing (frontend issue)
+            const isTokenInvalidOrExpired =
+                errorMessage.includes('expired') ||
+                errorMessage.includes('invalid token') ||
+                errorMessage.includes('jwt') ||
+                errorMessage.includes('malformed');
+
+            // "Access token required" means token wasn't sent - don't logout, just log the error
+            const isTokenMissing = errorMessage.includes('required') || errorMessage.includes('missing');
+
             const isLoginPage = typeof window !== 'undefined' &&
                 window.location.pathname.includes('/login');
 
-            if (isAuthFailure && !isLoginPage && typeof window !== 'undefined') {
-                console.warn('Auth failure detected, redirecting to login:', errorMessage);
+            if (hadToken && isTokenInvalidOrExpired && !isLoginPage && typeof window !== 'undefined') {
+                console.warn('[API] Token invalid/expired, redirecting to login');
                 sessionStorage.removeItem('admin');
                 window.location.href = '/login';
+            } else if (isTokenMissing) {
+                console.error('[API] Token was not sent with request - this is a frontend issue');
             }
         }
         return Promise.reject(error);
