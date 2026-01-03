@@ -140,18 +140,17 @@ export function useTransactions() {
 // Banners
 export interface Banner {
     id: number;
-    title: string;
-    photo: string;
-    link?: string;
-    status: number;
-    created_at: string;
+    image: string;
+    image_type?: number;
+    created_at?: string;
 }
 
 export function useBanners() {
     return useQuery({
         queryKey: ['banners'],
         queryFn: async () => {
-            const response = await GET<Banner[]>('/get_banner');
+            // Mobile banners endpoint from React admin
+            const response = await GET<Banner[]>('/get_banner/mobile');
             return response.data || [];
         },
     });
@@ -178,14 +177,12 @@ export function useTestimonials() {
     });
 }
 
-// Pincodes
+// Pincodes - API uses pin_code field
 export interface Pincode {
     id: number;
-    pincode: string;
-    area?: string;
-    city?: string;
-    delivery_charge: number;
-    status: number;
+    pin_code: string;  // API field name
+    created_at?: string;
+    updated_at?: string;
 }
 
 export function usePincodes() {
@@ -198,20 +195,71 @@ export function usePincodes() {
     });
 }
 
-// Delivery Locations
+// Delivery Locations - Available delivery locations
 export interface DeliveryLocation {
     id: number;
-    name: string;
-    address?: string;
-    pincode?: string;
-    status: number;
+    title: string;  // API field name
+    created_at?: string;
+    updated_at?: string;
 }
 
 export function useDeliveryLocations() {
     return useQuery({
         queryKey: ['delivery-locations'],
         queryFn: async () => {
-            const response = await GET<DeliveryLocation[]>('/get_delivery_location');
+            // Correct endpoint from React admin
+            const response = await GET<DeliveryLocation[]>('/get_available_delivery_location');
+            return response.data || [];
+        },
+    });
+}
+
+// User Holidays
+export interface Holiday {
+    id: number;
+    user_id: number;
+    name: string;
+    phone: string;
+    date: string;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export function useHolidays() {
+    return useQuery({
+        queryKey: ['holidays'],
+        queryFn: async () => {
+            const response = await GET<Holiday[]>('/get_users_holiday');
+            return response.data || [];
+        },
+    });
+}
+
+// Upcoming Orders (Normal)
+export interface UpcomingOrder {
+    id: number;
+    user_id: number;
+    name: string;
+    s_phone: string;
+    title: string;
+    qty: number;
+    qty_text: string;
+    delivery_boy_name?: string;
+    delivery_status?: number;
+    flat_no?: string;
+    apartment_name?: string;
+    area?: string;
+    city?: string;
+    pincode?: string;
+    order_type?: number;
+    created_at: string;
+}
+
+export function useUpcomingOrders() {
+    return useQuery({
+        queryKey: ['upcoming-orders'],
+        queryFn: async () => {
+            const response = await GET<UpcomingOrder[]>('/get_upcoming_delivery/normal');
             return response.data || [];
         },
     });
