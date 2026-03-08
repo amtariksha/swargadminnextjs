@@ -13,7 +13,7 @@ const apiClient: AxiosInstance = axios.create({
 apiClient.interceptors.request.use(
     (config) => {
         if (typeof window !== 'undefined') {
-            const admin = sessionStorage.getItem('admin');
+            const admin = localStorage.getItem('admin');
             if (admin) {
                 try {
                     const parsed = JSON.parse(admin);
@@ -24,10 +24,10 @@ apiClient.interceptors.request.use(
                         console.warn('[API] No token in admin object for:', config.url);
                     }
                 } catch (e) {
-                    console.error('[API] Failed to parse admin from sessionStorage:', e);
+                    console.error('[API] Failed to parse admin from localStorage:', e);
                 }
             } else {
-                console.warn('[API] No admin in sessionStorage for:', config.url);
+                console.warn('[API] No admin in localStorage for:', config.url);
             }
         }
         return config;
@@ -66,7 +66,7 @@ apiClient.interceptors.response.use(
 
             if (hadToken && isTokenInvalidOrExpired && !isLoginPage && typeof window !== 'undefined') {
                 console.warn('[API] Token invalid/expired, redirecting to login');
-                sessionStorage.removeItem('admin');
+                localStorage.removeItem('admin');
                 window.location.href = '/login';
             } else if (isTokenMissing) {
                 console.error('[API] Token was not sent with request - this is a frontend issue');

@@ -45,10 +45,37 @@ interface NavItem {
 
 const navItems: NavItem[] = [
     {
+        name: 'Dashboard',
+        href: '/dashboard',
+        icon: <LayoutDashboard className="w-5 h-5" />,
+    },
+    // --- Operations ---
+    {
         name: 'Delivery List',
         href: '/delivery-list',
         icon: <ClipboardList className="w-5 h-5" />,
     },
+    {
+        name: 'Packing List',
+        href: '/packing-list',
+        icon: <Package className="w-5 h-5" />,
+    },
+    {
+        name: 'Pre-Packing List',
+        href: '/pre-packing-list',
+        icon: <Package className="w-5 h-5" />,
+    },
+    {
+        name: 'Routewise Products',
+        href: '/routewise-products',
+        icon: <Navigation className="w-5 h-5" />,
+    },
+    {
+        name: 'Dairy Pickup',
+        href: '/dairy-pickup',
+        icon: <Package className="w-5 h-5" />,
+    },
+    // --- Reports ---
     {
         name: 'Delivery Report',
         href: '/delivery-report',
@@ -59,6 +86,7 @@ const navItems: NavItem[] = [
         href: '/performance-report',
         icon: <TrendingUp className="w-5 h-5" />,
     },
+    // --- People ---
     {
         name: 'Users',
         href: '/users',
@@ -69,6 +97,7 @@ const navItems: NavItem[] = [
         href: '/drivers',
         icon: <Truck className="w-5 h-5" />,
     },
+    // --- Catalog ---
     {
         name: 'Categories',
         href: '/categories',
@@ -84,10 +113,21 @@ const navItems: NavItem[] = [
         href: '/products',
         icon: <Package className="w-5 h-5" />,
     },
+    // --- Orders ---
     {
         name: 'Orders',
         href: '/orders',
         icon: <ShoppingCart className="w-5 h-5" />,
+    },
+    {
+        name: 'Upcoming Orders',
+        href: '/upcoming-orders',
+        icon: <ShoppingCart className="w-5 h-5" />,
+    },
+    {
+        name: 'Upcoming Subs Orders',
+        href: '/upcoming-subs-orders',
+        icon: <CalendarDays className="w-5 h-5" />,
     },
     {
         name: 'User Holidays',
@@ -104,6 +144,7 @@ const navItems: NavItem[] = [
         href: '/transactions',
         icon: <CreditCard className="w-5 h-5" />,
     },
+    // --- Content ---
     {
         name: 'Banners',
         href: '/banners',
@@ -121,39 +162,31 @@ const navItems: NavItem[] = [
         ],
     },
     {
-        name: 'Pincodes',
-        href: '/pincodes',
-        icon: <MapPin className="w-5 h-5" />,
-    },
-    {
         name: 'Testimonials',
         href: '/testimonials',
         icon: <MessageSquare className="w-5 h-5" />,
-    },
-    {
-        name: 'Settings',
-        href: '/settings',
-        icon: <Settings className="w-5 h-5" />,
     },
     {
         name: 'Notifications',
         href: '/notifications',
         icon: <Bell className="w-5 h-5" />,
     },
+    // --- Configuration ---
     {
-        name: 'Low Wallet Notification',
-        href: '/notifications/low-wallet',
-        icon: <Wallet className="w-5 h-5" />,
+        name: 'Settings',
+        icon: <Settings className="w-5 h-5" />,
+        children: [
+            { name: 'General', href: '/settings', icon: <Settings className="w-4 h-4" /> },
+            { name: 'Web App', href: '/settings/webapp', icon: <Globe className="w-4 h-4" /> },
+            { name: 'Invoice', href: '/settings/invoice', icon: <Receipt className="w-4 h-4" /> },
+            { name: 'Payment Gateway', href: '/settings/payment', icon: <Banknote className="w-4 h-4" /> },
+            { name: 'Social Media', href: '/settings/social-media', icon: <Share2 className="w-4 h-4" /> },
+        ],
     },
     {
-        name: 'Web App Setting',
-        href: '/settings/webapp',
-        icon: <Globe className="w-5 h-5" />,
-    },
-    {
-        name: 'Invoice Setting',
-        href: '/settings/invoice',
-        icon: <Receipt className="w-5 h-5" />,
+        name: 'Pincodes',
+        href: '/pincodes',
+        icon: <MapPin className="w-5 h-5" />,
     },
     {
         name: 'Delivery Location',
@@ -161,20 +194,11 @@ const navItems: NavItem[] = [
         icon: <Navigation className="w-5 h-5" />,
     },
     {
-        name: 'Payment Gateway',
-        href: '/settings/payment',
-        icon: <Banknote className="w-5 h-5" />,
+        name: 'Low Wallet Notification',
+        href: '/notifications/low-wallet',
+        icon: <Wallet className="w-5 h-5" />,
     },
-    {
-        name: 'Social Media',
-        href: '/settings/social-media',
-        icon: <Share2 className="w-5 h-5" />,
-    },
-    {
-        name: 'Upcoming Orders',
-        href: '/upcoming-orders',
-        icon: <Package className="w-5 h-5" />,
-    },
+    // --- Admin ---
     {
         name: 'Admin Users',
         href: '/admin-users',
@@ -317,8 +341,8 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
                                         <span className="font-medium">{item.name}</span>
                                     </Link>
                                 )}
-                                {/* Dividers matching original sidebar */}
-                                {(index === 2 || index === 4 || index === 7 || index === 11) && (
+                                {/* Section dividers */}
+                                {(index === 0 || index === 5 || index === 7 || index === 9 || index === 12 || index === 18 || index === 22 || index === 26) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>

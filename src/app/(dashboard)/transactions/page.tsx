@@ -1,12 +1,33 @@
 'use client';
 
-import { useTransactions, Transaction } from '@/hooks/useData';
-import DataTable, { Column } from '@/components/DataTable';
+import { useState } from 'react';
 import { format } from 'date-fns';
+import { useTransactions, useTransactionsByDateRange, Transaction } from '@/hooks/useData';
+import DataTable, { Column } from '@/components/DataTable';
+import DateRangePicker from '@/components/DateRangePicker';
 import { CreditCard, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
 export default function TransactionsPage() {
-    const { data: transactions = [], isLoading } = useTransactions();
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const hasDateRange = !!startDate && !!endDate;
+
+    const { data: allTransactions = [], isLoading: allLoading } = useTransactions();
+    const { data: rangeTransactions = [], isLoading: rangeLoading } = useTransactionsByDateRange(startDate, endDate);
+
+    // Normalize UserTransaction[] to Transaction[] format for the DataTable
+    const transactions: Transaction[] = hasDateRange
+        ? rangeTransactions.map(t => ({
+            id: t.id,
+            user_id: t.user_id,
+            amount: t.amount,
+            type: t.type === 1 ? 'credit' : 'debit',
+            payment_method: t.payment_mode === 1 ? 'online' : t.payment_mode === 2 ? 'cash' : undefined,
+            status: 1,
+            created_at: t.created_at,
+        }))
+        : allTransactions;
+    const isLoading = hasDateRange ? rangeLoading : allLoading;
 
     const columns: Column<Transaction>[] = [
         { key: 'id', header: 'ID', width: '80px' },
@@ -85,6 +106,26 @@ export default function TransactionsPage() {
                 <p className="text-slate-400">View wallet transactions</p>
             </div>
 
+            {/* Date Range Filter */}
+            <div className="glass rounded-xl p-4">
+                <DateRangePicker
+                    startDate={startDate}
+                    endDate={endDate}
+                    onChange={(start, end) => {
+                        setStartDate(start);
+                        setEndDate(end);
+                    }}
+                />
+                {hasDateRange && (
+                    <button
+                        onClick={() => { setStartDate(''); setEndDate(''); }}
+                        className="mt-2 text-xs text-slate-400 hover:text-white"
+                    >
+                        Clear date filter
+                    </button>
+                )}
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="glass rounded-xl p-4">
                     <p className="text-sm text-slate-400">Total Transactions</p>
@@ -97,6 +138,12 @@ export default function TransactionsPage() {
                 <div className="glass rounded-xl p-4">
                     <p className="text-sm text-slate-400">Total Debits</p>
                     <p className="text-2xl font-bold text-red-400">₹{totalDebit}</p>
+                </div>
+                <div className="glass rounded-xl p-4">
+                    <p className="text-sm text-slate-400">Net Balance</p>
+                    <p className={`text-2xl font-bold ${totalCredit - totalDebit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        ₹{(totalCredit - totalDebit).toLocaleString()}
+                    </p>
                 </div>
             </div>
 

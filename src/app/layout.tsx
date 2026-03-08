@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { QueryProvider } from "@/lib/query-provider";
 import { BRANDING } from "@/config/tenant";
+import { Toaster } from "sonner";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -26,6 +27,18 @@ export default function RootLayout({
         <QueryProvider>
           <AuthProvider>
             {children}
+            <Toaster
+              theme="dark"
+              position="top-right"
+              toastOptions={{
+                style: {
+                  background: 'rgba(30, 41, 59, 0.95)',
+                  border: '1px solid rgba(100, 116, 139, 0.3)',
+                  color: '#fff',
+                  backdropFilter: 'blur(12px)',
+                },
+              }}
+            />
           </AuthProvider>
         </QueryProvider>
       </body>

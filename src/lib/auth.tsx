@@ -26,14 +26,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
     const router = useRouter();
 
-    // Load admin from sessionStorage on mount
+    // Load admin from localStorage on mount
     useEffect(() => {
-        const stored = sessionStorage.getItem('admin');
+        const stored = localStorage.getItem('admin');
         if (stored) {
             try {
                 setAdmin(JSON.parse(stored));
             } catch {
-                sessionStorage.removeItem('admin');
+                localStorage.removeItem('admin');
             }
         }
         setIsLoading(false);
@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (response.response === 200 && response.data) {
             const adminData = response.data;
-            sessionStorage.setItem('admin', JSON.stringify(adminData));
+            localStorage.setItem('admin', JSON.stringify(adminData));
             setAdmin(adminData);
             router.push('/');
         } else {
@@ -53,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, [router]);
 
     const logout = useCallback(() => {
-        sessionStorage.removeItem('admin');
+        localStorage.removeItem('admin');
         setAdmin(null);
         router.push('/login');
     }, [router]);
