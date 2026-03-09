@@ -40,10 +40,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const login = useCallback(async (email: string, password: string) => {
-        const response = await POST<AdminUser>('/login', { email, password });
+        // Login API returns token at top level: { response: 200, data: {...user}, token: "JWT" }
+        const response = await POST<AdminUser>('/login', { email, password }) as
+            { data: AdminUser; message?: string; response?: number; token?: string };
 
         if (response.response === 200 && response.data) {
-            const adminData = response.data;
+            const adminData = { ...response.data, token: response.token || '' };
             localStorage.setItem('admin', JSON.stringify(adminData));
             setAdmin(adminData);
             router.push('/');
