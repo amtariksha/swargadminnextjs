@@ -100,7 +100,7 @@ export default function DeliveryListPage() {
 
     const { data: drivers = [] } = useDrivers();
 
-    const { data: rawItems = [], isLoading, refetch } = useQuery({
+    const { data: rawItems = [], isLoading, isFetching, refetch } = useQuery({
         queryKey: ['delivery-list', selectedDate],
         queryFn: async () => {
             const response = await GET<DeliveryItem[]>(`/get_genrated_order_list/${selectedDate}`);
@@ -348,8 +348,8 @@ export default function DeliveryListPage() {
                             <option key={d.id} value={d.id}>{d.name}</option>
                         ))}
                     </select>
-                    <button onClick={() => refetch()} className="p-2 bg-slate-800/50 border border-slate-700/50 rounded-xl">
-                        <RefreshCw className="w-5 h-5 text-slate-400" />
+                    <button onClick={() => refetch()} className="p-2 bg-slate-800/50 border border-slate-700/50 rounded-xl hover:bg-slate-700/50 transition-colors">
+                        <RefreshCw className={`w-5 h-5 text-slate-400 ${isFetching ? 'animate-spin' : ''}`} />
                     </button>
                 </div>
             </div>
