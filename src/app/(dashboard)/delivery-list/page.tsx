@@ -213,13 +213,14 @@ export default function DeliveryListPage() {
         },
         {
             key: 'edit_qty',
-            header: 'Qty',
-            width: '50px',
+            header: '',
+            width: '40px',
             render: (item) => (
                 <button
                     onClick={(e) => { e.stopPropagation(); setEditQtyModal({ item, newQty: item.qty }); }}
                     disabled={item.status === 3}
                     className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-30"
+                    title="Edit quantity"
                 >
                     <Edit className="w-3 h-3 text-blue-400" />
                 </button>
