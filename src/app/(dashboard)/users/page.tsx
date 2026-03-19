@@ -43,12 +43,16 @@ export default function UsersPage() {
         {
             key: 'wallet_amount',
             header: 'Wallet',
-            render: (item) => (
-                <div className="flex items-center gap-2">
-                    <Wallet className="w-4 h-4 text-green-400" />
-                    <span className="font-semibold text-green-400">₹{item.wallet_amount || 0}</span>
-                </div>
-            ),
+            render: (item) => {
+                const amount = item.wallet_amount || 0;
+                const isLow = amount < 250;
+                return (
+                    <div className="flex items-center gap-2">
+                        <Wallet className={`w-4 h-4 ${isLow ? 'text-red-400' : 'text-green-400'}`} />
+                        <span className={`font-semibold ${isLow ? 'text-red-400' : 'text-green-400'}`}>₹{amount}</span>
+                    </div>
+                );
+            },
         },
         {
             key: 'address',
@@ -97,6 +101,16 @@ export default function UsersPage() {
                     <p className="text-2xl font-bold text-white">{users.length}</p>
                 </div>
                 <div className="glass rounded-xl p-4">
+                    <p className="text-sm text-slate-400">New (last 7 days)</p>
+                    <p className="text-2xl font-bold text-blue-400">
+                        {users.filter(u => {
+                            if (!u.created_at) return false;
+                            const d = new Date(u.created_at);
+                            return d.getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000;
+                        }).length}
+                    </p>
+                </div>
+                <div className="glass rounded-xl p-4">
                     <p className="text-sm text-slate-400">Active</p>
                     <p className="text-2xl font-bold text-green-400">
                         {users.filter(u => u.status === 1).length}
@@ -105,7 +119,7 @@ export default function UsersPage() {
                 <div className="glass rounded-xl p-4">
                     <p className="text-sm text-slate-400">Total Wallet</p>
                     <p className="text-2xl font-bold text-emerald-400">
-                        ₹{users.reduce((sum, u) => sum + (u.wallet_amount || 0), 0)}
+                        ₹{users.reduce((sum, u) => sum + (u.wallet_amount || 0), 0).toLocaleString()}
                     </p>
                 </div>
             </div>
@@ -114,7 +128,7 @@ export default function UsersPage() {
                 data={users}
                 columns={columns}
                 loading={isLoading}
-                pageSize={15}
+                pageSize={50}
                 searchPlaceholder="Search users..."
                 emptyMessage="No users found"
                 onRowClick={(item) => router.push(`/users/${item.id}`)}

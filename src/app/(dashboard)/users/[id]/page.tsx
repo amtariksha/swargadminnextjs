@@ -49,8 +49,11 @@ export default function UserDetailPage() {
     const [showHolidayModal, setShowHolidayModal] = useState(false);
     const [showTxnModal, setShowTxnModal] = useState(false);
     const [deleteHoliday, setDeleteHoliday] = useState<UserHoliday | null>(null);
-    const [holidayDate, setHolidayDate] = useState('');
+    const [holidayStartDate, setHolidayStartDate] = useState('');
+    const [holidayEndDate, setHolidayEndDate] = useState('');
     const [txnForm, setTxnForm] = useState({ amount: '', type: '1', description: '', payment_mode: '1' });
+
+    const TXN_DESCRIPTION_PRESETS = ['Cash Deposit', 'Recharge', 'Bank Transfer', 'Cheque Payment Via Payment Gateway', 'Refund', 'Referral Bonus'];
 
     const { data: user, isLoading } = useUser(id);
     const { data: orders = [] } = useUserOrders(id);
@@ -64,12 +67,17 @@ export default function UserDetailPage() {
     const addTxnMutation = useAddTransaction();
 
     const handleAddHoliday = async () => {
-        if (!holidayDate) return;
+        if (!holidayStartDate) return;
         try {
-            await addHolidayMutation.mutateAsync({ user_id: id, dates: [holidayDate] });
+            await addHolidayMutation.mutateAsync({
+                user_id: id,
+                date: holidayStartDate,
+                end_date: holidayEndDate || holidayStartDate,
+            });
             toast.success('Holiday added');
             setShowHolidayModal(false);
-            setHolidayDate('');
+            setHolidayStartDate('');
+            setHolidayEndDate('');
         } catch {
             toast.error('Failed to add holiday');
         }
@@ -298,8 +306,14 @@ export default function UserDetailPage() {
                             <span className="text-slate-300">{user.phone || '-'}</span>
                         </div>
                         <div className="flex items-center gap-3">
-                            <Wallet className="w-4 h-4 text-green-400" />
-                            <span className="text-green-400 font-semibold text-lg">₹{user.wallet_amount || 0}</span>
+                            {(() => {
+                                const amt = user.wallet_amount || 0;
+                                const isLow = amt < 250;
+                                return <>
+                                    <Wallet className={`w-4 h-4 ${isLow ? 'text-red-400' : 'text-green-400'}`} />
+                                    <span className={`font-semibold text-lg ${isLow ? 'text-red-400' : 'text-green-400'}`}>₹{amt}</span>
+                                </>;
+                            })()}
                         </div>
                         <div className="flex items-center gap-3 md:col-span-2">
                             <MapPin className="w-4 h-4 text-slate-500" />
@@ -351,10 +365,17 @@ export default function UserDetailPage() {
             {/* Add Holiday Modal */}
             <Modal isOpen={showHolidayModal} onClose={() => setShowHolidayModal(false)} title="Add Holiday">
                 <div className="space-y-4">
-                    <input type="date" value={holidayDate} onChange={(e) => setHolidayDate(e.target.value)} className={inputClassName} />
+                    <div>
+                        <label className="block text-sm text-slate-300 mb-1">Start Date</label>
+                        <input type="date" value={holidayStartDate} onChange={(e) => setHolidayStartDate(e.target.value)} className={inputClassName} />
+                    </div>
+                    <div>
+                        <label className="block text-sm text-slate-300 mb-1">End Date (optional — defaults to start date)</label>
+                        <input type="date" value={holidayEndDate} onChange={(e) => setHolidayEndDate(e.target.value)} min={holidayStartDate} className={inputClassName} />
+                    </div>
                     <div className="flex gap-3">
                         <button onClick={() => setShowHolidayModal(false)} className="flex-1 px-4 py-2.5 text-sm text-slate-300 bg-slate-800/50 rounded-xl">Cancel</button>
-                        <button onClick={handleAddHoliday} disabled={addHolidayMutation.isPending} className="flex-1 px-4 py-2.5 text-sm text-white bg-purple-600 hover:bg-purple-700 rounded-xl disabled:opacity-50">
+                        <button onClick={handleAddHoliday} disabled={addHolidayMutation.isPending || !holidayStartDate} className="flex-1 px-4 py-2.5 text-sm text-white bg-purple-600 hover:bg-purple-700 rounded-xl disabled:opacity-50">
                             {addHolidayMutation.isPending ? 'Adding...' : 'Add Holiday'}
                         </button>
                     </div>
@@ -384,8 +405,14 @@ export default function UserDetailPage() {
                     </div>
                     <div>
                         <label className="block text-sm text-slate-300 mb-1">Description</label>
-                        <input type="text" placeholder="Transaction description" value={txnForm.description} onChange={(e) => setTxnForm({ ...txnForm, description: e.target.value })} className={inputClassName} />
+                        <select value={txnForm.description} onChange={(e) => setTxnForm({ ...txnForm, description: e.target.value })} className={selectClassName}>
+                            <option value="">Select description...</option>
+                            {TXN_DESCRIPTION_PRESETS.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
                     </div>
+                    {txnForm.type === '2' && user && Number(txnForm.amount) > (user.wallet_amount || 0) && (
+                        <p className="text-red-400 text-xs">Debit amount exceeds wallet balance (₹{user.wallet_amount || 0})</p>
+                    )}
                     <div className="flex gap-3">
                         <button onClick={() => setShowTxnModal(false)} className="flex-1 px-4 py-2.5 text-sm text-slate-300 bg-slate-800/50 rounded-xl">Cancel</button>
                         <button onClick={handleAddTransaction} disabled={addTxnMutation.isPending} className="flex-1 px-4 py-2.5 text-sm text-white bg-purple-600 hover:bg-purple-700 rounded-xl disabled:opacity-50">

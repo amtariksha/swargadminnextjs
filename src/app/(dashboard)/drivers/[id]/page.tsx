@@ -27,7 +27,7 @@ export default function DriverDetailPage() {
         name: '',
         phone: '',
         email: '',
-        status: 1,
+        is_location: 0,
     });
 
     const { data: driver, isLoading } = useQuery({
@@ -45,13 +45,13 @@ export default function DriverDetailPage() {
                 name: driver.name || '',
                 phone: driver.phone || '',
                 email: driver.email || '',
-                status: driver.status ?? 1,
+                is_location: driver.is_location ?? 0,
             });
         }
     }, [driver]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const value = e.target.name === 'status' ? Number(e.target.value) : e.target.value;
+        const value = e.target.name === 'is_location' ? Number(e.target.value) : e.target.value;
         setFormData(prev => ({ ...prev, [e.target.name]: value }));
     };
 
@@ -128,14 +128,16 @@ export default function DriverDetailPage() {
                     />
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Status</label>
-                    <select
-                        name="status" value={formData.status} onChange={handleChange}
-                        className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                    >
-                        <option value={1}>Active</option>
-                        <option value={0}>Inactive</option>
-                    </select>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Driver Location Tracking</label>
+                    <div className="flex items-center gap-4">
+                        <span className="text-sm text-slate-400">Off</span>
+                        <button type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, is_location: prev.is_location ? 0 : 1 }))}
+                            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${formData.is_location ? 'bg-green-600' : 'bg-slate-700'}`}>
+                            <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${formData.is_location ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                        <span className="text-sm text-slate-400">On</span>
+                    </div>
                 </div>
 
                 <div className="glass rounded-xl p-4 space-y-2">
