@@ -111,7 +111,7 @@ export default function HolidaysPage() {
                 </button>
             </div>
 
-            <DataTable data={holidays} columns={columns} loading={isLoading} searchPlaceholder="Search holidays..." />
+            <DataTable data={holidays} columns={columns} loading={isLoading} pageSize={50} searchPlaceholder="Search holidays..." />
 
             {showModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
