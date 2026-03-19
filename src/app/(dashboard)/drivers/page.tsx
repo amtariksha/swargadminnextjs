@@ -96,6 +96,7 @@ export default function DriversPage() {
                 loading={isLoading}
                 pageSize={15}
                 searchPlaceholder="Search drivers..."
+                onRowClick={(driver) => router.push(`/drivers/${driver.id}`)}
             />
         </div>
     );

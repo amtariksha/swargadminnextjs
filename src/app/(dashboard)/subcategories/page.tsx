@@ -5,7 +5,7 @@ import { useSubcategories, Subcategory } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { Plus, Layers, Trash2, Edit } from 'lucide-react';
-import { POST, PUT, DELETE } from '@/lib/api';
+import { POST } from '@/lib/api';
 
 export default function SubcategoriesPage() {
     const { data: subcategories = [], isLoading, refetch } = useSubcategories();
@@ -19,9 +19,9 @@ export default function SubcategoriesPage() {
         setIsSubmitting(true);
         try {
             if (editItem) {
-                await PUT(`/update_subcategory/${editItem.id}`, formData);
+                await POST('/update_sub_cat', { id: editItem.id, ...formData });
             } else {
-                await POST('/add_subcategory', formData);
+                await POST('/add_sub_cat', formData);
             }
             setIsModalOpen(false);
             setEditItem(null);
@@ -72,7 +72,7 @@ export default function SubcategoriesPage() {
                         className="p-2 hover:bg-slate-800/50 rounded-lg">
                         <Edit className="w-4 h-4 text-slate-400" />
                     </button>
-                    <button onClick={async (e) => { e.stopPropagation(); if (confirm('Delete?')) { await DELETE(`/delete_subcategory/${item.id}`); refetch(); } }}
+                    <button onClick={async (e) => { e.stopPropagation(); if (confirm('Delete?')) { await POST('/delete_sub_cat', { id: item.id }); refetch(); } }}
                         className="p-2 hover:bg-red-500/10 rounded-lg text-red-400">
                         <Trash2 className="w-4 h-4" />
                     </button>

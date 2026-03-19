@@ -6,7 +6,7 @@ import { useCategories, Category } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { Plus, FolderTree, Trash2, Edit } from 'lucide-react';
-import { POST, PUT, DELETE } from '@/lib/api';
+import { POST } from '@/lib/api';
 
 export default function CategoriesPage() {
     const router = useRouter();
@@ -21,9 +21,9 @@ export default function CategoriesPage() {
         setIsSubmitting(true);
         try {
             if (editItem) {
-                await PUT(`/update_category/${editItem.id}`, formData);
+                await POST('/update_cat', { id: editItem.id, ...formData });
             } else {
-                await POST('/add_category', formData);
+                await POST('/add_cat', formData);
             }
             setIsModalOpen(false);
             setEditItem(null);
@@ -44,7 +44,7 @@ export default function CategoriesPage() {
 
     const handleDelete = async (id: number) => {
         if (confirm('Are you sure you want to delete this category?')) {
-            await DELETE(`/delete_category/${id}`);
+            await POST('/delete_cat', { id });
             refetch();
         }
     };

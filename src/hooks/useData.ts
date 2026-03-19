@@ -804,8 +804,12 @@ export function useAddTransaction() {
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['transactions'] });
             if (variables.user_id) {
-                queryClient.invalidateQueries({ queryKey: ['user-transactions', variables.user_id] });
-                queryClient.invalidateQueries({ queryKey: ['user', variables.user_id] });
+                const uid = String(variables.user_id);
+                queryClient.invalidateQueries({ queryKey: ['user-transactions', uid] });
+                queryClient.invalidateQueries({ queryKey: ['user-transactions', Number(variables.user_id)] });
+                queryClient.invalidateQueries({ queryKey: ['user', uid] });
+                queryClient.invalidateQueries({ queryKey: ['user', Number(variables.user_id)] });
+                queryClient.invalidateQueries({ queryKey: ['users'] });
             }
         },
     });
