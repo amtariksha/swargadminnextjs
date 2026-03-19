@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useUsers } from '@/hooks/useData';
-import { useOrders } from '@/hooks/useOrders';
+import { useDeliveryList } from '@/hooks/useOrders';
 import {
     Users,
     ShoppingCart,
@@ -19,15 +19,16 @@ export default function DashboardPage() {
     const router = useRouter();
     const { data: users = [], isLoading: usersLoading } = useUsers();
     const today = format(new Date(), 'yyyy-MM-dd');
-    const { data: todayOrders = [], isLoading: ordersLoading } = useOrders(today);
+    const { data: todayDeliveries = [], isLoading: deliveriesLoading } = useDeliveryList(today);
 
-    const isLoading = usersLoading || ordersLoading;
+    const isLoading = usersLoading || deliveriesLoading;
 
     const activeUsers = users.filter((u) => u.status === 1).length;
     const totalWallet = users.reduce((sum, u) => sum + (u.wallet_amount || 0), 0);
     const lowWalletUsers = users.filter((u) => (u.wallet_amount || 0) < 100).length;
-    const pendingOrders = todayOrders.filter((o) => o.order_status === 0 || o.status === 0).length;
-    const todayRevenue = todayOrders.reduce((sum, o) => sum + (o.final_amount || 0), 0);
+    const pendingDeliveries = todayDeliveries.filter((d) => d.status === 1).length;
+    const deliveredCount = todayDeliveries.filter((d) => d.status === 3).length;
+    const todayRevenue = todayDeliveries.reduce((sum, d) => sum + (d.order_amount || 0), 0);
 
     const stats = [
         {
@@ -45,32 +46,32 @@ export default function DashboardPage() {
             bg: 'from-green-500/20 to-green-600/10',
         },
         {
-            label: "Today's Orders",
-            value: todayOrders.length,
-            icon: ShoppingCart,
+            label: "Today's Deliveries",
+            value: todayDeliveries.length,
+            icon: TruckIcon,
             color: 'text-purple-400',
             bg: 'from-purple-500/20 to-purple-600/10',
+        },
+        {
+            label: 'Delivered',
+            value: deliveredCount,
+            icon: ShoppingCart,
+            color: 'text-emerald-400',
+            bg: 'from-emerald-500/20 to-emerald-600/10',
+        },
+        {
+            label: 'Pending',
+            value: pendingDeliveries,
+            icon: TruckIcon,
+            color: 'text-orange-400',
+            bg: 'from-orange-500/20 to-orange-600/10',
         },
         {
             label: "Today's Revenue",
             value: `₹${todayRevenue.toLocaleString()}`,
             icon: Wallet,
-            color: 'text-emerald-400',
-            bg: 'from-emerald-500/20 to-emerald-600/10',
-        },
-        {
-            label: 'Total Wallet Balance',
-            value: `₹${totalWallet.toLocaleString()}`,
-            icon: Wallet,
             color: 'text-cyan-400',
             bg: 'from-cyan-500/20 to-cyan-600/10',
-        },
-        {
-            label: 'Pending Deliveries',
-            value: pendingOrders,
-            icon: TruckIcon,
-            color: 'text-orange-400',
-            bg: 'from-orange-500/20 to-orange-600/10',
         },
         {
             label: 'Low Wallet Users',
@@ -142,20 +143,20 @@ export default function DashboardPage() {
                         View All <ArrowRight className="w-4 h-4" />
                     </button>
                 </div>
-                {ordersLoading ? (
+                {deliveriesLoading ? (
                     <div className="space-y-3">
                         {[...Array(5)].map((_, i) => (
                             <div key={i} className="h-14 bg-slate-800/50 rounded-xl animate-pulse" />
                         ))}
                     </div>
-                ) : todayOrders.length === 0 ? (
-                    <p className="text-slate-500 text-sm py-8 text-center">No orders today</p>
+                ) : todayDeliveries.length === 0 ? (
+                    <p className="text-slate-500 text-sm py-8 text-center">No deliveries today</p>
                 ) : (
                     <div className="space-y-2">
-                        {todayOrders.slice(0, 10).map((order) => (
+                        {todayDeliveries.slice(0, 10).map((item, idx) => (
                             <div
-                                key={order.id}
-                                onClick={() => router.push(`/orders/${order.id}`)}
+                                key={`${item.pre_delivery_id}-${idx}`}
+                                onClick={() => router.push(`/orders/${item.id}`)}
                                 className="flex items-center justify-between p-3 bg-slate-900/30 hover:bg-slate-800/30 rounded-xl cursor-pointer transition-colors"
                             >
                                 <div className="flex items-center gap-3">
@@ -164,27 +165,27 @@ export default function DashboardPage() {
                                     </div>
                                     <div>
                                         <p className="text-sm font-medium text-white">
-                                            #{order.id} - {order.product_title}
+                                            #{item.id} - {item.product_title}
                                         </p>
                                         <p className="text-xs text-slate-400">
-                                            {order.user_name || 'Unknown'} &middot; {order.user_phone || ''}
+                                            {item.user_name || 'Unknown'} &middot; {item.user_phone || ''}
                                         </p>
                                     </div>
                                 </div>
                                 <div className="text-right">
                                     <p className="text-sm font-semibold text-emerald-400">
-                                        ₹{order.final_amount}
+                                        ₹{item.order_amount || 0}
                                     </p>
                                     <span
                                         className={`px-2 py-0.5 rounded-lg text-xs font-medium ${
-                                            order.status === 1
+                                            item.status === 3
                                                 ? 'bg-green-500/20 text-green-400'
-                                                : order.status === 2
+                                                : item.status === 2
                                                 ? 'bg-red-500/20 text-red-400'
                                                 : 'bg-yellow-500/20 text-yellow-400'
                                         }`}
                                     >
-                                        {order.status === 1 ? 'Confirmed' : order.status === 2 ? 'Cancelled' : 'Pending'}
+                                        {item.status === 3 ? 'Delivered' : item.status === 2 ? 'Not Delivered' : 'Pending'}
                                     </span>
                                 </div>
                             </div>

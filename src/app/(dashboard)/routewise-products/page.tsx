@@ -2,118 +2,179 @@
 
 import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
-import { useDeliveryList, DeliveryItem } from '@/hooks/useOrders';
-import DataTable, { Column } from '@/components/DataTable';
-import { CalendarDays, MapPin } from 'lucide-react';
+import { useDeliveryList } from '@/hooks/useOrders';
+import { CalendarDays, Navigation, RotateCcw, Download } from 'lucide-react';
+
+// Drivers excluded from routewise (they go to Dairy Pickup)
+const DAIRY_PICKUP_DRIVERS = ['00 swarg office', '01  kanakpura', '01 kanakpura'];
+
+interface ProductAgg {
+    title: string;
+    qty_text: string;
+    qty: number;
+}
+
+interface DriverGroup {
+    driverName: string;
+    products: ProductAgg[];
+    totalQty: number;
+}
 
 export default function RoutewiseProductsPage() {
     const today = format(new Date(), 'yyyy-MM-dd');
     const [date, setDate] = useState(today);
     const { data: items = [], isLoading } = useDeliveryList(date);
 
-    // Group items by driver (route)
-    const routeGroups = useMemo(() => {
-        const map = new Map<string, { driverName: string; items: DeliveryItem[]; totalQty: number }>();
+    // Group by driver, aggregate products per driver (matching React admin RouteWiseList.jsx)
+    const driverGroups = useMemo((): DriverGroup[] => {
+        const driverMap = new Map<string, Map<string, ProductAgg>>();
+
         items.forEach((item) => {
             const driver = item.delivery_boy_name || 'Unassigned';
-            const existing = map.get(driver);
+
+            // Exclude dairy pickup drivers
+            if (DAIRY_PICKUP_DRIVERS.some(d => driver.toLowerCase().startsWith(d))) return;
+
+            if (!driverMap.has(driver)) {
+                driverMap.set(driver, new Map());
+            }
+            const products = driverMap.get(driver)!;
+            const key = item.product_title;
+            if (!key) return;
+
+            const existing = products.get(key);
             if (existing) {
-                existing.items.push(item);
-                existing.totalQty += item.qty || 1;
+                existing.qty += item.qty || 1;
             } else {
-                map.set(driver, { driverName: driver, items: [item], totalQty: item.qty || 1 });
+                products.set(key, {
+                    title: key,
+                    qty_text: item.qty_text || '',
+                    qty: item.qty || 1,
+                });
             }
         });
-        return Array.from(map.values()).sort((a, b) => b.items.length - a.items.length);
+
+        return Array.from(driverMap.entries())
+            .map(([driverName, products]) => ({
+                driverName,
+                products: Array.from(products.values()).sort((a, b) => a.title.localeCompare(b.title)),
+                totalQty: Array.from(products.values()).reduce((sum, p) => sum + p.qty, 0),
+            }))
+            .sort((a, b) => {
+                // Sort by numeric prefix first, then alphabetically
+                const aNum = parseInt(a.driverName.match(/^(\d+)/)?.[1] || '999');
+                const bNum = parseInt(b.driverName.match(/^(\d+)/)?.[1] || '999');
+                if (aNum !== bNum) return aNum - bNum;
+                return a.driverName.localeCompare(b.driverName);
+            });
     }, [items]);
 
-    const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
+    const totalProducts = driverGroups.reduce((sum, g) => sum + g.totalQty, 0);
 
-    const displayItems = selectedRoute
-        ? items.filter((i) => (i.delivery_boy_name || 'Unassigned') === selectedRoute)
-        : items;
-
-    const columns: Column<DeliveryItem>[] = [
-        { key: 'order_id', header: 'Order', width: '70px' },
-        {
-            key: 'user_name', header: 'Customer',
-            render: (i) => (
-                <div>
-                    <p className="text-white font-medium">{i.user_name || '-'}</p>
-                    <p className="text-xs text-slate-400">{i.user_phone || '-'}</p>
-                </div>
-            ),
-        },
-        { key: 'product_title', header: 'Product' },
-        { key: 'qty', header: 'Qty', width: '60px', render: (i) => <span className="font-semibold text-white">{i.qty}</span> },
-        { key: 'delivery_boy_name', header: 'Driver', render: (i) => i.delivery_boy_name || 'Unassigned' },
-        {
-            key: 'address', header: 'Address',
-            render: (i) => <span className="text-slate-400 text-sm truncate max-w-[200px] block">{i.address || '-'}</span>,
-        },
-        { key: 'route', header: 'Route', render: (i) => i.route || '-' },
-    ];
+    const handleExport = () => {
+        const rows = [['Delivery Boy', 'Product Title', 'Quantity Text', 'Quantity']];
+        driverGroups.forEach(g => {
+            g.products.forEach(p => {
+                rows.push([g.driverName, p.title, p.qty_text, String(p.qty)]);
+            });
+        });
+        const csv = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Routewise_Products_${date}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
 
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-white">Routewise Products</h1>
+                    <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+                        <Navigation className="w-7 h-7 text-purple-400" />
+                        Routewise Products
+                    </h1>
                     <p className="text-slate-400">Products grouped by delivery route</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                     <CalendarDays className="w-5 h-5 text-slate-400" />
                     <input
                         type="date"
                         value={date}
                         onChange={(e) => setDate(e.target.value)}
-                        className="px-3 py-2 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                        className="px-3 py-2 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white text-sm"
                     />
+                    <button onClick={() => setDate(today)} className="p-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-slate-300 hover:text-white">
+                        <RotateCcw className="w-4 h-4" />
+                    </button>
+                    <button onClick={handleExport} disabled={driverGroups.length === 0}
+                        className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-slate-300 hover:text-white disabled:opacity-40">
+                        <Download className="w-4 h-4" /> Export
+                    </button>
                 </div>
             </div>
 
-            {/* Route Cards */}
-            {routeGroups.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="glass rounded-xl p-4">
-                    <h2 className="text-lg font-semibold text-white mb-3 flex items-center gap-2">
-                        <MapPin className="w-5 h-5 text-purple-400" /> Routes
-                    </h2>
-                    <div className="flex flex-wrap gap-2">
-                        <button
-                            onClick={() => setSelectedRoute(null)}
-                            className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-                                !selectedRoute
-                                    ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30'
-                                    : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'
-                            }`}
-                        >
-                            All ({items.length})
-                        </button>
-                        {routeGroups.map((g) => (
-                            <button
-                                key={g.driverName}
-                                onClick={() => setSelectedRoute(g.driverName)}
-                                className={`px-3 py-2 rounded-xl text-sm font-medium transition-colors ${
-                                    selectedRoute === g.driverName
-                                        ? 'bg-purple-600/20 text-purple-400 border border-purple-500/30'
-                                        : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'
-                                }`}
-                            >
-                                {g.driverName} ({g.items.length} / {g.totalQty} qty)
-                            </button>
-                        ))}
-                    </div>
+                    <p className="text-sm text-slate-400">Routes</p>
+                    <p className="text-2xl font-bold text-white">{driverGroups.length}</p>
+                </div>
+                <div className="glass rounded-xl p-4">
+                    <p className="text-sm text-slate-400">Total Quantity</p>
+                    <p className="text-2xl font-bold text-purple-400">{totalProducts}</p>
+                </div>
+                <div className="glass rounded-xl p-4">
+                    <p className="text-sm text-slate-400">Total Orders</p>
+                    <p className="text-2xl font-bold text-blue-400">{items.length}</p>
+                </div>
+            </div>
+
+            {isLoading ? (
+                <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => (
+                        <div key={i} className="h-24 bg-slate-800/50 rounded-xl animate-pulse" />
+                    ))}
+                </div>
+            ) : driverGroups.length === 0 ? (
+                <div className="glass rounded-xl p-12 text-center">
+                    <p className="text-slate-400">No delivery data for this date. Generate the delivery list first.</p>
+                </div>
+            ) : (
+                <div className="space-y-4">
+                    {driverGroups.map((group) => (
+                        <div key={group.driverName} className="glass rounded-xl overflow-hidden">
+                            <div className="px-4 py-3 bg-slate-800/50 flex items-center justify-between">
+                                <h3 className="font-semibold text-white">{group.driverName}</h3>
+                                <span className="text-sm text-purple-400 font-medium">{group.totalQty} qty</span>
+                            </div>
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="border-b border-slate-800/50">
+                                        <th className="text-left px-4 py-2 text-xs text-slate-400 font-medium">Product Title</th>
+                                        <th className="text-left px-4 py-2 text-xs text-slate-400 font-medium w-32">Qty Text</th>
+                                        <th className="text-right px-4 py-2 text-xs text-slate-400 font-medium w-24">Quantity</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {group.products.map((p) => (
+                                        <tr key={p.title} className="border-b border-slate-800/30 hover:bg-slate-800/20">
+                                            <td className="px-4 py-2.5 text-sm text-white">{p.title}</td>
+                                            <td className="px-4 py-2.5 text-sm text-slate-400">{p.qty_text}</td>
+                                            <td className="px-4 py-2.5 text-right">
+                                                <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-sm font-bold">
+                                                    {p.qty}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ))}
                 </div>
             )}
-
-            <DataTable
-                data={displayItems}
-                columns={columns}
-                loading={isLoading}
-                pageSize={20}
-                searchPlaceholder="Search items..."
-                emptyMessage="No items for this date"
-            />
         </div>
     );
 }

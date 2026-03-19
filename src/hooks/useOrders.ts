@@ -36,29 +36,68 @@ export function useOrders(date?: string) {
 
 export interface DeliveryItem {
     id: number;
+    pre_delivery_id: number;
     order_id: number;
     user_id: number;
     product_id: number;
     product_title: string;
     qty: number;
+    qty_text: string;
     delivery_boy_id: number | null;
     delivery_boy_name: string | null;
     status: number;
+    order_status: string | null;
+    order_amount: number;
+    subscription_type: number;
+    start_date: string | null;
     created_at: string;
-    delivery_date: string;
-    user_name?: string;
-    user_phone?: string;
-    address?: string;
-    route?: string;
+    delivered_date: string | null;
+    mark_delivered_qty: number | null;
+    mark_delivered_time_stamp: string | null;
+    user_name: string;
+    user_phone: string;
+    flat_no: string | null;
+    apartment_name: string | null;
+    area: string | null;
+    city: string | null;
+    pincode: string;
+    wallet_amount: number;
+    address: string;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapDeliveryItem(raw: any): DeliveryItem {
+    const address = [
+        raw.flat_no ? `Flat ${raw.flat_no}` : null,
+        raw.apartment_name,
+        raw.area,
+        raw.city,
+        raw.pincode,
+    ].filter(Boolean).join(', ');
+
+    return {
+        ...raw,
+        product_title: raw.title || raw.product_title || '',
+        user_name: raw.name || raw.user_name || '',
+        user_phone: raw.s_phone || raw.user_phone || '',
+        address,
+    };
 }
 
 export function useDeliveryList(date: string) {
     return useQuery({
         queryKey: ['delivery-list', date],
         queryFn: async () => {
-            // This endpoint returns generated order list for a specific date
-            const response = await GET<DeliveryItem[]>(`/get_genrated_order_list/${date}`);
-            return response.data || [];
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const response = await GET<any[]>(`/get_genrated_order_list/${date}`);
+            const raw = response.data || [];
+            // Deduplicate by pre_delivery_id
+            const seen = new Set<number>();
+            return raw.filter(item => {
+                if (seen.has(item.pre_delivery_id)) return false;
+                seen.add(item.pre_delivery_id);
+                return true;
+            }).map(mapDeliveryItem);
         },
     });
 }
