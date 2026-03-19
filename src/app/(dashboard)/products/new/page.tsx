@@ -18,7 +18,9 @@ const productSchema = z.object({
     mrp: z.number().min(0, 'MRP must be positive'),
     tax: z.number().min(0).max(99, 'Tax must be 0-99'),
     stock_qty: z.number().min(0).max(10000),
+    preferences: z.number().min(0),
     subscription: z.number(),
+    is_active: z.number(),
     sub_cat_id: z.number().min(1, 'Subcategory is required'),
     offer_text: z.string().optional(),
     description: z.string().optional(),
@@ -36,7 +38,7 @@ export default function AddProductPage() {
 
     const { register, handleSubmit, formState: { errors } } = useForm<ProductFormData>({
         resolver: zodResolver(productSchema),
-        defaultValues: { tax: 0, stock_qty: 100, subscription: 1, price: 0, mrp: 0 },
+        defaultValues: { tax: 0, stock_qty: 100, preferences: 0, subscription: 1, is_active: 1, price: 0, mrp: 0 },
     });
 
     const onSubmit = async (data: ProductFormData) => {
@@ -99,10 +101,19 @@ export default function AddProductPage() {
                             ))}
                         </select>
                     </FormField>
+                    <FormField label="Preferences (display order)" error={errors.preferences}>
+                        <input {...register('preferences', { valueAsNumber: true })} type="number" min={0} className={inputClassName} placeholder="0" />
+                    </FormField>
                     <FormField label="Subscription">
                         <select {...register('subscription', { valueAsNumber: true })} className={selectClassName}>
                             <option value={1}>Enabled</option>
                             <option value={0}>Disabled</option>
+                        </select>
+                    </FormField>
+                    <FormField label="Active">
+                        <select {...register('is_active', { valueAsNumber: true })} className={selectClassName}>
+                            <option value={1}>Active</option>
+                            <option value={0}>Inactive</option>
                         </select>
                     </FormField>
                 </div>
