@@ -325,7 +325,12 @@ export interface UserTransaction {
     description?: string;
     order_id?: number;
     log_type?: string;
+    name?: string;
+    phone?: string;
+    pre_tx_wallet_balance?: number;
+    updated_wallet_balance?: number;
     created_at: string;
+    updated_at?: string;
 }
 
 export interface UserHoliday {
@@ -449,7 +454,8 @@ export function useUserOrders(userId: number | string | undefined) {
     return useQuery({
         queryKey: ['user-orders', userId],
         queryFn: async () => {
-            const response = await GET<import('./useOrders').Order[]>(`/get_order/user/${userId}`);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const response = await GET<any[]>(`/get_order/user/${userId}`);
             return response.data || [];
         },
         enabled: !!userId,
