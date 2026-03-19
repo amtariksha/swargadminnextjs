@@ -56,23 +56,8 @@ const navItems: NavItem[] = [
         icon: <ClipboardList className="w-5 h-5" />,
     },
     {
-        name: 'Packing List',
-        href: '/packing-list',
-        icon: <Package className="w-5 h-5" />,
-    },
-    {
         name: 'Pre-Packing List',
         href: '/pre-packing-list',
-        icon: <Package className="w-5 h-5" />,
-    },
-    {
-        name: 'Routewise Products',
-        href: '/routewise-products',
-        icon: <Navigation className="w-5 h-5" />,
-    },
-    {
-        name: 'Dairy Pickup',
-        href: '/dairy-pickup',
         icon: <Package className="w-5 h-5" />,
     },
     // --- Reports ---
@@ -377,7 +362,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                     </Link>
                                 )}
                                 {/* Section dividers */}
-                                {!collapsed && (index === 0 || index === 5 || index === 7 || index === 9 || index === 12 || index === 18 || index === 22 || index === 26) && (
+                                {!collapsed && (index === 0 || index === 2 || index === 4 || index === 6 || index === 9 || index === 15 || index === 19 || index === 23) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>
