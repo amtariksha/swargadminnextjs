@@ -214,9 +214,10 @@ const navItems: NavItem[] = [
 interface SidebarProps {
     isOpen: boolean;
     onToggle: () => void;
+    collapsed?: boolean;
 }
 
-export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
+export default function Sidebar({ isOpen, onToggle, collapsed = false }: SidebarProps) {
     const pathname = usePathname();
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
@@ -246,85 +247,119 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
             <aside
                 className={`
                     fixed lg:sticky top-0 left-0 z-50
-                    h-screen w-72
+                    h-screen ${collapsed ? 'w-[68px]' : 'w-72'}
                     bg-slate-900/95 backdrop-blur-xl
                     border-r border-slate-800/50
                     flex flex-col
-                    transform transition-transform duration-300 ease-in-out
+                    transform transition-all duration-300 ease-in-out
                     ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
                 `}
             >
                 {/* Logo */}
-                <div className="p-5 border-b border-slate-800/50">
+                <div className={`${collapsed ? 'p-3' : 'p-5'} border-b border-slate-800/50`}>
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/25">
+                        <div className={`flex items-center ${collapsed ? 'justify-center w-full' : 'gap-3'}`}>
+                            <div className={`${collapsed ? 'w-9 h-9' : 'w-10 h-10'} bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/25 flex-shrink-0`}>
                                 <LayoutDashboard className="w-5 h-5 text-white" />
                             </div>
-                            <div>
-                                <h1 className="font-bold text-white text-lg leading-tight">
-                                    {BRANDING.appName}
-                                </h1>
-                                <p className="text-xs text-slate-400">Admin Panel</p>
-                            </div>
+                            {!collapsed && (
+                                <div>
+                                    <h1 className="font-bold text-white text-lg leading-tight">
+                                        {BRANDING.appName}
+                                    </h1>
+                                    <p className="text-xs text-slate-400">Admin Panel</p>
+                                </div>
+                            )}
                         </div>
-                        <button
-                            onClick={onToggle}
-                            className="lg:hidden p-2 hover:bg-slate-800/50 rounded-lg transition-colors"
-                        >
-                            <X className="w-5 h-5 text-slate-400" />
-                        </button>
+                        {!collapsed && (
+                            <button
+                                onClick={onToggle}
+                                className="lg:hidden p-2 hover:bg-slate-800/50 rounded-lg transition-colors"
+                            >
+                                <X className="w-5 h-5 text-slate-400" />
+                            </button>
+                        )}
                     </div>
                 </div>
 
                 {/* Navigation */}
-                <nav className="flex-1 overflow-y-auto py-4 px-3">
+                <nav className={`flex-1 overflow-y-auto py-4 ${collapsed ? 'px-2' : 'px-3'}`}>
                     <ul className="space-y-1">
                         {navItems.map((item, index) => (
                             <li key={item.name}>
                                 {item.children ? (
-                                    <div>
-                                        <button
-                                            onClick={() => toggleExpand(item.name)}
+                                    collapsed ? (
+                                        /* Collapsed: show first child link as icon-only */
+                                        <Link
+                                            href={item.children[0]?.href || '#'}
                                             className={`
-                                                w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg
-                                                text-slate-300 hover:bg-slate-800/50 hover:text-white
+                                                flex items-center justify-center p-2.5 rounded-lg
                                                 transition-all duration-200
+                                                text-slate-300 hover:bg-slate-800/50 hover:text-white
                                             `}
+                                            title={item.name}
                                         >
-                                            <div className="flex items-center gap-3">
-                                                {item.icon}
-                                                <span className="font-medium">{item.name}</span>
-                                            </div>
-                                            {expandedItems.includes(item.name) ? (
-                                                <ChevronDown className="w-4 h-4" />
-                                            ) : (
-                                                <ChevronRight className="w-4 h-4" />
+                                            {item.icon}
+                                        </Link>
+                                    ) : (
+                                        <div>
+                                            <button
+                                                onClick={() => toggleExpand(item.name)}
+                                                className={`
+                                                    w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg
+                                                    text-slate-300 hover:bg-slate-800/50 hover:text-white
+                                                    transition-all duration-200
+                                                `}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    {item.icon}
+                                                    <span className="font-medium">{item.name}</span>
+                                                </div>
+                                                {expandedItems.includes(item.name) ? (
+                                                    <ChevronDown className="w-4 h-4" />
+                                                ) : (
+                                                    <ChevronRight className="w-4 h-4" />
+                                                )}
+                                            </button>
+                                            {expandedItems.includes(item.name) && (
+                                                <ul className="ml-4 mt-1 space-y-1 border-l border-slate-800 pl-4">
+                                                    {item.children.map(child => (
+                                                        <li key={child.href}>
+                                                            <Link
+                                                                href={child.href!}
+                                                                className={`
+                                                                    flex items-center gap-3 px-3 py-2 rounded-lg
+                                                                    transition-all duration-200
+                                                                    ${isActive(child.href!)
+                                                                        ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                                                                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
+                                                                    }
+                                                                `}
+                                                            >
+                                                                {child.icon}
+                                                                <span className="text-sm">{child.name}</span>
+                                                            </Link>
+                                                        </li>
+                                                    ))}
+                                                </ul>
                                             )}
-                                        </button>
-                                        {expandedItems.includes(item.name) && (
-                                            <ul className="ml-4 mt-1 space-y-1 border-l border-slate-800 pl-4">
-                                                {item.children.map(child => (
-                                                    <li key={child.href}>
-                                                        <Link
-                                                            href={child.href!}
-                                                            className={`
-                                                                flex items-center gap-3 px-3 py-2 rounded-lg
-                                                                transition-all duration-200
-                                                                ${isActive(child.href!)
-                                                                    ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                                                                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                                                                }
-                                                            `}
-                                                        >
-                                                            {child.icon}
-                                                            <span className="text-sm">{child.name}</span>
-                                                        </Link>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        )}
-                                    </div>
+                                        </div>
+                                    )
+                                ) : collapsed ? (
+                                    <Link
+                                        href={item.href!}
+                                        className={`
+                                            flex items-center justify-center p-2.5 rounded-lg
+                                            transition-all duration-200
+                                            ${isActive(item.href!)
+                                                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                                                : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'
+                                            }
+                                        `}
+                                        title={item.name}
+                                    >
+                                        {item.icon}
+                                    </Link>
                                 ) : (
                                     <Link
                                         href={item.href!}
@@ -342,7 +377,7 @@ export default function Sidebar({ isOpen, onToggle }: SidebarProps) {
                                     </Link>
                                 )}
                                 {/* Section dividers */}
-                                {(index === 0 || index === 5 || index === 7 || index === 9 || index === 12 || index === 18 || index === 22 || index === 26) && (
+                                {!collapsed && (index === 0 || index === 5 || index === 7 || index === 9 || index === 12 || index === 18 || index === 22 || index === 26) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>

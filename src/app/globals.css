@@ -84,6 +84,82 @@
     animation: pulse-glow 2s ease-in-out infinite;
 }
 
+/* ========== Light Mode Overrides ========== */
+html:not(.dark) body {
+    background: #f1f5f9 !important;
+    color: #0f172a !important;
+}
+
+html:not(.dark) .glass {
+    background: rgba(255, 255, 255, 0.8);
+    border-color: rgba(148, 163, 184, 0.25);
+}
+
+html:not(.dark) .glass-hover:hover {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(148, 163, 184, 0.4);
+}
+
+/* Sidebar & topbar light mode */
+html:not(.dark) aside {
+    background: rgba(255, 255, 255, 0.97) !important;
+    border-color: #e2e8f0 !important;
+}
+
+html:not(.dark) header {
+    background: rgba(255, 255, 255, 0.9) !important;
+    border-color: #e2e8f0 !important;
+}
+
+/* Override dark backgrounds in light mode */
+html:not(.dark) .bg-slate-950 { background: #f1f5f9 !important; }
+html:not(.dark) .bg-slate-900 { background: #f8fafc !important; }
+html:not(.dark) .bg-slate-900\/95 { background: rgba(248, 250, 252, 0.97) !important; }
+html:not(.dark) .bg-slate-900\/80 { background: rgba(248, 250, 252, 0.9) !important; }
+html:not(.dark) .bg-slate-900\/50 { background: rgba(241, 245, 249, 0.5) !important; }
+html:not(.dark) .bg-slate-800 { background: #e2e8f0 !important; }
+html:not(.dark) .bg-slate-800\/50 { background: rgba(226, 232, 240, 0.5) !important; }
+html:not(.dark) .bg-slate-800\/95 { background: rgba(226, 232, 240, 0.97) !important; }
+
+/* Text overrides in light mode */
+html:not(.dark) .text-white { color: #0f172a !important; }
+html:not(.dark) .text-slate-300 { color: #475569 !important; }
+html:not(.dark) .text-slate-400 { color: #64748b !important; }
+html:not(.dark) .text-slate-500 { color: #94a3b8 !important; }
+
+/* Border overrides */
+html:not(.dark) .border-slate-700 { border-color: #cbd5e1 !important; }
+html:not(.dark) .border-slate-700\/50 { border-color: rgba(203, 213, 225, 0.5) !important; }
+html:not(.dark) .border-slate-800 { border-color: #e2e8f0 !important; }
+html:not(.dark) .border-slate-800\/50 { border-color: rgba(226, 232, 240, 0.5) !important; }
+
+/* Input overrides */
+html:not(.dark) input,
+html:not(.dark) select,
+html:not(.dark) textarea {
+    color: #0f172a !important;
+}
+
+html:not(.dark) input::placeholder,
+html:not(.dark) textarea::placeholder {
+    color: #94a3b8 !important;
+}
+
+/* Dropdown overrides */
+html:not(.dark) option {
+    background: #fff;
+    color: #0f172a;
+}
+
+/* Scrollbar light mode */
+html:not(.dark) ::-webkit-scrollbar-track {
+    background: rgba(241, 245, 249, 0.5);
+}
+
+html:not(.dark) ::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.4);
+}
+
 /* Loading spinner */
 .spinner {
     border: 3px solid rgba(148, 163, 184, 0.2);

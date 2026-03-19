@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { QueryProvider } from "@/lib/query-provider";
+import { ThemeProvider } from "@/lib/theme";
 import { BRANDING } from "@/config/tenant";
 import { Toaster } from "sonner";
 
@@ -23,22 +24,24 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.className} bg-slate-950 text-white antialiased`}>
+      <body className={`${inter.className} bg-slate-950 text-white dark:bg-slate-950 dark:text-white antialiased transition-colors duration-200`}>
         <QueryProvider>
           <AuthProvider>
-            {children}
-            <Toaster
-              theme="dark"
-              position="top-right"
-              toastOptions={{
-                style: {
-                  background: 'rgba(30, 41, 59, 0.95)',
-                  border: '1px solid rgba(100, 116, 139, 0.3)',
-                  color: '#fff',
-                  backdropFilter: 'blur(12px)',
-                },
-              }}
-            />
+            <ThemeProvider>
+              {children}
+              <Toaster
+                theme="dark"
+                position="top-right"
+                toastOptions={{
+                  style: {
+                    background: 'rgba(30, 41, 59, 0.95)',
+                    border: '1px solid rgba(100, 116, 139, 0.3)',
+                    color: '#fff',
+                    backdropFilter: 'blur(12px)',
+                  },
+                }}
+              />
+            </ThemeProvider>
           </AuthProvider>
         </QueryProvider>
       </body>

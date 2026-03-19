@@ -1,15 +1,19 @@
 'use client';
 
 import { useAuth } from '@/lib/auth';
-import { Menu, LogOut, User, Bell } from 'lucide-react';
+import { useTheme } from '@/lib/theme';
+import { Menu, LogOut, User, Bell, Sun, Moon, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
 interface TopbarProps {
     onMenuClick: () => void;
+    sidebarCollapsed?: boolean;
+    onToggleCollapse?: () => void;
 }
 
-export default function Topbar({ onMenuClick }: TopbarProps) {
+export default function Topbar({ onMenuClick, sidebarCollapsed, onToggleCollapse }: TopbarProps) {
     const { admin, logout } = useAuth();
+    const { theme, toggleTheme } = useTheme();
     const [showDropdown, setShowDropdown] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -32,15 +36,27 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
         <header className="sticky top-0 z-30 h-16 bg-slate-900/80 backdrop-blur-xl border-b border-slate-800/50 px-4 lg:px-6">
             <div className="h-full flex items-center justify-between">
                 {/* Left side */}
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
                     <button
                         onClick={onMenuClick}
                         className="lg:hidden p-2 hover:bg-slate-800/50 rounded-lg transition-colors"
                     >
                         <Menu className="w-5 h-5 text-slate-400" />
                     </button>
+                    {onToggleCollapse && (
+                        <button
+                            onClick={onToggleCollapse}
+                            className="hidden lg:flex p-2 hover:bg-slate-800/50 rounded-lg transition-colors"
+                            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                        >
+                            {sidebarCollapsed
+                                ? <PanelLeft className="w-5 h-5 text-slate-400" />
+                                : <PanelLeftClose className="w-5 h-5 text-slate-400" />
+                            }
+                        </button>
+                    )}
 
-                    <div className="hidden sm:block">
+                    <div className="hidden sm:block ml-2">
                         <h2 className="text-lg font-semibold text-white">Dashboard</h2>
                         <p className="text-xs text-slate-400">Welcome back!</p>
                     </div>
@@ -48,6 +64,18 @@ export default function Topbar({ onMenuClick }: TopbarProps) {
 
                 {/* Right side */}
                 <div className="flex items-center gap-3">
+                    {/* Theme toggle */}
+                    <button
+                        onClick={toggleTheme}
+                        className="p-2.5 hover:bg-slate-800/50 rounded-xl transition-colors"
+                        title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    >
+                        {theme === 'dark'
+                            ? <Sun className="w-5 h-5 text-amber-400" />
+                            : <Moon className="w-5 h-5 text-slate-500" />
+                        }
+                    </button>
+
                     {/* Notifications */}
                     <button className="relative p-2.5 hover:bg-slate-800/50 rounded-xl transition-colors">
                         <Bell className="w-5 h-5 text-slate-400" />
