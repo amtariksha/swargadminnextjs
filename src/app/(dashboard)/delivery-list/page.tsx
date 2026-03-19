@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
 import { useDrivers } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
-import { Calendar, RefreshCw, Plus, Truck, Package, Edit, Check, Trash2, ListChecks } from 'lucide-react';
+import { Calendar, RefreshCw, Plus, Truck, Edit, Check, Trash2, Download, AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface DeliveryItem {
     id: number;
@@ -23,6 +24,7 @@ interface DeliveryItem {
     mark_delivered_qty: number | null;
     delivery_boy_id: number | null;
     delivery_boy_name: string | null;
+    order_assign_user: number | null;
     status: number;
     delivered_date: string | null;
     mark_delivered_time_stamp: string | null;
@@ -35,21 +37,11 @@ interface DeliveryItem {
     start_date: string;
     subscription_type: number;
     order_type: number;
-    user_holiday: number | null;
 }
 
 const getSubscriptionLabel = (type: number) => {
-    const types: Record<number, string> = {
-        1: 'One Time Order',
-        2: 'Weekly',
-        3: 'Daily',
-        4: 'Alternative Days',
-    };
+    const types: Record<number, string> = { 1: 'One Time Order', 2: 'Weekly', 3: 'Daily', 4: 'Alternative Days' };
     return types[type] || 'Normal Order';
-};
-
-const getOrderTypeLabel = (type: number) => {
-    return type === 1 ? 'Prepaid' : type === 2 ? 'Postpaid' : 'N/A';
 };
 
 const getStatusLabel = (status: number) => {
@@ -65,31 +57,96 @@ const formatTime = (timestamp: string | null) => {
     if (!timestamp) return '-';
     try {
         return format(new Date(timestamp), 'hh:mm a');
-    } catch {
-        return '-';
-    }
+    } catch { return '-'; }
 };
 
 const composeAddress = (item: DeliveryItem) => {
-    const parts = [
-        item.flat_no ? `Flat No. - ${item.flat_no}` : null,
-        item.apartment_name,
-        item.area,
-        item.city,
-        item.pincode,
-    ].filter(Boolean);
-    return parts.join(', ') || '-';
+    return [item.flat_no, item.apartment_name, item.area, item.city, item.pincode].filter(Boolean).join(', ') || '-';
 };
+
+// Passcode Dialog Component
+function PasscodeDialog({ title, selectedDate, onConfirm, onCancel }: {
+    title: string;
+    selectedDate: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+}) {
+    const [passcode, setPasscode] = useState('');
+    const [error, setError] = useState('');
+
+    const today = format(new Date(), 'yyyy-MM-dd');
+    const expectedPasscode = selectedDate.replace(/-/g, ''); // YYYYMMDD
+    const isToday = selectedDate === today;
+
+    const handleSubmit = () => {
+        // For today's date, passcode must be "TODAY" (case-insensitive)
+        // For other dates, passcode must be YYYYMMDD of the selected date
+        if (isToday) {
+            if (passcode.toUpperCase() === 'TODAY') {
+                onConfirm();
+                return;
+            }
+            setError('Enter "TODAY" to confirm for current date');
+            return;
+        }
+
+        if (passcode === expectedPasscode) {
+            onConfirm();
+            return;
+        }
+        setError(`Enter the date in YYYYMMDD format (${expectedPasscode}) to confirm`);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="glass rounded-2xl p-6 w-full max-w-md mx-4">
+                <div className="flex items-center gap-3 mb-4">
+                    <AlertTriangle className="w-6 h-6 text-amber-400" />
+                    <h2 className="text-xl font-bold text-white">{title}</h2>
+                </div>
+                <p className="text-sm text-slate-400 mb-2">
+                    Date: <span className="text-white font-medium">{selectedDate}</span>
+                </p>
+                <p className="text-sm text-slate-400 mb-4">
+                    {isToday
+                        ? 'Type "TODAY" to confirm action for the current date.'
+                        : `Type the date in YYYYMMDD format (${expectedPasscode}) to confirm.`
+                    }
+                </p>
+                <input
+                    type="text"
+                    value={passcode}
+                    onChange={(e) => { setPasscode(e.target.value); setError(''); }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+                    placeholder={isToday ? 'Type TODAY' : `Type ${expectedPasscode}`}
+                    autoFocus
+                    className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white mb-2 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+                {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+                <div className="flex gap-3 mt-4">
+                    <button onClick={onCancel}
+                        className="flex-1 px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl">
+                        Cancel
+                    </button>
+                    <button onClick={handleSubmit}
+                        className="flex-1 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium">
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 export default function DeliveryListPage() {
     const router = useRouter();
-    const queryClient = useQueryClient();
     const today = format(new Date(), 'yyyy-MM-dd');
     const [selectedDate, setSelectedDate] = useState(today);
     const [selectedDriver, setSelectedDriver] = useState<number | ''>('');
-    const [selectedRows, setSelectedRows] = useState<number[]>([]);
     const [editQtyModal, setEditQtyModal] = useState<{ item: DeliveryItem; newQty: number } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [generateDialog, setGenerateDialog] = useState(false);
+    const [deleteDialog, setDeleteDialog] = useState(false);
 
     // Filters
     const [filters, setFilters] = useState({
@@ -121,9 +178,10 @@ export default function DeliveryListPage() {
     // Apply filters
     const deliveryItems = useMemo(() => {
         let result = uniqueItems;
-
         if (selectedDriver) {
-            result = result.filter(item => item.delivery_boy_id === selectedDriver);
+            result = result.filter(item =>
+                item.order_assign_user === selectedDriver || item.delivery_boy_id === selectedDriver
+            );
         }
         if (filters.delivered) {
             result = result.filter(item => item.status === 3);
@@ -140,41 +198,45 @@ export default function DeliveryListPage() {
     }, [uniqueItems, selectedDriver, filters]);
 
     const handleGenerateList = async () => {
-        if (!confirm(`Generate delivery list for ${selectedDate}?`)) return;
         setIsSubmitting(true);
         try {
             await POST('/genrate_order_list', { date: selectedDate });
+            toast.success('Delivery list generated successfully');
             refetch();
         } catch (error) {
             console.error('Generate failed:', error);
+            toast.error('Failed to generate delivery list');
         } finally {
             setIsSubmitting(false);
+            setGenerateDialog(false);
         }
     };
 
     const handleDeleteList = async () => {
-        if (!confirm(`Delete delivery list for ${selectedDate}? This cannot be undone.`)) return;
         setIsSubmitting(true);
         try {
             await POST('/delete_pre_delivery_list', { date: selectedDate });
+            toast.success('Delivery list deleted');
             refetch();
         } catch (error) {
             console.error('Delete failed:', error);
+            toast.error('Failed to delete delivery list');
         } finally {
             setIsSubmitting(false);
+            setDeleteDialog(false);
         }
     };
 
-    const handleMarkDelivered = async () => {
-        if (selectedRows.length === 0) return;
-        if (!confirm(`Mark ${selectedRows.length} items as delivered?`)) return;
+    const handleMarkDelivered = async (preDeliveryIds: number[]) => {
+        if (preDeliveryIds.length === 0) return;
         setIsSubmitting(true);
         try {
-            await POST('/mark_delivery', { orders_id: selectedRows.join(', ') });
-            setSelectedRows([]);
+            await POST('/mark_delivery', { orders_id: preDeliveryIds.join(', ') });
+            toast.success(`${preDeliveryIds.length} items marked as delivered`);
             refetch();
         } catch (error) {
             console.error('Mark delivered failed:', error);
+            toast.error('Failed to mark as delivered');
         } finally {
             setIsSubmitting(false);
         }
@@ -188,132 +250,108 @@ export default function DeliveryListPage() {
                 id: editQtyModal.item.pre_delivery_id,
                 qty: editQtyModal.newQty
             });
+            toast.success('Quantity updated');
             setEditQtyModal(null);
             refetch();
         } catch (error) {
             console.error('Update qty failed:', error);
+            toast.error('Failed to update quantity');
         } finally {
             setIsSubmitting(false);
         }
     };
 
+    // CSV Export
+    const handleExport = useCallback(() => {
+        const headers = ['Pre ID', 'Order ID', 'Name', 'Phone', 'Product', 'Qty Text', 'Qty', 'Del Qty', 'Driver', 'Status', 'Del Date', 'Del Time', 'Address', 'Pincode', 'Wallet', 'Start Date', 'Sub Type'];
+        const rows = deliveryItems.map(item => [
+            item.pre_delivery_id, item.id, item.name, item.s_phone, item.title,
+            item.qty_text, item.qty, item.mark_delivered_qty ?? '',
+            item.delivery_boy_name || '', getStatusLabel(item.status).label,
+            item.delivered_date || '', formatTime(item.mark_delivered_time_stamp),
+            composeAddress(item), item.pincode, item.wallet_amount,
+            item.start_date, getSubscriptionLabel(item.subscription_type)
+        ]);
+        const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${selectedDate.replace(/-/g, '')}_Pre-delivery-list.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+    }, [deliveryItems, selectedDate]);
+
     const columns: Column<DeliveryItem>[] = [
         {
-            key: 'actions',
-            header: 'Edit',
-            width: '60px',
+            key: 'actions', header: 'Edit', width: '60px',
             render: (item) => (
-                <button
-                    onClick={(e) => { e.stopPropagation(); router.push(`/orders/${item.id}`); }}
-                    className="p-1.5 hover:bg-slate-800/50 rounded-lg"
-                >
+                <button onClick={(e) => { e.stopPropagation(); router.push(`/orders/${item.id}`); }}
+                    className="p-1.5 hover:bg-slate-800/50 rounded-lg">
                     <Edit className="w-4 h-4 text-purple-400" />
                 </button>
             ),
         },
         {
-            key: 'edit_qty',
-            header: '',
-            width: '40px',
+            key: 'edit_qty', header: '', width: '40px',
             render: (item) => (
                 <button
                     onClick={(e) => { e.stopPropagation(); setEditQtyModal({ item, newQty: item.qty }); }}
                     disabled={item.status === 3}
                     className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-30"
-                    title="Edit quantity"
-                >
+                    title="Edit quantity">
                     <Edit className="w-3 h-3 text-blue-400" />
                 </button>
             ),
         },
-        { key: 'pre_delivery_id', header: 'Pre ID', width: '70px' },
-        { key: 'id', header: 'Order', width: '70px' },
+        { key: 'pre_delivery_id', header: 'Pre ID', width: '80px' },
+        { key: 'id', header: 'Order ID', width: '80px' },
+        { key: 'name', header: 'Name', width: '150px' },
+        { key: 's_phone', header: 'Phone', width: '120px' },
+        { key: 'title', header: 'Product', width: '200px' },
+        { key: 'qty_text', header: 'Qty Text', width: '120px' },
         {
-            key: 'name',
-            header: 'Customer',
-            render: (item) => (
-                <div>
-                    <p className="font-medium text-white">{item.name}</p>
-                    <p className="text-xs text-slate-400">{item.s_phone}</p>
-                </div>
-            ),
-        },
-        { key: 'title', header: 'Product' },
-        { key: 'qty_text', header: 'Qty Text', width: '100px' },
-        {
-            key: 'qty',
-            header: 'Qty',
-            width: '60px',
-            render: (item) => (
-                <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-sm font-medium">
-                    {item.qty}
-                </span>
-            ),
+            key: 'qty', header: 'Qty', width: '70px',
+            render: (item) => <span className="font-semibold">{item.qty}</span>,
         },
         {
-            key: 'mark_delivered_qty',
-            header: 'Del Qty',
-            width: '70px',
+            key: 'mark_delivered_qty', header: 'Del Qty', width: '80px',
             render: (item) => {
                 const isDiff = item.mark_delivered_qty !== null && item.mark_delivered_qty !== item.qty;
-                return (
-                    <span className={`font-medium ${isDiff ? 'text-red-400' : 'text-slate-300'}`}>
-                        {item.mark_delivered_qty ?? '-'}
-                    </span>
-                );
+                return <span className={`font-medium ${isDiff ? 'text-red-400' : ''}`}>{item.mark_delivered_qty ?? '-'}</span>;
             },
         },
-        {
-            key: 'delivery_boy_name',
-            header: 'Driver',
-            render: (item) => (
-                <div className="flex items-center gap-1.5">
-                    <Truck className="w-3 h-3 text-slate-400" />
-                    <span className="text-sm">{item.delivery_boy_name || 'Unassigned'}</span>
-                </div>
-            ),
+        { key: 'delivery_boy_name', header: 'Driver', width: '150px',
+            render: (item) => <span>{item.delivery_boy_name || 'Unassigned'}</span>,
         },
         {
-            key: 'status',
-            header: 'Status',
+            key: 'status', header: 'Status', width: '120px',
             render: (item) => {
-                const status = getStatusLabel(item.status);
-                return <span className={`font-semibold ${status.color}`}>{status.label}</span>;
+                const s = getStatusLabel(item.status);
+                return <span className={`font-semibold ${s.color}`}>{s.label}</span>;
             },
         },
-        { key: 'delivered_date', header: 'Del Date', width: '100px' },
+        { key: 'delivered_date', header: 'Del Date', width: '110px' },
         {
-            key: 'mark_delivered_time_stamp',
-            header: 'Del Time',
-            width: '90px',
+            key: 'mark_delivered_time_stamp', header: 'Del Time', width: '100px',
             render: (item) => <span className="text-sm">{formatTime(item.mark_delivered_time_stamp)}</span>,
         },
         {
-            key: 'address',
-            header: 'Address',
-            render: (item) => (
-                <span className="text-sm text-slate-300 truncate max-w-[200px] block" title={composeAddress(item)}>
-                    {composeAddress(item)}
-                </span>
-            ),
+            key: 'address', header: 'Address', width: '220px',
+            render: (item) => <span className="text-sm text-slate-300 truncate max-w-[200px] block" title={composeAddress(item)}>{composeAddress(item)}</span>,
         },
-        { key: 'pincode', header: 'Pincode', width: '80px' },
+        { key: 'pincode', header: 'Pincode', width: '100px' },
         {
-            key: 'wallet_amount',
-            header: 'Wallet',
-            width: '80px',
+            key: 'wallet_amount', header: 'Wallet', width: '100px',
             render: (item) => <span className="text-green-400">₹{item.wallet_amount || 0}</span>,
         },
-        { key: 'start_date', header: 'Start', width: '100px' },
+        { key: 'start_date', header: 'Start Date', width: '110px' },
         {
-            key: 'subscription_type',
-            header: 'Sub Type',
-            width: '120px',
+            key: 'subscription_type', header: 'Sub Type', width: '130px',
             render: (item) => <span className="text-xs">{getSubscriptionLabel(item.subscription_type)}</span>,
         },
     ];
 
-    // Stats
     const stats = {
         total: deliveryItems.length,
         pending: deliveryItems.filter(d => d.status === 1).length,
@@ -342,14 +380,13 @@ export default function DeliveryListPage() {
                     <select
                         value={selectedDriver}
                         onChange={(e) => setSelectedDriver(e.target.value ? Number(e.target.value) : '')}
-                        className="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white"
-                    >
+                        className="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white">
                         <option value="">All Drivers</option>
-                        {drivers.map(d => (
+                        {[...drivers].sort((a, b) => a.name.localeCompare(b.name)).map(d => (
                             <option key={d.id} value={d.id}>{d.name}</option>
                         ))}
                     </select>
-                    <button onClick={() => refetch()} className="p-2 bg-slate-800/50 border border-slate-700/50 rounded-xl hover:bg-slate-700/50 transition-colors">
+                    <button onClick={() => refetch()} className="p-2 bg-slate-800/50 border border-slate-700/50 rounded-xl hover:bg-slate-700/50">
                         <RefreshCw className={`w-5 h-5 text-slate-400 ${isFetching ? 'animate-spin' : ''}`} />
                     </button>
                 </div>
@@ -357,27 +394,29 @@ export default function DeliveryListPage() {
 
             {/* Action Buttons */}
             <div className="flex flex-wrap gap-3">
-                <button
-                    onClick={handleGenerateList}
-                    disabled={isSubmitting}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-medium disabled:opacity-50"
-                >
+                <button onClick={() => setGenerateDialog(true)} disabled={isSubmitting}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-medium disabled:opacity-50">
                     <Plus className="w-4 h-4" /> Generate List
                 </button>
-                <button
-                    onClick={handleDeleteList}
-                    disabled={isSubmitting}
-                    className="flex items-center gap-2 px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl font-medium disabled:opacity-50"
-                >
+                <button onClick={() => setDeleteDialog(true)} disabled={isSubmitting}
+                    className="flex items-center gap-2 px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl font-medium disabled:opacity-50">
                     <Trash2 className="w-4 h-4" /> Delete List
                 </button>
-                {selectedRows.length > 0 && (
+                <button onClick={handleExport} disabled={deliveryItems.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-slate-300 hover:text-white disabled:opacity-40">
+                    <Download className="w-4 h-4" /> Export CSV
+                </button>
+                {deliveryItems.filter(d => d.status === 1).length > 0 && (
                     <button
-                        onClick={handleMarkDelivered}
+                        onClick={() => {
+                            const pendingIds = deliveryItems.filter(d => d.status === 1).map(d => d.pre_delivery_id);
+                            if (confirm(`Mark all ${pendingIds.length} pending items as delivered?`)) {
+                                handleMarkDelivered(pendingIds);
+                            }
+                        }}
                         disabled={isSubmitting}
-                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50"
-                    >
-                        <Check className="w-4 h-4" /> Mark {selectedRows.length} Delivered
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50">
+                        <Check className="w-4 h-4" /> Mark All Pending Delivered ({deliveryItems.filter(d => d.status === 1).length})
                     </button>
                 )}
             </div>
@@ -385,30 +424,21 @@ export default function DeliveryListPage() {
             {/* Filters */}
             <div className="flex flex-wrap gap-4">
                 <label className="flex items-center gap-2 text-sm text-slate-300">
-                    <input
-                        type="checkbox"
-                        checked={filters.delivered}
+                    <input type="checkbox" checked={filters.delivered}
                         onChange={(e) => setFilters({ ...filters, delivered: e.target.checked, not_delivered: false })}
-                        className="rounded border-slate-600"
-                    />
+                        className="rounded border-slate-600" />
                     Delivered Only
                 </label>
                 <label className="flex items-center gap-2 text-sm text-slate-300">
-                    <input
-                        type="checkbox"
-                        checked={filters.not_delivered}
+                    <input type="checkbox" checked={filters.not_delivered}
                         onChange={(e) => setFilters({ ...filters, not_delivered: e.target.checked, delivered: false })}
-                        className="rounded border-slate-600"
-                    />
+                        className="rounded border-slate-600" />
                     Not Delivered Only
                 </label>
                 <label className="flex items-center gap-2 text-sm text-slate-300">
-                    <input
-                        type="checkbox"
-                        checked={filters.delivered_diff_qty}
+                    <input type="checkbox" checked={filters.delivered_diff_qty}
                         onChange={(e) => setFilters({ ...filters, delivered_diff_qty: e.target.checked })}
-                        className="rounded border-slate-600"
-                    />
+                        className="rounded border-slate-600" />
                     Different Qty Delivered
                 </label>
             </div>
@@ -444,36 +474,55 @@ export default function DeliveryListPage() {
                 onRowClick={(item) => router.push(`/orders/${item.id}`)}
             />
 
+            {/* Generate List Passcode Dialog */}
+            {generateDialog && (
+                <PasscodeDialog
+                    title="Generate Delivery List"
+                    selectedDate={selectedDate}
+                    onConfirm={handleGenerateList}
+                    onCancel={() => setGenerateDialog(false)}
+                />
+            )}
+
+            {/* Delete List Passcode Dialog */}
+            {deleteDialog && (
+                <PasscodeDialog
+                    title="Delete Delivery List"
+                    selectedDate={selectedDate}
+                    onConfirm={handleDeleteList}
+                    onCancel={() => setDeleteDialog(false)}
+                />
+            )}
+
             {/* Edit Qty Modal */}
             {editQtyModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="glass rounded-2xl p-6 w-full max-w-sm mx-4">
                         <h2 className="text-xl font-bold text-white mb-4">Edit Quantity</h2>
-                        <p className="text-sm text-slate-400 mb-4">
-                            {editQtyModal.item.name} - {editQtyModal.item.title}
-                        </p>
-                        <div className="mb-4">
-                            <label className="block text-sm text-slate-400 mb-1">New Quantity</label>
-                            <input
-                                type="number"
-                                value={editQtyModal.newQty}
-                                onChange={(e) => setEditQtyModal({ ...editQtyModal, newQty: Number(e.target.value) })}
-                                min={0}
-                                className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white"
-                            />
+                        <div className="space-y-3 mb-4">
+                            <div>
+                                <label className="block text-xs text-slate-500 mb-1">Pre Delivery ID</label>
+                                <input type="text" value={editQtyModal.item.pre_delivery_id} disabled
+                                    className="w-full px-4 py-2 bg-slate-800/30 border border-slate-700/30 rounded-xl text-slate-400" />
+                            </div>
+                            <p className="text-sm text-slate-400">
+                                {editQtyModal.item.name} — {editQtyModal.item.title}
+                            </p>
+                            <div>
+                                <label className="block text-sm text-slate-400 mb-1">New Quantity</label>
+                                <input
+                                    type="number"
+                                    value={editQtyModal.newQty}
+                                    onChange={(e) => setEditQtyModal({ ...editQtyModal, newQty: Number(e.target.value) })}
+                                    min={0} autoFocus
+                                    className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white" />
+                            </div>
                         </div>
                         <div className="flex gap-3">
-                            <button
-                                onClick={() => setEditQtyModal(null)}
-                                className="flex-1 px-4 py-2 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleUpdateQty}
-                                disabled={isSubmitting}
-                                className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50"
-                            >
+                            <button onClick={() => setEditQtyModal(null)}
+                                className="flex-1 px-4 py-2 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl">Cancel</button>
+                            <button onClick={handleUpdateQty} disabled={isSubmitting}
+                                className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50">
                                 {isSubmitting ? 'Saving...' : 'Save'}
                             </button>
                         </div>
