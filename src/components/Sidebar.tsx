@@ -44,119 +44,31 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-    {
-        name: 'Dashboard',
-        href: '/dashboard',
-        icon: <LayoutDashboard className="w-5 h-5" />,
-    },
-    // --- Operations ---
-    {
-        name: 'Delivery List',
-        href: '/delivery-list',
-        icon: <ClipboardList className="w-5 h-5" />,
-    },
-    {
-        name: 'Pre-Packing List',
-        href: '/pre-packing-list',
-        icon: <Package className="w-5 h-5" />,
-    },
-    // --- Reports ---
-    {
-        name: 'Delivery Report',
-        href: '/delivery-report',
-        icon: <BarChart3 className="w-5 h-5" />,
-    },
-    {
-        name: 'Performance Report',
-        href: '/performance-report',
-        icon: <TrendingUp className="w-5 h-5" />,
-    },
-    // --- People ---
-    {
-        name: 'Users',
-        href: '/users',
-        icon: <Users className="w-5 h-5" />,
-    },
-    {
-        name: 'Drivers',
-        href: '/drivers',
-        icon: <Truck className="w-5 h-5" />,
-    },
-    // --- Catalog ---
-    {
-        name: 'Categories',
-        href: '/categories',
-        icon: <FolderTree className="w-5 h-5" />,
-    },
-    {
-        name: 'Subcategories',
-        href: '/subcategories',
-        icon: <Layers className="w-5 h-5" />,
-    },
-    {
-        name: 'Products',
-        href: '/products',
-        icon: <Package className="w-5 h-5" />,
-    },
-    // --- Orders ---
-    {
-        name: 'Orders',
-        href: '/orders',
-        icon: <ShoppingCart className="w-5 h-5" />,
-    },
-    {
-        name: 'Upcoming Orders',
-        href: '/upcoming-orders',
-        icon: <ShoppingCart className="w-5 h-5" />,
-    },
-    {
-        name: 'Upcoming Subs Orders',
-        href: '/upcoming-subs-orders',
-        icon: <CalendarDays className="w-5 h-5" />,
-    },
-    {
-        name: 'User Holidays',
-        href: '/holidays',
-        icon: <CalendarDays className="w-5 h-5" />,
-    },
-    {
-        name: 'Calendar',
-        href: '/calendar',
-        icon: <Calendar className="w-5 h-5" />,
-    },
-    {
-        name: 'Transactions',
-        href: '/transactions',
-        icon: <CreditCard className="w-5 h-5" />,
-    },
-    // --- Content ---
-    {
-        name: 'Banners',
-        href: '/banners',
-        icon: <Image className="w-5 h-5" />,
-    },
-    {
-        name: 'Pages',
-        icon: <FileText className="w-5 h-5" />,
-        children: [
-            { name: 'About Us', href: '/pages/about', icon: <FileText className="w-4 h-4" /> },
-            { name: 'Privacy Policy', href: '/pages/privacy', icon: <FileText className="w-4 h-4" /> },
-            { name: 'Terms', href: '/pages/terms', icon: <FileText className="w-4 h-4" /> },
-            { name: 'Refund Policy', href: '/pages/refund', icon: <FileText className="w-4 h-4" /> },
-            { name: 'FAQ', href: '/pages/faq', icon: <FileText className="w-4 h-4" /> },
-        ],
-    },
-    {
-        name: 'Testimonials',
-        href: '/testimonials',
-        icon: <MessageSquare className="w-5 h-5" />,
-    },
-    {
-        name: 'Notifications',
-        href: '/notifications',
-        icon: <Bell className="w-5 h-5" />,
-    },
-    // --- Configuration ---
+    // 0: Dashboard
+    { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
+    // --- Operations --- (divider after 0)
+    // 1-2
+    { name: 'Delivery List', href: '/delivery-list', icon: <ClipboardList className="w-5 h-5" /> },
+    { name: 'Pre-Packing List', href: '/pre-packing-list', icon: <Package className="w-5 h-5" /> },
+    // --- Reports --- (divider after 2)
+    // 3-4
+    { name: 'Delivery Report', href: '/delivery-report', icon: <BarChart3 className="w-5 h-5" /> },
+    { name: 'Performance Report', href: '/performance-report', icon: <TrendingUp className="w-5 h-5" /> },
+    // --- People --- (divider after 4)
+    // 5-6
+    { name: 'Users', href: '/users', icon: <Users className="w-5 h-5" /> },
+    { name: 'Drivers', href: '/drivers', icon: <Truck className="w-5 h-5" /> },
+    // --- Catalog --- (divider after 6)
+    // 7-9
+    { name: 'Categories', href: '/categories', icon: <FolderTree className="w-5 h-5" /> },
+    { name: 'Subcategories', href: '/subcategories', icon: <Layers className="w-5 h-5" /> },
+    { name: 'Products', href: '/products', icon: <Package className="w-5 h-5" /> },
+    // --- Orders & Finance --- (divider after 9)
+    // 10-11
+    { name: 'Orders', href: '/orders', icon: <ShoppingCart className="w-5 h-5" /> },
+    { name: 'Transactions', href: '/transactions', icon: <CreditCard className="w-5 h-5" /> },
+    // --- Settings --- (divider after 11)
+    // 12
     {
         name: 'Settings',
         icon: <Settings className="w-5 h-5" />,
@@ -166,34 +78,33 @@ const navItems: NavItem[] = [
             { name: 'Invoice', href: '/settings/invoice', icon: <Receipt className="w-4 h-4" /> },
             { name: 'Payment Gateway', href: '/settings/payment', icon: <Banknote className="w-4 h-4" /> },
             { name: 'Social Media', href: '/settings/social-media', icon: <Share2 className="w-4 h-4" /> },
+            { name: 'Banners', href: '/banners', icon: <Image className="w-4 h-4" /> },
+            { name: 'Testimonials', href: '/testimonials', icon: <MessageSquare className="w-4 h-4" /> },
+            { name: 'Pages', href: '/pages/about', icon: <FileText className="w-4 h-4" /> },
         ],
     },
+    // --- Location & Notifications --- (divider after 12)
+    // 13-15
+    { name: 'Pincodes', href: '/pincodes', icon: <MapPin className="w-5 h-5" /> },
+    { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-5 h-5" /> },
+    { name: 'Notifications', href: '/notifications', icon: <Bell className="w-5 h-5" /> },
+    // --- Archive --- (divider after 15)
+    // 16
     {
-        name: 'Pincodes',
-        href: '/pincodes',
-        icon: <MapPin className="w-5 h-5" />,
+        name: 'Archive',
+        icon: <CalendarDays className="w-5 h-5" />,
+        children: [
+            { name: 'Upcoming Orders', href: '/upcoming-orders', icon: <ShoppingCart className="w-4 h-4" /> },
+            { name: 'Upcoming Subs', href: '/upcoming-subs-orders', icon: <CalendarDays className="w-4 h-4" /> },
+            { name: 'User Holidays', href: '/holidays', icon: <Calendar className="w-4 h-4" /> },
+            { name: 'Calendar', href: '/calendar', icon: <Calendar className="w-4 h-4" /> },
+            { name: 'Low Wallet', href: '/notifications/low-wallet', icon: <Wallet className="w-4 h-4" /> },
+        ],
     },
-    {
-        name: 'Delivery Location',
-        href: '/delivery-locations',
-        icon: <Navigation className="w-5 h-5" />,
-    },
-    {
-        name: 'Low Wallet Notification',
-        href: '/notifications/low-wallet',
-        icon: <Wallet className="w-5 h-5" />,
-    },
-    // --- Admin ---
-    {
-        name: 'Admin Users',
-        href: '/admin-users',
-        icon: <Users className="w-5 h-5" />,
-    },
-    {
-        name: 'Roles & Permissions',
-        href: '/roles',
-        icon: <Settings className="w-5 h-5" />,
-    },
+    // --- Admin --- (divider after 16)
+    // 17-18
+    { name: 'Admin Users', href: '/admin-users', icon: <Users className="w-5 h-5" /> },
+    { name: 'Roles & Permissions', href: '/roles', icon: <Settings className="w-5 h-5" /> },
 ];
 
 interface SidebarProps {
@@ -362,7 +273,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                     </Link>
                                 )}
                                 {/* Section dividers */}
-                                {!collapsed && (index === 0 || index === 2 || index === 4 || index === 6 || index === 9 || index === 15 || index === 19 || index === 23) && (
+                                {!collapsed && (index === 0 || index === 2 || index === 4 || index === 6 || index === 9 || index === 11 || index === 12 || index === 15 || index === 16) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>

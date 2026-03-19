@@ -18,7 +18,7 @@ export default function DeliveryLocationsPage() {
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            await POST('/add_available_delivery_location', { title: newTitle });
+            await POST('/add_available_delivery_location', { location: newTitle });
             setShowModal(false);
             setNewTitle('');
             queryClient.invalidateQueries({ queryKey: ['delivery-locations'] });
@@ -42,12 +42,12 @@ export default function DeliveryLocationsPage() {
     const columns: Column<DeliveryLocation>[] = [
         { key: 'id', header: 'ID', width: '80px' },
         {
-            key: 'title',
+            key: 'location',
             header: 'Location',
             render: (item) => (
                 <div className="flex items-center gap-2">
                     <Navigation className="w-4 h-4 text-purple-400" />
-                    <span className="font-medium text-white">{item.title}</span>
+                    <span className="font-medium text-white">{item.location || item.title || '-'}</span>
                 </div>
             ),
         },

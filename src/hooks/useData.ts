@@ -215,7 +215,8 @@ export function usePincodes() {
 // Delivery Locations - Available delivery locations
 export interface DeliveryLocation {
     id: number;
-    title: string;  // API field name
+    location: string;
+    title?: string; // alias
     created_at?: string;
     updated_at?: string;
 }

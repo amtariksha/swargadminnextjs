@@ -1,45 +1,64 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
 import { Save, FileText } from 'lucide-react';
-import { useWebPage, useUpdateWebPage } from '@/hooks/useData';
+import { GET, POST } from '@/lib/api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import RichTextEditor from '@/components/RichTextEditor';
 import { toast } from 'sonner';
 
-const pageConfig: Record<string, { title: string; key: string }> = {
-    about: { title: 'About Us', key: 'about_us' },
-    privacy: { title: 'Privacy Policy', key: 'privacy_policy' },
-    terms: { title: 'Terms & Conditions', key: 'terms_conditions' },
-    refund: { title: 'Refund Policy', key: 'refund_policy' },
-    faq: { title: 'FAQ', key: 'faq' },
+// Backend uses numeric page_id (from Laravel):
+// 1=About Us, 2=Privacy Policy, 3=Terms, 4=Refund Policy, 5=FAQ
+const PAGE_CONFIG: Record<string, { title: string; pageId: number }> = {
+    about: { title: 'About Us', pageId: 1 },
+    privacy: { title: 'Privacy Policy', pageId: 2 },
+    terms: { title: 'Terms & Conditions', pageId: 3 },
+    refund: { title: 'Refund Policy', pageId: 4 },
+    faq: { title: 'FAQ', pageId: 5 },
 };
 
-export default function PageEditorPage({ params }: { params: Promise<{ slug: string }> }) {
-    const [slug, setSlug] = useState('');
+export default function PageEditorPage() {
+    const params = useParams<{ slug: string }>();
+    const slug = params.slug || '';
+    const queryClient = useQueryClient();
     const [content, setContent] = useState('');
     const [initialized, setInitialized] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
-    useEffect(() => {
-        params.then(p => setSlug(p.slug));
-    }, [params]);
+    const config = PAGE_CONFIG[slug] || { title: 'Page', pageId: 0 };
 
-    const config = pageConfig[slug] || { title: 'Page', key: slug };
-    const { data: page, isLoading } = useWebPage(config.key);
-    const updatePage = useUpdateWebPage();
+    const { data: page, isLoading } = useQuery({
+        queryKey: ['web-page', config.pageId],
+        queryFn: async () => {
+            const response = await GET<{ id: number; page_id: number; title: string; body: string }>(`/get_web_page/page/${config.pageId}`);
+            return response.data;
+        },
+        enabled: config.pageId > 0,
+    });
 
     useEffect(() => {
         if (page && !initialized) {
-            setContent(page.content || '');
+            setContent(page.body || '');
             setInitialized(true);
         }
     }, [page, initialized]);
 
+    // Reset when slug changes
+    useEffect(() => {
+        setInitialized(false);
+    }, [slug]);
+
     const handleSave = async () => {
+        setIsSaving(true);
         try {
-            await updatePage.mutateAsync({ page: config.key, content });
+            await POST('/update_web_page', { page_id: config.pageId, body: content });
+            queryClient.invalidateQueries({ queryKey: ['web-page', config.pageId] });
             toast.success('Page saved successfully');
         } catch {
             toast.error('Failed to save page');
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -64,20 +83,26 @@ export default function PageEditorPage({ params }: { params: Promise<{ slug: str
                         <p className="text-slate-400">Edit page content</p>
                     </div>
                 </div>
-                <button
-                    onClick={handleSave}
-                    disabled={updatePage.isPending}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50"
-                >
-                    <Save className="w-5 h-5" />
-                    {updatePage.isPending ? 'Saving...' : 'Save Changes'}
-                </button>
+                {/* Page navigation tabs */}
+                <div className="flex gap-2 flex-wrap">
+                    {Object.entries(PAGE_CONFIG).map(([key, val]) => (
+                        <a key={key} href={`/pages/${key}`}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium ${key === slug ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'text-slate-400 hover:text-white hover:bg-slate-800/50'}`}>
+                            {val.title}
+                        </a>
+                    ))}
+                </div>
             </div>
 
             <div className="glass rounded-2xl p-6">
                 <label className="block text-sm font-medium text-slate-300 mb-2">Content</label>
                 <RichTextEditor content={content} onChange={setContent} />
             </div>
+
+            <button onClick={handleSave} disabled={isSaving}
+                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50">
+                <Save className="w-5 h-5" /> {isSaving ? 'Saving...' : 'Save Changes'}
+            </button>
         </div>
     );
 }
