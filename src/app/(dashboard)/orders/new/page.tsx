@@ -71,7 +71,9 @@ export default function CreateOrderPage() {
         [products, selectedProductId]
     );
 
-    const orderAmount = selectedProduct ? selectedProduct.price * qty : 0;
+    const orderAmount = selectedProduct
+        ? Math.round((selectedProduct.price + selectedProduct.price * (selectedProduct.tax || 0) / 100) * qty * 100) / 100
+        : 0;
 
     const filteredUsers = useMemo(
         () => userSearch.length >= 2
@@ -206,12 +208,34 @@ export default function CreateOrderPage() {
                                 }`}
                             >
                                 <p className="font-medium truncate">{p.title}</p>
-                                <p className="text-xs text-slate-400">₹{p.price} &middot; {p.unit}</p>
+                                <p className="text-xs text-slate-400">₹{p.price} &middot; {p.qty_text || p.unit || ''} {p.subscription === 1 ? '📦' : ''}</p>
                             </button>
                         ))}
                     </div>
                     {errors.product_id && <p className="mt-1 text-xs text-red-400">{errors.product_id.message}</p>}
                 </div>
+
+                {/* Auto-filled product info */}
+                {selectedProduct && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                            <label className="block text-xs text-slate-500 mb-1">MRP</label>
+                            <input value={`₹${selectedProduct.mrp || selectedProduct.price}`} disabled className={`${inputClassName} !text-slate-500 !bg-slate-800/30`} />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-slate-500 mb-1">Price</label>
+                            <input value={`₹${selectedProduct.price}`} disabled className={`${inputClassName} !text-slate-500 !bg-slate-800/30`} />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-slate-500 mb-1">Tax %</label>
+                            <input value={`${selectedProduct.tax || 0}%`} disabled className={`${inputClassName} !text-slate-500 !bg-slate-800/30`} />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-slate-500 mb-1">Order Amount</label>
+                            <input value={`₹${orderAmount}`} disabled className={`${inputClassName} !text-emerald-400 !bg-slate-800/30 font-semibold`} />
+                        </div>
+                    </div>
+                )}
 
                 {/* Order Details */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -299,7 +323,7 @@ export default function CreateOrderPage() {
                 <FormField label="Delivery Partner">
                     <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className={selectClassName}>
                         <option value="">Select delivery partner (optional)</option>
-                        {drivers.map((d) => (
+                        {[...drivers].sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
                             <option key={d.id} value={d.id}>{d.name} - {d.phone}</option>
                         ))}
                     </select>
