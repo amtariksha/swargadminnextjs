@@ -93,16 +93,33 @@ export function useSubcategories() {
 export interface Product {
     id: number;
     title: string;
-    category_id: number;
-    subcategory_id?: number;
-    photo?: string;
-    description?: string;
+    preferences?: number;
+    qty_text?: string;
+    stock_qty?: number;
+    sub_cat_id?: number;
     price: number;
-    discount_price?: number;
-    unit: string;
-    stock: number;
-    status: number;
+    mrp?: number;
+    tax?: number;
+    offer_text?: string;
+    description?: string;
+    disclaimer?: string;
+    subscription?: number;
+    is_active?: number;
+    cat_id?: number;
+    cat_title?: string;
+    sub_cat_title?: string;
+    image_id?: number | null;
+    image?: string | null;
     created_at: string;
+    updated_at?: string;
+    // Legacy aliases (some pages may still use these)
+    photo?: string;
+    discount_price?: number;
+    unit?: string;
+    stock?: number;
+    status?: number;
+    category_id?: number;
+    subcategory_id?: number;
 }
 
 export function useProducts() {
