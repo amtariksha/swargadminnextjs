@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useDrivers, Driver } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import { Plus, X } from 'lucide-react';
-import { POST, PUT } from '@/lib/api';
+import { POST } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -50,7 +50,7 @@ export default function DriversPage() {
                 await POST('/add_user', { name: formName, email: formEmail, phone: formPhone, role: 4 });
                 toast.success('New Driver Added successfully');
             } else {
-                await PUT('/update_user', { id: editUserId, name: formName, email: formEmail, phone: formPhone, is_location: formIsLocation });
+                await POST('/update_user', { id: editUserId, name: formName, email: formEmail, phone: formPhone, is_location: formIsLocation });
                 toast.success('User Details Updated successfully');
             }
             queryClient.invalidateQueries({ queryKey: ['drivers'] });

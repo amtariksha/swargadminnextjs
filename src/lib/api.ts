@@ -71,8 +71,9 @@ export const POST = async <T = unknown>(
     endpoint: string,
     data?: Record<string, unknown> | FormData
 ): Promise<{ data: T; message?: string; response?: number }> => {
+    // For FormData, do NOT set Content-Type — let axios/browser set it with the correct boundary
     const config = data instanceof FormData
-        ? { headers: { 'Content-Type': 'multipart/form-data' } }
+        ? {}
         : {};
     const response = await apiClient.post<{ data: T; message?: string; response?: number }>(
         endpoint,
@@ -87,9 +88,8 @@ export const PUT = async <T = unknown>(
     endpoint: string,
     data?: Record<string, unknown> | FormData
 ): Promise<{ data: T; message?: string }> => {
-    const config = data instanceof FormData
-        ? { headers: { 'Content-Type': 'multipart/form-data' } }
-        : {};
+    // For FormData, do NOT set Content-Type — let axios/browser set it with the correct boundary
+    const config = data instanceof FormData ? {} : {};
     const response = await apiClient.put<{ data: T; message?: string }>(endpoint, data, config);
     return response.data;
 };
