@@ -5,7 +5,7 @@ import { useState, useMemo } from 'react';
 import { format } from 'date-fns';
 import {
     useUser, useUserOrders, useUserTransactions, useUserHolidays, useUserAddresses,
-    useUserDeliveryHistory, useAddHoliday, useDeleteHoliday, useAddTransaction,
+    useUserDeliveryHistory, useUserCalendar, useAddHoliday, useDeleteHoliday, useAddTransaction,
     useAddAddress, useUpdateAddress, useDeleteAddress,
     type UserTransaction, type UserHoliday, type Address,
 } from '@/hooks/useData';
@@ -44,8 +44,11 @@ export default function UserDetailPage() {
     const [txnForm, setTxnForm] = useState({ amount: '', type: '1', description: '', payment_mode: '1' });
     const [addrForm, setAddrForm] = useState({ name: '', s_phone: '', flat_no: '', apartment_name: '', area: '', landmark: '', city: '', pincode: '', lat: '', lng: '' });
 
+    // Calendar date
+    const [calendarDate, setCalendarDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+
     // Log filters for All Activity tab
-    const [logFilters, setLogFilters] = useState({ orders: true, transactions: true, holidays: true, deliveries: true });
+    const [logFilters, setLogFilters] = useState({ orders: true, transactions: true, holidays: true, deliveries: true, calendar: true });
 
     // Data
     const { data: user, isLoading } = useUser(id);
@@ -54,6 +57,7 @@ export default function UserDetailPage() {
     const { data: holidays = [] } = useUserHolidays(id);
     const { data: addresses = [] } = useUserAddresses(id);
     const { data: deliveryHistory = [] } = useUserDeliveryHistory(id);
+    const { data: calendarData = [] } = useUserCalendar(id, calendarDate);
 
     // Mutations
     const addHolidayMutation = useAddHoliday();
@@ -73,8 +77,10 @@ export default function UserDetailPage() {
         if (logFilters.holidays) holidays.forEach(h => items.push({ ...h, log_type: 'Holiday', sort_date: h.date || h.created_at }));
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (logFilters.deliveries) deliveryHistory.forEach((d: any) => items.push({ ...d, log_type: 'Delivery', sort_date: d.date || d.created_at }));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (logFilters.calendar) calendarData.forEach((c: any) => items.push({ ...c, log_type: 'Calendar', sort_date: c.start_date || c.created_at }));
         return items.sort((a, b) => new Date(b.sort_date || 0).getTime() - new Date(a.sort_date || 0).getTime());
-    }, [orders, transactions, holidays, deliveryHistory, logFilters]);
+    }, [orders, transactions, holidays, deliveryHistory, calendarData, logFilters]);
 
     // ====== Handlers ======
     const handleAddHoliday = async () => {
@@ -165,6 +171,7 @@ export default function UserDetailPage() {
                 const colors: Record<string, string> = {
                     Order: 'bg-blue-500/20 text-blue-400', Transaction: 'bg-purple-500/20 text-purple-400',
                     Holiday: 'bg-orange-500/20 text-orange-400', Delivery: 'bg-green-500/20 text-green-400',
+                    Calendar: 'bg-cyan-500/20 text-cyan-400',
                 };
                 return <span className={`px-2 py-1 rounded-lg text-xs font-medium ${colors[item.log_type] || ''}`}>{item.log_type}</span>;
             },
@@ -283,7 +290,7 @@ export default function UserDetailPage() {
             content: (
                 <div>
                     <div className="flex flex-wrap gap-3 mb-4">
-                        {(['orders', 'transactions', 'holidays', 'deliveries'] as const).map(key => (
+                        {(['orders', 'transactions', 'holidays', 'deliveries', 'calendar'] as const).map(key => (
                             <label key={key} className="flex items-center gap-2 text-sm text-slate-300">
                                 <input type="checkbox" checked={logFilters[key]}
                                     onChange={(e) => setLogFilters({ ...logFilters, [key]: e.target.checked })}
@@ -344,12 +351,60 @@ export default function UserDetailPage() {
             label: 'Delivery History', count: deliveryHistory.length,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             content: <DataTable data={deliveryHistory} columns={[
-                { key: 'id', header: 'ID', width: '70px' },
-                { key: 'date', header: 'Date', render: (d: Record<string, unknown>) => { try { return format(new Date(d.date as string), 'dd MMM yyyy'); } catch { return '-'; } } },
-                { key: 'qty', header: 'Qty', render: (d: Record<string, unknown>) => String(d.qty || '-') },
-                { key: 'order_id', header: 'Order', width: '70px' },
+                { key: 'entry_user_id', header: 'Delivery User Id', width: '130px' },
+                { key: 'name', header: 'Name', render: (d: Record<string, unknown>) => String(d.name || '-') },
+                { key: 'phone', header: 'Phone Number', width: '130px', render: (d: Record<string, unknown>) => String(d.phone || '-') },
+                { key: 'email', header: 'Email', width: '180px', render: (d: Record<string, unknown>) => String(d.email || '-') },
+                { key: 'date', header: 'Delivery Date', width: '130px', render: (d: Record<string, unknown>) => { try { return format(new Date(d.date as string), 'yyyy-MM-dd'); } catch { return '-'; } } },
+                { key: 'created_at', header: 'Time Stamps', width: '180px', render: (d: Record<string, unknown>) => { try { return format(new Date(d.created_at as string), 'yyyy-MM-dd HH:mm:ss'); } catch { return '-'; } } },
+                {
+                    key: 'payment_mode', header: 'Payment Mode', width: '120px',
+                    render: (d: Record<string, unknown>) => {
+                        const pm = d.payment_mode as number | null;
+                        return String(pm === 1 ? 'Online' : pm === 2 ? 'Offline' : 'N/A');
+                    },
+                },
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ] as Column<any>[]} pageSize={10} emptyMessage="No delivery history" />,
+            ] as Column<any>[]} pageSize={50} searchPlaceholder="Search deliveries..." emptyMessage="No delivery history" />,
+        },
+        {
+            label: 'Calendar', count: calendarData.length,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            content: (
+                <div>
+                    <div className="flex items-center gap-4 mb-4">
+                        <label className="text-sm text-slate-300">Date:</label>
+                        <input type="date" value={calendarDate} onChange={(e) => setCalendarDate(e.target.value)} className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent" />
+                    </div>
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    <DataTable data={calendarData} columns={[
+                        { key: 'id', header: 'ID', width: '60px' },
+                        { key: 'order_type', header: 'Order Type', width: '100px', render: (c: Record<string, unknown>) => String(ORDER_TYPE_LABELS[c.order_type as number] || 'N/A') },
+                        { key: 'title', header: 'Product Title', render: (c: Record<string, unknown>) => String(c.title || '-') },
+                        { key: 'order_amount', header: 'Order Amount', width: '120px', render: (c: Record<string, unknown>) => `₹${c.order_amount ?? 0}` },
+                        { key: 'qty', header: 'Quantity', width: '80px', render: (c: Record<string, unknown>) => String(c.qty || '-') },
+                        { key: 'start_date', header: 'Start Date', width: '120px', render: (c: Record<string, unknown>) => { try { return format(new Date(c.start_date as string), 'yyyy-MM-dd'); } catch { return '-'; } } },
+                        { key: 'subscription_type', header: 'Sub Type', width: '130px', render: (c: Record<string, unknown>) => String(SUB_TYPE_LABELS[c.subscription_type as number] || 'N/A') },
+                        {
+                            key: 'order_status', header: 'Order Status', width: '120px',
+                            render: (c: Record<string, unknown>) => {
+                                if (c.subscription_type !== null && c.subscription_type !== undefined) {
+                                    return (c.order_status as number) === 0 ? 'Active' : 'Stopped';
+                                }
+                                return 'N/A';
+                            },
+                        },
+                        { key: 'created_at', header: 'Created At', width: '170px', render: (c: Record<string, unknown>) => { try { return format(new Date(c.created_at as string), 'yyyy-MM-dd HH:mm:ss'); } catch { return '-'; } } },
+                        { key: 'updated_at', header: 'Updated At', width: '170px', render: (c: Record<string, unknown>) => { try { return format(new Date(c.updated_at as string), 'yyyy-MM-dd HH:mm:ss'); } catch { return '-'; } } },
+                        { key: 'qty_text', header: 'Qty Text', width: '100px', render: (c: Record<string, unknown>) => String(c.qty_text || '-') },
+                        { key: 'stock_qty', header: 'Stock Qty', width: '100px', render: (c: Record<string, unknown>) => String(c.stock_qty ?? '-') },
+                        { key: 'user_holiday_date', header: 'Holiday Date', width: '120px', render: (c: Record<string, unknown>) => { try { return c.user_holiday_date ? format(new Date(c.user_holiday_date as string), 'yyyy-MM-dd') : 'N/A'; } catch { return 'N/A'; } } },
+                        { key: 'pre_order_updates_qty', header: 'Pre-Order Qty', width: '120px', render: (c: Record<string, unknown>) => String(c.pre_order_updates_qty ?? '-') },
+                        { key: 'pre_order_updtes_id', header: 'Pre-Order ID', width: '110px', render: (c: Record<string, unknown>) => String(c.pre_order_updtes_id ?? '-') },
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    ] as Column<any>[]} pageSize={50} searchPlaceholder="Search calendar..." emptyMessage="No calendar entries for this date" />
+                </div>
+            ),
         },
     ];
 
@@ -360,7 +415,7 @@ export default function UserDetailPage() {
                 <button onClick={() => router.push('/users')} className="p-2 hover:bg-slate-800/50 rounded-lg"><ArrowLeft className="w-5 h-5 text-slate-400" /></button>
                 <div className="flex-1">
                     <h1 className="text-2xl font-bold text-white">{user.name}</h1>
-                    <p className="text-slate-400">User #{user.id}</p>
+                    <p className="text-slate-400">User #{user.id || id}</p>
                 </div>
                 <button onClick={() => router.push(`/users/${id}/edit`)} className="flex items-center gap-2 px-4 py-2 bg-purple-600/20 text-purple-400 rounded-xl hover:bg-purple-600/30"><Edit className="w-4 h-4" /> Edit</button>
                 <button onClick={() => router.push(`/orders/new?user_id=${id}`)} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl"><Plus className="w-4 h-4" /> New Order</button>
