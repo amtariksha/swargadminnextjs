@@ -8,9 +8,9 @@ export interface AdminUser {
     name: string;
     email: string;
     phone: string;
-    photo?: string;
-    status: number;
+    image?: string | null;
     created_at: string;
+    updated_at?: string;
     role?: {
         id: number;
         role_id: number;
@@ -58,7 +58,7 @@ export function useRoles() {
     });
 }
 
-// Create admin user mutation
+// Create admin user mutation — uses /add_user with role
 export function useCreateAdminUser() {
     const queryClient = useQueryClient();
 
@@ -70,7 +70,13 @@ export function useCreateAdminUser() {
             password: string;
             role_id: number;
         }) => {
-            const response = await POST('/add_admin_user', data);
+            const response = await POST('/add_user', {
+                name: data.name,
+                email: data.email,
+                phone: data.phone,
+                password: data.password,
+                role: data.role_id,
+            });
             return response;
         },
         onSuccess: () => {
@@ -79,7 +85,7 @@ export function useCreateAdminUser() {
     });
 }
 
-// Update admin user mutation
+// Update admin user mutation — uses /update_user
 export function useUpdateAdminUser() {
     const queryClient = useQueryClient();
 
@@ -89,10 +95,8 @@ export function useUpdateAdminUser() {
             name?: string;
             email?: string;
             phone?: string;
-            role_id?: number;
-            status?: number;
         }) => {
-            const response = await POST('/update_admin_user', data);
+            const response = await POST('/update_user', data);
             return response;
         },
         onSuccess: () => {
@@ -101,13 +105,13 @@ export function useUpdateAdminUser() {
     });
 }
 
-// Delete admin user mutation
+// Delete admin user mutation — uses /delete_user
 export function useDeleteAdminUser() {
     const queryClient = useQueryClient();
 
     return useMutation({
         mutationFn: async (id: number) => {
-            const response = await DELETE(`/delete_admin_user/${id}`);
+            const response = await POST('/delete_user', { id });
             return response;
         },
         onSuccess: () => {
