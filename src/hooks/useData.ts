@@ -470,26 +470,26 @@ export function useProduct(id: number | string | undefined) {
 // User-Scoped Query Hooks
 // ==========================================
 
-export function useUserOrders(userId: number | string | undefined) {
+export function useUserOrders(userId: number | string | undefined, enabled = true) {
     return useQuery({
         queryKey: ['user-orders', userId],
         queryFn: async () => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const response = await GET<any[]>(`/get_order/user/${userId}`);
+            const response = await GET<any[]>(`/get_order/user/${userId}?limit=50`);
             return response.data || [];
         },
-        enabled: !!userId,
+        enabled: !!userId && enabled,
     });
 }
 
-export function useUserTransactions(userId: number | string | undefined) {
+export function useUserTransactions(userId: number | string | undefined, enabled = true) {
     return useQuery({
         queryKey: ['user-transactions', userId],
         queryFn: async () => {
-            const response = await GET<UserTransaction[]>(`/txn/user/${userId}`);
+            const response = await GET<UserTransaction[]>(`/txn/user/${userId}?limit=50`);
             return response.data || [];
         },
-        enabled: !!userId,
+        enabled: !!userId && enabled,
     });
 }
 
@@ -515,27 +515,27 @@ export function useUserAddresses(userId: number | string | undefined) {
     });
 }
 
-export function useUserDeliveryHistory(userId: number | string | undefined) {
+export function useUserDeliveryHistory(userId: number | string | undefined, enabled = true) {
     return useQuery({
         queryKey: ['user-delivery-history', userId],
         queryFn: async () => {
             const response = await GET<import('./useOrders').DeliveryReportItem[]>(
-                `/get_sub_order_delivery_by_user/${userId}`
+                `/get_sub_order_delivery_by_user/${userId}?limit=50`
             );
             return response.data || [];
         },
-        enabled: !!userId,
+        enabled: !!userId && enabled,
     });
 }
 
-export function useUserCalendar(userId: number | string | undefined, month: string) {
+export function useUserCalendar(userId: number | string | undefined, month: string, enabled = true) {
     return useQuery({
         queryKey: ['user-calendar', userId, month],
         queryFn: async () => {
             const response = await GET<Record<string, unknown>[]>(`/get_order_calender/${userId}/${month}`);
             return response.data || [];
         },
-        enabled: !!userId && !!month,
+        enabled: !!userId && !!month && enabled,
     });
 }
 

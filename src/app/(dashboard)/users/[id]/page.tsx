@@ -50,14 +50,21 @@ export default function UserDetailPage() {
     // Log filters for All Activity tab
     const [logFilters, setLogFilters] = useState({ orders: true, transactions: true, holidays: true, deliveries: true, calendar: true });
 
-    // Data
+    // Data — lazy-load heavy queries based on active tab
+    // Tab 0: All Activity (loads orders+transactions+deliveries), Tab 1: Orders, Tab 2: Transactions
+    // Tab 3: Holidays, Tab 4: Addresses, Tab 5: Delivery History, Tab 6: Calendar
+    const needOrders = activeTab === 0 || activeTab === 1;
+    const needTransactions = activeTab === 0 || activeTab === 2;
+    const needDeliveries = activeTab === 0 || activeTab === 5;
+    const needCalendar = activeTab === 6;
+
     const { data: user, isLoading } = useUser(id);
-    const { data: orders = [] } = useUserOrders(id);
-    const { data: transactions = [] } = useUserTransactions(id);
-    const { data: holidays = [] } = useUserHolidays(id);
-    const { data: addresses = [] } = useUserAddresses(id);
-    const { data: deliveryHistory = [] } = useUserDeliveryHistory(id);
-    const { data: calendarData = [] } = useUserCalendar(id, calendarDate);
+    const { data: orders = [] } = useUserOrders(id, needOrders);
+    const { data: transactions = [] } = useUserTransactions(id, needTransactions);
+    const { data: holidays = [] } = useUserHolidays(id); // small dataset, always load
+    const { data: addresses = [] } = useUserAddresses(id); // small dataset, always load
+    const { data: deliveryHistory = [] } = useUserDeliveryHistory(id, needDeliveries);
+    const { data: calendarData = [] } = useUserCalendar(id, calendarDate, needCalendar);
 
     // Mutations
     const addHolidayMutation = useAddHoliday();
