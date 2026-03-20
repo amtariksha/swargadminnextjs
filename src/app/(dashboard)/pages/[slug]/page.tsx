@@ -28,7 +28,7 @@ export default function PageEditorPage() {
 
     const config = PAGE_CONFIG[slug] || { title: 'Page', pageId: 0 };
 
-    const { data: page, isLoading } = useQuery({
+    const { data: page, isLoading, isError } = useQuery({
         queryKey: ['web-page', config.pageId],
         queryFn: async () => {
             const response = await GET<{ id: number; page_id: number; title: string; body: string }>(`/get_web_page/page/${config.pageId}`);
@@ -38,11 +38,13 @@ export default function PageEditorPage() {
     });
 
     useEffect(() => {
-        if (page && !initialized) {
-            setContent(page.body || '');
+        if (!initialized && !isLoading) {
+            if (page) {
+                setContent(page.body || '');
+            }
             setInitialized(true);
         }
-    }, [page, initialized]);
+    }, [page, initialized, isLoading]);
 
     // Reset when slug changes
     useEffect(() => {
@@ -62,7 +64,7 @@ export default function PageEditorPage() {
         }
     };
 
-    if (isLoading) {
+    if (isLoading || !initialized) {
         return (
             <div className="space-y-6">
                 <div className="h-8 w-48 bg-slate-800/50 rounded animate-pulse" />
@@ -96,6 +98,9 @@ export default function PageEditorPage() {
 
             <div className="glass rounded-2xl p-6">
                 <label className="block text-sm font-medium text-slate-300 mb-2">Content</label>
+                {!page && !isLoading && (
+                    <p className="text-slate-500 text-sm mb-2">No existing content found. Start editing below to create this page.</p>
+                )}
                 <RichTextEditor content={content} onChange={setContent} />
             </div>
 

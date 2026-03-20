@@ -30,7 +30,7 @@ import {
     Code,
     Quote,
 } from 'lucide-react';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 interface RichTextEditorProps {
     content: string;
@@ -39,6 +39,8 @@ interface RichTextEditorProps {
 }
 
 export default function RichTextEditor({ content, onChange, placeholder }: RichTextEditorProps) {
+    const isUpdatingFromProp = useRef(false);
+
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
@@ -54,7 +56,9 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
         ],
         content,
         onUpdate: ({ editor }) => {
-            onChange(editor.getHTML());
+            if (!isUpdatingFromProp.current) {
+                onChange(editor.getHTML());
+            }
         },
         editorProps: {
             attributes: {
@@ -62,6 +66,15 @@ export default function RichTextEditor({ content, onChange, placeholder }: RichT
             },
         },
     });
+
+    // Sync content prop changes into the editor (e.g., async data load)
+    useEffect(() => {
+        if (editor && content && editor.getHTML() !== content) {
+            isUpdatingFromProp.current = true;
+            editor.commands.setContent(content);
+            isUpdatingFromProp.current = false;
+        }
+    }, [content, editor]);
 
     const addLink = useCallback(() => {
         if (!editor) return;
