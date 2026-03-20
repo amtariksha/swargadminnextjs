@@ -23,7 +23,6 @@ export default function DashboardPage() {
 
     const isLoading = usersLoading || deliveriesLoading;
 
-    const activeUsers = users.filter((u) => u.status === 1).length;
     const totalWallet = users.reduce((sum, u) => sum + (u.wallet_amount || 0), 0);
     const lowWalletUsers = users.filter((u) => (u.wallet_amount || 0) < 100).length;
     const pendingDeliveries = todayDeliveries.filter((d) => d.status === 1).length;
@@ -39,9 +38,9 @@ export default function DashboardPage() {
             bg: 'from-blue-500/20 to-blue-600/10',
         },
         {
-            label: 'Active Users',
-            value: activeUsers,
-            icon: Users,
+            label: 'Total Wallet',
+            value: `₹${totalWallet.toLocaleString()}`,
+            icon: Wallet,
             color: 'text-green-400',
             bg: 'from-green-500/20 to-green-600/10',
         },

@@ -381,8 +381,11 @@ export default function UserDetailPage() {
                             <MapPin className="w-4 h-4 text-slate-500" />
                             <span className="text-slate-400 text-sm">{user.address || [user.flat_no, user.apartment_name, user.area, user.city, user.pincode].filter(Boolean).join(', ') || '-'}</span>
                         </div>
-                        <div>
-                            <span className={`px-2 py-1 rounded-lg text-xs font-medium ${user.status === 1 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>{user.status === 1 ? 'Active' : 'Inactive'}</span>
+                        <div className="flex items-center gap-3">
+                            <Calendar className="w-4 h-4 text-slate-500" />
+                            <span className="text-slate-400 text-sm">
+                                {user.updated_at ? new Date(user.updated_at).toLocaleDateString('en-IN') : '-'}
+                            </span>
                         </div>
                     </div>
                 </div>

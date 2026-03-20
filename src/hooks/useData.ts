@@ -7,12 +7,10 @@ export interface User {
     name: string;
     email: string;
     phone: string;
-    photo?: string;
-    address?: string;
-    pincode?: string;
+    image?: string | null;
     wallet_amount: number;
-    status: number;
     created_at: string;
+    updated_at: string;
 }
 
 export function useUsers() {
@@ -28,14 +26,15 @@ export function useUsers() {
 // Drivers
 export interface Driver {
     id: number;
+    user_id: number;
     name: string;
     email: string;
     phone: string;
-    photo?: string;
-    address?: string;
-    vehicle_number?: string;
-    status: number;
+    image?: string | null;
+    is_location?: number;
+    wallet_amount?: number;
     created_at: string;
+    updated_at?: string;
 }
 
 export function useDrivers() {
@@ -308,6 +307,8 @@ export function useSettings() {
 // ==========================================
 
 export interface UserDetail extends User {
+    address?: string;
+    pincode?: string;
     flat_no?: string;
     apartment_name?: string;
     area?: string;
@@ -316,7 +317,6 @@ export interface UserDetail extends User {
     lat?: string;
     lng?: string;
     role?: Array<{ id: number; role_id: number; role_title: string }>;
-    updated_at?: string;
 }
 
 export interface Address {
