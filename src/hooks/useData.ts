@@ -173,15 +173,17 @@ export function useBanners() {
     });
 }
 
-// Testimonials
+// Testimonials — field names match backend (title, sub_title, description, image)
 export interface Testimonial {
     id: number;
-    name: string;
-    designation?: string;
-    message: string;
-    photo?: string;
+    title: string;
+    sub_title: string;
+    description: string;
     rating: number;
-    status: number;
+    image?: string;
+    image_id?: number;
+    status?: number;
+    updated_at?: string;
 }
 
 export function useTestimonials() {

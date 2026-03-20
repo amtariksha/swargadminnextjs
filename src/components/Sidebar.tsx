@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BRANDING } from '@/config/tenant';
 import {
     LayoutDashboard,
@@ -47,28 +47,27 @@ const navItems: NavItem[] = [
     // 0: Dashboard
     { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
     // --- Operations --- (divider after 0)
-    // 1-2
+    // 1
     { name: 'Delivery List', href: '/delivery-list', icon: <ClipboardList className="w-5 h-5" /> },
-    { name: 'Pre-Packing List', href: '/pre-packing-list', icon: <Package className="w-5 h-5" /> },
-    // --- Reports --- (divider after 2)
-    // 3-4
+    // --- Reports --- (divider after 1)
+    // 2-3
     { name: 'Delivery Report', href: '/delivery-report', icon: <BarChart3 className="w-5 h-5" /> },
     { name: 'Performance Report', href: '/performance-report', icon: <TrendingUp className="w-5 h-5" /> },
-    // --- People --- (divider after 4)
-    // 5-6
+    // --- People --- (divider after 3)
+    // 4-5
     { name: 'Users', href: '/users', icon: <Users className="w-5 h-5" /> },
     { name: 'Drivers', href: '/drivers', icon: <Truck className="w-5 h-5" /> },
-    // --- Catalog --- (divider after 6)
-    // 7-9
+    // --- Catalog --- (divider after 5)
+    // 6-8
     { name: 'Categories', href: '/categories', icon: <FolderTree className="w-5 h-5" /> },
     { name: 'Subcategories', href: '/subcategories', icon: <Layers className="w-5 h-5" /> },
     { name: 'Products', href: '/products', icon: <Package className="w-5 h-5" /> },
-    // --- Orders & Finance --- (divider after 9)
-    // 10-11
+    // --- Orders & Finance --- (divider after 8)
+    // 9-10
     { name: 'Orders', href: '/orders', icon: <ShoppingCart className="w-5 h-5" /> },
     { name: 'Transactions', href: '/transactions', icon: <CreditCard className="w-5 h-5" /> },
-    // --- Settings --- (divider after 11)
-    // 12
+    // --- Settings --- (divider after 10)
+    // 11
     {
         name: 'Settings',
         icon: <Settings className="w-5 h-5" />,
@@ -80,29 +79,30 @@ const navItems: NavItem[] = [
             { name: 'Social Media', href: '/settings/social-media', icon: <Share2 className="w-4 h-4" /> },
             { name: 'Banners', href: '/banners', icon: <Image className="w-4 h-4" /> },
             { name: 'Testimonials', href: '/testimonials', icon: <MessageSquare className="w-4 h-4" /> },
-            { name: 'Pages', href: '/pages/about', icon: <FileText className="w-4 h-4" /> },
+            { name: 'Pages', href: '/pages', icon: <FileText className="w-4 h-4" /> },
         ],
     },
-    // --- Location & Notifications --- (divider after 12)
-    // 13-15
+    // --- Location & Notifications --- (divider after 11)
+    // 12-14
     { name: 'Pincodes', href: '/pincodes', icon: <MapPin className="w-5 h-5" /> },
     { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-5 h-5" /> },
     { name: 'Notifications', href: '/notifications', icon: <Bell className="w-5 h-5" /> },
-    // --- Archive --- (divider after 15)
-    // 16
+    // --- Archive --- (divider after 14)
+    // 15
     {
         name: 'Archive',
         icon: <CalendarDays className="w-5 h-5" />,
         children: [
             { name: 'Upcoming Orders', href: '/upcoming-orders', icon: <ShoppingCart className="w-4 h-4" /> },
             { name: 'Upcoming Subs', href: '/upcoming-subs-orders', icon: <CalendarDays className="w-4 h-4" /> },
+            { name: 'Pre-Packing List', href: '/pre-packing-list', icon: <Package className="w-4 h-4" /> },
             { name: 'User Holidays', href: '/holidays', icon: <Calendar className="w-4 h-4" /> },
             { name: 'Calendar', href: '/calendar', icon: <Calendar className="w-4 h-4" /> },
             { name: 'Low Wallet', href: '/notifications/low-wallet', icon: <Wallet className="w-4 h-4" /> },
         ],
     },
-    // --- Admin --- (divider after 16)
-    // 17-18
+    // --- Admin --- (divider after 15)
+    // 16-17
     { name: 'Admin Users', href: '/admin-users', icon: <Users className="w-5 h-5" /> },
     { name: 'Roles & Permissions', href: '/roles', icon: <Settings className="w-5 h-5" /> },
 ];
@@ -126,8 +126,24 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
     };
 
     const isActive = (href: string) => {
-        return pathname === href || pathname.startsWith(href + '/');
+        if (pathname === href) return true;
+        // For /pages, also match /pages/about, /pages/privacy, etc.
+        // For /settings, do NOT match /settings/webapp (sibling routes)
+        // Only allow prefix matching when there are no sibling routes sharing the prefix
+        const allChildHrefs = navItems.flatMap(i => i.children?.map(c => c.href) || []);
+        const hasSibling = allChildHrefs.some(h => h !== href && h?.startsWith(href + '/'));
+        if (hasSibling) return false;
+        return pathname.startsWith(href + '/');
     };
+
+    // Auto-expand the group containing the active page
+    useEffect(() => {
+        navItems.forEach(item => {
+            if (item.children?.some(c => c.href && isActive(c.href!))) {
+                setExpandedItems(prev => prev.includes(item.name) ? prev : [...prev, item.name]);
+            }
+        });
+    }, [pathname]);
 
     return (
         <>
@@ -273,7 +289,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                     </Link>
                                 )}
                                 {/* Section dividers */}
-                                {!collapsed && (index === 0 || index === 2 || index === 4 || index === 6 || index === 9 || index === 11 || index === 12 || index === 15 || index === 16) && (
+                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 10 || index === 11 || index === 14 || index === 15) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>
