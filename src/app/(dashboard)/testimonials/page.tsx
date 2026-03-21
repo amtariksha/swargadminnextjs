@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTestimonials, useCreateTestimonial, useUpdateTestimonial, useDeleteTestimonial, Testimonial } from '@/hooks/useData';
 import { POST } from '@/lib/api';
 import { IMAGE_BASE_URL } from '@/config/tenant';
@@ -9,6 +10,7 @@ import { Plus, Star, Pencil, Trash2, X, Loader2, Image as ImageIcon } from 'luci
 import { toast } from 'sonner';
 
 export default function TestimonialsPage() {
+    const queryClient = useQueryClient();
     const { data: testimonials = [], isLoading } = useTestimonials();
     const createMutation = useCreateTestimonial();
     const updateMutation = useUpdateTestimonial();
@@ -123,9 +125,10 @@ export default function TestimonialsPage() {
         if (!existingImageId) return;
         setDeletingImage(true);
         try {
-            await POST('/product/delete_image', { id: existingImageId });
+            await POST('/testimonial/delete_image', { image_id: existingImageId });
             setExistingImageId(null);
             setImagePreview(null);
+            queryClient.invalidateQueries({ queryKey: ['testimonials'] });
             toast.success('Image deleted');
         } catch {
             toast.error('Failed to delete image');

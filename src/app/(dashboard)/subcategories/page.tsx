@@ -119,7 +119,7 @@ export default function SubcategoriesPage() {
     const handleDeleteImage = async () => {
         if (!editItem?.image_id) return;
         try {
-            await POST('/cat/delete_image', { id: editItem.image_id });
+            await POST('/sub_cat/delete_image', { id: editItem.image_id });
             toast.success('Image deleted');
             setEditItem({ ...editItem, image: null, image_id: null });
             refetch();

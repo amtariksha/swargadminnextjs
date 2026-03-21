@@ -719,8 +719,10 @@ export function useDeleteProductImage() {
         mutationFn: async (data: Record<string, unknown>) => {
             return POST('/product/delete_image', data);
         },
-        onSuccess: () => {
+        onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
+            if (variables.product_id) queryClient.invalidateQueries({ queryKey: ['product', variables.product_id] });
+            if (variables.id) queryClient.invalidateQueries({ queryKey: ['product', variables.id] });
         },
     });
 }
@@ -773,6 +775,18 @@ export function useUploadCategoryImage() {
     });
 }
 
+export function useDeleteCategoryImage() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST('/cat/delete_image', data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['categories'] });
+        },
+    });
+}
+
 export function useCreateSubcategory() {
     const queryClient = useQueryClient();
     return useMutation({
@@ -814,6 +828,18 @@ export function useUploadSubcategoryImage() {
     return useMutation({
         mutationFn: async (data: FormData) => {
             return POST('/sub_cat/upload_image', data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['subcategories'] });
+        },
+    });
+}
+
+export function useDeleteSubcategoryImage() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST('/sub_cat/delete_image', data);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['subcategories'] });

@@ -111,7 +111,7 @@ export default function EditProductPage() {
     const handleDeleteImage = async () => {
         if (deleteImageId === null) return;
         try {
-            await deleteImage.mutateAsync({ id: deleteImageId });
+            await deleteImage.mutateAsync({ id: deleteImageId, product_id: Number(id) });
             toast.success('Image deleted');
             setDeleteImageId(null);
         } catch {
