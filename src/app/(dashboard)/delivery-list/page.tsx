@@ -127,11 +127,11 @@ function PasscodeDialog({ title, selectedDate, onConfirm, onCancel }: {
     const handleSubmit = () => {
         if (isToday) {
             if (passcode.toUpperCase() === 'TODAY') { onConfirm(); return; }
-            setError('Enter "TODAY" to confirm for current date');
+            setError('Incorrect passcode');
             return;
         }
         if (passcode === expectedPasscode) { onConfirm(); return; }
-        setError(`Enter the date as ${expectedPasscode} to confirm`);
+        setError('Incorrect passcode');
     };
 
     return (
@@ -141,14 +141,11 @@ function PasscodeDialog({ title, selectedDate, onConfirm, onCancel }: {
                     <AlertTriangle className="w-6 h-6 text-amber-400" />
                     <h2 className="text-xl font-bold text-white">{title}</h2>
                 </div>
-                <p className="text-sm text-slate-400 mb-2">Date: <span className="text-white font-medium">{selectedDate}</span></p>
-                <p className="text-sm text-slate-400 mb-4">
-                    {isToday ? 'Type "TODAY" to confirm.' : `Type ${expectedPasscode} to confirm.`}
-                </p>
+                <p className="text-sm text-slate-400 mb-4">Date: <span className="text-white font-medium">{selectedDate}</span></p>
                 <input type="text" value={passcode}
                     onChange={(e) => { setPasscode(e.target.value); setError(''); }}
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                    placeholder={isToday ? 'Type TODAY' : `Type ${expectedPasscode}`}
+                    placeholder="Enter passcode"
                     autoFocus
                     className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white mb-2 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                 />
@@ -227,6 +224,8 @@ export default function DeliveryListPage() {
     const [generateDialog, setGenerateDialog] = useState(false);
     const [deleteDialog, setDeleteDialog] = useState(false);
     const [filters, setFilters] = useState({ delivered: false, not_delivered: false, delivered_diff_qty: false });
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    const [expandedCol, setExpandedCol] = useState<string | null>('edit_qty');
 
     const { data: drivers = [] } = useDrivers();
 
@@ -270,13 +269,14 @@ export default function DeliveryListPage() {
 
     // ====== Actions ======
     const handleGenerateList = async () => {
+        setGenerateDialog(false);
         setIsSubmitting(true);
         try {
             await POST('/genrate_order_list', { date: selectedDate });
             toast.success('Delivery list generated successfully');
             refetch();
         } catch { toast.error('Failed to generate delivery list'); }
-        finally { setIsSubmitting(false); setGenerateDialog(false); }
+        finally { setIsSubmitting(false); }
     };
 
     const handleDeleteList = async () => {
@@ -337,32 +337,57 @@ export default function DeliveryListPage() {
         downloadCSV(rows, `${selectedDate.replace(/-/g, '')}_Packing-list.csv`);
     }, [packingProducts, selectedDate]);
 
+    // ====== Selection helpers ======
+    const toggleSelect = (preDeliveryId: number) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(preDeliveryId)) next.delete(preDeliveryId);
+            else next.add(preDeliveryId);
+            return next;
+        });
+    };
+    const toggleSelectAll = () => {
+        const undelivered = deliveryItems.filter(d => d.status !== 3);
+        if (selectedIds.size === undelivered.length && undelivered.length > 0) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(undelivered.map(d => d.pre_delivery_id)));
+        }
+    };
+
+    // Column width helper — expanded column gets more space
+    const colW = (key: string, defaultW: string, expandedW: string) => expandedCol === key ? expandedW : defaultW;
+
     // ====== Columns ======
     const columns: Column<DeliveryItem>[] = [
-        { key: 'actions', header: 'Edit', width: '60px',
-            render: (item) => <button onClick={(e) => { e.stopPropagation(); router.push(`/orders/${item.id}`); }} className="p-1.5 hover:bg-slate-800/50 rounded-lg"><Edit className="w-4 h-4 text-purple-400" /></button> },
-        { key: 'edit_qty', header: '', width: '40px',
+        { key: 'select', header: '', width: '40px',
+            render: (item) => (
+                <input type="checkbox" checked={selectedIds.has(item.pre_delivery_id)} disabled={item.status === 3}
+                    onChange={() => toggleSelect(item.pre_delivery_id)}
+                    className="w-4 h-4 rounded border-slate-600 text-purple-500 focus:ring-purple-500 bg-slate-800/50 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" />
+            ) },
+        { key: 'edit_qty', header: 'Qty Edit', width: colW('edit_qty', '70px', '120px'),
             render: (item) => <button onClick={(e) => { e.stopPropagation(); setEditQtyModal({ item, newQty: item.qty }); }} disabled={item.status === 3} className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-30" title="Edit quantity"><Edit className="w-3 h-3 text-blue-400" /></button> },
-        { key: 'pre_delivery_id', header: 'Pre ID', width: '80px' },
-        { key: 'id', header: 'Order ID', width: '80px' },
-        { key: 'name', header: 'Name', width: '150px' },
-        { key: 's_phone', header: 'Phone', width: '120px' },
-        { key: 'title', header: 'Product', width: '200px' },
-        { key: 'qty_text', header: 'Qty Text', width: '120px' },
-        { key: 'qty', header: 'Qty', width: '70px', render: (item) => <span className="font-semibold">{item.qty}</span> },
-        { key: 'mark_delivered_qty', header: 'Del Qty', width: '80px',
+        { key: 'pre_delivery_id', header: 'Pre ID', width: colW('pre_delivery_id', '80px', '120px') },
+        { key: 'id', header: 'Order ID', width: colW('id', '80px', '120px') },
+        { key: 'name', header: 'Name', width: colW('name', '150px', '250px') },
+        { key: 's_phone', header: 'Phone', width: colW('s_phone', '120px', '180px') },
+        { key: 'title', header: 'Product', width: colW('title', '200px', '350px') },
+        { key: 'qty_text', header: 'Qty Text', width: colW('qty_text', '120px', '200px') },
+        { key: 'qty', header: 'Qty', width: colW('qty', '70px', '100px'), render: (item) => <span className="font-semibold">{item.qty}</span> },
+        { key: 'mark_delivered_qty', header: 'Del Qty', width: colW('mark_delivered_qty', '80px', '120px'),
             render: (item) => { const isDiff = item.mark_delivered_qty !== null && item.mark_delivered_qty !== item.qty; return <span className={`font-medium ${isDiff ? 'text-red-400' : ''}`}>{item.mark_delivered_qty ?? '-'}</span>; } },
-        { key: 'delivery_boy_name', header: 'Driver', width: '150px', render: (item) => <span>{item.delivery_boy_name || 'Unassigned'}</span> },
-        { key: 'status', header: 'Status', width: '120px',
+        { key: 'delivery_boy_name', header: 'Driver', width: colW('delivery_boy_name', '150px', '250px'), render: (item) => <span>{item.delivery_boy_name || 'Unassigned'}</span> },
+        { key: 'status', header: 'Status', width: colW('status', '120px', '160px'),
             render: (item) => { const s = getStatusLabel(item.status); return <span className={`font-semibold ${s.color}`}>{s.label}</span>; } },
-        { key: 'delivered_date', header: 'Del Date', width: '110px' },
-        { key: 'mark_delivered_time_stamp', header: 'Del Time', width: '100px', render: (item) => <span className="text-sm">{formatTime(item.mark_delivered_time_stamp)}</span> },
-        { key: 'address', header: 'Address', width: '220px',
-            render: (item) => <span className="text-sm text-slate-300 truncate max-w-[200px] block" title={composeAddress(item)}>{composeAddress(item)}</span> },
-        { key: 'pincode', header: 'Pincode', width: '100px' },
-        { key: 'wallet_amount', header: 'Wallet', width: '100px', render: (item) => <span className="text-green-400">₹{item.wallet_amount || 0}</span> },
-        { key: 'start_date', header: 'Start Date', width: '110px' },
-        { key: 'subscription_type', header: 'Sub Type', width: '130px', render: (item) => <span className="text-xs">{getSubscriptionLabel(item.subscription_type)}</span> },
+        { key: 'delivered_date', header: 'Del Date', width: colW('delivered_date', '110px', '160px') },
+        { key: 'mark_delivered_time_stamp', header: 'Del Time', width: colW('mark_delivered_time_stamp', '100px', '150px'), render: (item) => <span className="text-sm">{formatTime(item.mark_delivered_time_stamp)}</span> },
+        { key: 'address', header: 'Address', width: colW('address', '220px', '400px'),
+            render: (item) => <span className="text-sm text-slate-300 truncate block" style={{ maxWidth: expandedCol === 'address' ? '380px' : '200px' }} title={composeAddress(item)}>{composeAddress(item)}</span> },
+        { key: 'pincode', header: 'Pincode', width: colW('pincode', '100px', '140px') },
+        { key: 'wallet_amount', header: 'Wallet', width: colW('wallet_amount', '100px', '140px'), render: (item) => <span className="text-green-400">₹{item.wallet_amount || 0}</span> },
+        { key: 'start_date', header: 'Start Date', width: colW('start_date', '110px', '160px') },
+        { key: 'subscription_type', header: 'Sub Type', width: colW('subscription_type', '130px', '180px'), render: (item) => <span className="text-xs">{getSubscriptionLabel(item.subscription_type)}</span> },
     ];
 
     const packingColumns: Column<ProductAgg>[] = [
@@ -416,10 +441,11 @@ export default function DeliveryListPage() {
 
             {/* Action Buttons (only on orders tab) */}
             {activeTab === 'orders' && (
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                     <button onClick={() => setGenerateDialog(true)} disabled={isSubmitting}
                         className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-medium disabled:opacity-50">
-                        <Plus className="w-4 h-4" /> Generate List
+                        {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                        {isSubmitting ? 'Generating...' : 'Generate List'}
                     </button>
                     <button onClick={() => setDeleteDialog(true)} disabled={isSubmitting}
                         className="flex items-center gap-2 px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl font-medium disabled:opacity-50">
@@ -429,17 +455,28 @@ export default function DeliveryListPage() {
                         className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-slate-300 hover:text-white disabled:opacity-40">
                         <Download className="w-4 h-4" /> Export CSV
                     </button>
-                    {stats.pending > 0 && (
+                    {selectedIds.size > 0 && (
                         <button
-                            onClick={() => {
-                                const pendingIds = deliveryItems.filter(d => d.status === 1).map(d => d.pre_delivery_id);
-                                if (confirm(`Mark all ${pendingIds.length} pending items as delivered?`)) handleMarkDelivered(pendingIds);
-                            }}
+                            onClick={() => handleMarkDelivered(Array.from(selectedIds)).then(() => setSelectedIds(new Set()))}
                             disabled={isSubmitting}
                             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50">
-                            <Check className="w-4 h-4" /> Mark All Pending Delivered ({stats.pending})
+                            <Check className="w-4 h-4" /> Mark Selected Delivered ({selectedIds.size})
                         </button>
                     )}
+                    <div className="ml-auto flex items-center gap-2">
+                        <label className="text-xs text-slate-400">Expand:</label>
+                        <select value={expandedCol || ''} onChange={(e) => setExpandedCol(e.target.value || null)}
+                            className="px-2 py-1 bg-slate-800/50 border border-slate-700/50 rounded-lg text-xs text-white">
+                            <option value="">None</option>
+                            <option value="edit_qty">Qty Edit</option>
+                            <option value="name">Name</option>
+                            <option value="title">Product</option>
+                            <option value="qty_text">Qty Text</option>
+                            <option value="delivery_boy_name">Driver</option>
+                            <option value="address">Address</option>
+                            <option value="subscription_type">Sub Type</option>
+                        </select>
+                    </div>
                 </div>
             )}
 
@@ -465,7 +502,15 @@ export default function DeliveryListPage() {
             {activeTab === 'orders' && (
                 <>
                     {/* Filters */}
-                    <div className="flex flex-wrap gap-4">
+                    <div className="flex flex-wrap items-center gap-4">
+                        <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                            <input type="checkbox"
+                                checked={selectedIds.size > 0 && selectedIds.size === deliveryItems.filter(d => d.status !== 3).length}
+                                onChange={toggleSelectAll}
+                                className="w-4 h-4 rounded border-slate-600 text-purple-500 focus:ring-purple-500 bg-slate-800/50 cursor-pointer" />
+                            Select All Undelivered
+                        </label>
+                        <span className="text-slate-700">|</span>
                         <label className="flex items-center gap-2 text-sm text-slate-300">
                             <input type="checkbox" checked={filters.delivered}
                                 onChange={(e) => setFilters({ ...filters, delivered: e.target.checked, not_delivered: false })} className="rounded border-slate-600" />
@@ -492,7 +537,7 @@ export default function DeliveryListPage() {
                     </div>
 
                     {/* Data Table */}
-                    <DataTable data={deliveryItems} columns={columns} loading={isLoading} pageSize={50}
+                    <DataTable data={deliveryItems} columns={columns} loading={isLoading || isSubmitting} pageSize={50}
                         searchPlaceholder="Search deliveries..." emptyMessage="No deliveries found for this date"
                         onRowClick={(item) => router.push(`/orders/${item.id}`)} />
                 </>

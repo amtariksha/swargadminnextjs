@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth';
 import { useTheme } from '@/lib/theme';
 import { Menu, LogOut, User, Bell, Sun, Moon, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import Link from 'next/link';
 
 interface TopbarProps {
     onMenuClick: () => void;
@@ -77,10 +78,9 @@ export default function Topbar({ onMenuClick, sidebarCollapsed, onToggleCollapse
                     </button>
 
                     {/* Notifications */}
-                    <button className="relative p-2.5 hover:bg-slate-800/50 rounded-xl transition-colors">
+                    <Link href="/notifications" className="relative p-2.5 hover:bg-slate-800/50 rounded-xl transition-colors">
                         <Bell className="w-5 h-5 text-slate-400" />
-                        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-purple-500 rounded-full" />
-                    </button>
+                    </Link>
 
                     {/* User dropdown */}
                     <div className="relative" ref={dropdownRef}>

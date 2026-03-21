@@ -66,10 +66,14 @@ export default function CreateOrderPage() {
 
     const { data: addresses = [] } = useUserAddresses(selectedUserId || undefined);
 
-    const selectedProduct = useMemo(
-        () => products.find((p) => p.id === selectedProductId),
-        [products, selectedProductId]
-    );
+    const selectedProduct = useMemo(() => {
+        const product = products.find((p) => p.id === selectedProductId);
+        // Reset subscription type to One Time for non-subscription products
+        if (product && product.subscription !== 1 && subscriptionType !== 1) {
+            setValue('subscription_type', 1);
+        }
+        return product;
+    }, [products, selectedProductId]);
 
     const orderAmount = selectedProduct
         ? Math.round((selectedProduct.price + selectedProduct.price * (selectedProduct.tax || 0) / 100) * qty * 100) / 100
@@ -243,14 +247,20 @@ export default function CreateOrderPage() {
                         <input {...register('qty', { valueAsNumber: true })} type="number" min={1} className={inputClassName} />
                     </FormField>
                     <FormField label="Start Date" error={errors.start_date} required>
-                        <input {...register('start_date')} type="date" className={inputClassName} />
+                        <input {...register('start_date')} type="date" className={`${inputClassName} cursor-pointer [&::-webkit-calendar-picker-indicator]:cursor-pointer`}
+                            onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
                     </FormField>
                     <FormField label="Subscription Type" error={errors.subscription_type} required>
-                        <select {...register('subscription_type', { valueAsNumber: true })} className={selectClassName}>
+                        <select {...register('subscription_type', { valueAsNumber: true })} className={selectClassName}
+                            disabled={selectedProduct?.subscription !== 1}>
                             <option value={1}>One Time</option>
-                            <option value={2}>Weekly</option>
-                            <option value={3}>Daily</option>
-                            <option value={4}>Alternative Days</option>
+                            {selectedProduct?.subscription === 1 && (
+                                <>
+                                    <option value={2}>Weekly</option>
+                                    <option value={3}>Daily</option>
+                                    <option value={4}>Alternative Days</option>
+                                </>
+                            )}
                         </select>
                     </FormField>
                 </div>

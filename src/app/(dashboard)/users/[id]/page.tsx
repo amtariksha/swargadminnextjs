@@ -440,10 +440,6 @@ export default function UserDetailPage() {
                             <span className={`font-semibold text-lg ${isLowWallet ? 'text-red-400' : 'text-green-400'}`}>₹{walletAmt}</span>
                         </div>
                         <div className="flex items-center gap-3 md:col-span-2">
-                            <MapPin className="w-4 h-4 text-slate-500" />
-                            <span className="text-slate-400 text-sm">{user.address || [user.flat_no, user.apartment_name, user.area, user.city, user.pincode].filter(Boolean).join(', ') || '-'}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
                             <Calendar className="w-4 h-4 text-slate-500" />
                             <span className="text-slate-400 text-sm">
                                 {user.updated_at ? new Date(user.updated_at).toLocaleDateString('en-IN') : '-'}
