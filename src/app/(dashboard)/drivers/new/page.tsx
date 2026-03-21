@@ -28,10 +28,16 @@ export default function AddDriverPage() {
         }
         setIsSubmitting(true);
         try {
-            await POST('/add_user', {
+            const result = await POST('/add_user', {
                 ...formData,
                 role: 4, // Delivery Partner role
             });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const r = result as any;
+            if (r.response === 201 || r.response === 400) {
+                toast.error(r.message || 'Failed to add driver');
+                return;
+            }
             toast.success('Driver added successfully');
             router.push('/drivers');
         } catch (error) {
