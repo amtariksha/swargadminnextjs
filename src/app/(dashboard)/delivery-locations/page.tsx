@@ -18,7 +18,7 @@ export default function DeliveryLocationsPage() {
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            await POST('/add_available_delivery_location', { location: newTitle });
+            await POST('/add_available_delivery_location', { location: newTitle, title: newTitle });
             setShowModal(false);
             setNewTitle('');
             queryClient.invalidateQueries({ queryKey: ['delivery-locations'] });
