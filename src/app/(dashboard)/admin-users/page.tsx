@@ -53,21 +53,29 @@ export default function AdminUsersPage() {
         setSaving(true);
         try {
             if (isAddMode) {
-                await createMutation.mutateAsync({
+                const result = await createMutation.mutateAsync({
                     name: formName,
                     email: formEmail,
                     phone: formPhone,
                     password: formPassword,
                     role_id: formRoleId,
                 });
+                if (result.response === 201 || result.response === 400) {
+                    toast.error((result as { message?: string }).message || 'Failed to create user');
+                    return;
+                }
                 toast.success('Admin user created');
             } else {
-                await updateMutation.mutateAsync({
+                const result = await updateMutation.mutateAsync({
                     id: editId!,
                     name: formName,
                     email: formEmail,
                     phone: formPhone,
                 });
+                if (result.response === 201 || result.response === 400) {
+                    toast.error((result as { message?: string }).message || 'Failed to update user');
+                    return;
+                }
                 toast.success('Admin user updated');
             }
             setShowModal(false);

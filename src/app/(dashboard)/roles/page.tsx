@@ -134,15 +134,8 @@ export default function RolesPage() {
         },
     ];
 
-    // Default system roles
-    const systemRoles: Role[] = [
-        { id: 1, title: 'Super Admin', permissions: [] },
-        { id: 2, title: 'Admin', permissions: [] },
-        { id: 3, title: 'Sub Admin', permissions: ['dashboard', 'orders', 'delivery-list'] },
-        { id: 4, title: 'Delivery Partner', permissions: [] },
-    ];
-
-    const allRoles = [...systemRoles, ...roles];
+    // Use DB roles directly — no hardcoded duplicates
+    const allRoles = roles;
 
     return (
         <div className="space-y-6">

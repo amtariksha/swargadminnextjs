@@ -18,6 +18,7 @@ export default function TransactionsPage() {
     const [showAddModal, setShowAddModal] = useState(false);
     const [showRefundModal, setShowRefundModal] = useState<UserTransaction | null>(null);
     const [txnForm, setTxnForm] = useState({ user_id: '', payment_id: '', amount: '', type: '1', description: '' });
+    const [userSearch, setUserSearch] = useState('');
 
     const { data: transactions = [], isLoading, refetch } = useTransactionsByDateRange(startDate, endDate);
     const { data: users = [] } = useUsers();
@@ -181,10 +182,42 @@ export default function TransactionsPage() {
                 <div className="space-y-4">
                     <div>
                         <label className="block text-sm text-slate-300 mb-1">User</label>
-                        <select value={txnForm.user_id} onChange={(e) => setTxnForm({ ...txnForm, user_id: e.target.value })} className={selectClassName}>
-                            <option value="">Select user...</option>
-                            {users.map((u: User) => <option key={u.id} value={u.id}>{u.id} - {u.name} ({u.phone})</option>)}
-                        </select>
+                        {txnForm.user_id ? (
+                            <div className="flex items-center justify-between p-3 bg-slate-900/50 border border-slate-700/50 rounded-xl">
+                                <div>
+                                    {(() => { const u = users.find((u: User) => u.id === Number(txnForm.user_id)); return u ? <><p className="text-white font-medium">{u.name}</p><p className="text-xs text-slate-400">{u.phone} &middot; Wallet: ₹{u.wallet_amount}</p></> : <p className="text-white">User #{txnForm.user_id}</p>; })()}
+                                </div>
+                                <button type="button" onClick={() => { setTxnForm({ ...txnForm, user_id: '' }); setUserSearch(''); }} className="text-sm text-red-400 hover:text-red-300">Change</button>
+                            </div>
+                        ) : (
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    value={userSearch}
+                                    onChange={(e) => setUserSearch(e.target.value)}
+                                    placeholder="Search by name or phone..."
+                                    className={inputClassName}
+                                />
+                                {userSearch.length >= 2 && (
+                                    <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                                        {users
+                                            .filter((u: User) => u.name?.toLowerCase().includes(userSearch.toLowerCase()) || u.phone?.includes(userSearch))
+                                            .slice(0, 10)
+                                            .map((u: User) => (
+                                                <button key={u.id} type="button"
+                                                    onClick={() => { setTxnForm({ ...txnForm, user_id: String(u.id) }); setUserSearch(''); }}
+                                                    className="w-full text-left px-4 py-2.5 hover:bg-slate-800 text-sm">
+                                                    <p className="text-white">{u.name}</p>
+                                                    <p className="text-xs text-slate-400">{u.phone} &middot; ₹{u.wallet_amount}</p>
+                                                </button>
+                                            ))}
+                                        {users.filter((u: User) => u.name?.toLowerCase().includes(userSearch.toLowerCase()) || u.phone?.includes(userSearch)).length === 0 && (
+                                            <p className="px-4 py-3 text-sm text-slate-500">No users found</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                     <div>
                         <label className="block text-sm text-slate-300 mb-1">Payment ID (optional)</label>
