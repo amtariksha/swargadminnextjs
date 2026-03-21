@@ -404,7 +404,7 @@ export default function DeliveryListPage() {
                             className="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white">
                             <option value="">All Drivers</option>
                             {[...drivers].sort((a, b) => a.name.localeCompare(b.name)).map(d => (
-                                <option key={d.id} value={d.id}>{d.name}</option>
+                                <option key={d.id} value={d.user_id}>{d.name}</option>
                             ))}
                         </select>
                     )}
