@@ -44,7 +44,10 @@ export default function AddProductPage() {
     const onSubmit = async (data: ProductFormData) => {
         try {
             const result = await createProduct.mutateAsync(data as unknown as Record<string, unknown>);
-            const productId = (result as { data?: { id?: number } })?.data?.id;
+            // Backend returns id at top level: { response: 200, id: 123 }
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const r = result as any;
+            const productId = r?.id || r?.data?.id;
 
             if (imageFile && productId) {
                 const formData = new FormData();
