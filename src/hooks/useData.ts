@@ -721,8 +721,12 @@ export function useDeleteProductImage() {
         },
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
-            if (variables.product_id) queryClient.invalidateQueries({ queryKey: ['product', variables.product_id] });
-            if (variables.id) queryClient.invalidateQueries({ queryKey: ['product', variables.id] });
+            // Invalidate product detail cache - match both string and number key variants
+            const pid = variables.product_id;
+            if (pid) {
+                queryClient.invalidateQueries({ queryKey: ['product', String(pid)] });
+                queryClient.invalidateQueries({ queryKey: ['product', Number(pid)] });
+            }
         },
     });
 }
