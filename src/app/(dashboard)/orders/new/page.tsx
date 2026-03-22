@@ -97,10 +97,35 @@ export default function CreateOrderPage() {
 
     const onSubmit = async (data: OrderFormData) => {
         try {
+            // For Pay Now (type 3): check wallet balance first
+            if (data.order_type === 3) {
+                const user = users.find((u) => u.id === data.user_id);
+                if (!user || (user.wallet_amount || 0) < orderAmount) {
+                    toast.error('The user does not have sufficient wallet balance.');
+                    return;
+                }
+            }
+
+            // For Pay Now: deduct wallet BEFORE creating order (matches React admin)
+            let transactionId: number | null = null;
+            if (data.order_type === 3) {
+                const txnResult = await addTxn.mutateAsync({
+                    user_id: data.user_id,
+                    amount: orderAmount,
+                    payment_id: 'xxx-admin',
+                    type: 2,
+                    description: `Amount debited for ${data.qty} qty of ${selectedProduct?.title || 'product'}`,
+                    payment_mode: data.payment_mode || 1,
+                });
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                transactionId = (txnResult as any)?.id || (txnResult as any)?.data?.id || null;
+            }
+
             const orderData: Record<string, unknown> = {
                 ...data,
                 order_amount: orderAmount,
                 selected_days_for_weekly: subscriptionType === 2 ? JSON.stringify(selectedDays) : undefined,
+                trasation_id: transactionId,
             };
 
             const result = await createOrder.mutateAsync(orderData);
@@ -109,18 +134,6 @@ export default function CreateOrderPage() {
             // Assign driver if selected
             if (driverId && orderId) {
                 await assignOrder.mutateAsync({ user_id: Number(driverId), order_id: orderId });
-            }
-
-            // Create transaction for Pay Now orders
-            if (data.order_type === 3 && orderId) {
-                await addTxn.mutateAsync({
-                    user_id: data.user_id,
-                    amount: orderAmount,
-                    payment_id: 'xxx-admin',
-                    type: 2,
-                    description: `Order #${orderId} - Admin Created`,
-                    payment_mode: data.payment_mode || 1,
-                });
             }
 
             toast.success('Order created successfully');
@@ -347,6 +360,18 @@ export default function CreateOrderPage() {
                             <span className="text-slate-400">{selectedProduct.title} x {qty}</span>
                             <span className="text-white font-semibold">₹{orderAmount}</span>
                         </div>
+                        {orderType === 3 && selectedUser && (
+                            <div className={`mt-2 p-2 rounded-lg text-xs ${
+                                (selectedUser.wallet_amount || 0) >= orderAmount
+                                    ? 'bg-emerald-900/30 border border-emerald-700/30 text-emerald-400'
+                                    : 'bg-red-900/30 border border-red-700/30 text-red-400'
+                            }`}>
+                                Wallet: ₹{selectedUser.wallet_amount || 0}
+                                {(selectedUser.wallet_amount || 0) < orderAmount
+                                    ? ' — Insufficient balance! Need ₹' + (orderAmount - (selectedUser.wallet_amount || 0)).toFixed(2) + ' more'
+                                    : ' — Sufficient for deduction'}
+                            </div>
+                        )}
                     </div>
                 )}
 
