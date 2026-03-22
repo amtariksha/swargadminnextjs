@@ -6,6 +6,7 @@ import DataTable, { Column } from '@/components/DataTable';
 import { Plus, Navigation, Trash2 } from 'lucide-react';
 import { POST } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 export default function DeliveryLocationsPage() {
     const { data: locations = [], isLoading } = useDeliveryLocations();
@@ -23,7 +24,7 @@ export default function DeliveryLocationsPage() {
             setNewTitle('');
             queryClient.invalidateQueries({ queryKey: ['delivery-locations'] });
         } catch (error) {
-            console.error('Failed to add location:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to add location');
         } finally {
             setIsSubmitting(false);
         }
@@ -35,7 +36,7 @@ export default function DeliveryLocationsPage() {
             await POST('/delete_available_delivery_location', { id });
             queryClient.invalidateQueries({ queryKey: ['delivery-locations'] });
         } catch (error) {
-            console.error('Failed to delete:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to delete location');
         }
     };
 

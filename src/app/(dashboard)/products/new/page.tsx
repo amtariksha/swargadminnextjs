@@ -59,8 +59,8 @@ export default function AddProductPage() {
 
             toast.success('Product created successfully');
             router.push('/products');
-        } catch {
-            toast.error('Failed to create product');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to create product');
         }
     };
 

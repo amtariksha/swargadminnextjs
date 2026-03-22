@@ -73,8 +73,8 @@ export default function EditProductPage() {
             await updateProduct.mutateAsync({ id: Number(id), ...data } as unknown as Record<string, unknown>);
             toast.success('Product updated successfully');
             router.push('/products');
-        } catch {
-            toast.error('Failed to update product');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to update product');
         }
     };
 
@@ -86,8 +86,8 @@ export default function EditProductPage() {
         try {
             await uploadImage.mutateAsync(formData);
             toast.success('Main image uploaded');
-        } catch {
-            toast.error('Failed to upload image');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to upload image');
         }
     };
 
@@ -102,8 +102,8 @@ export default function EditProductPage() {
         try {
             await uploadImage.mutateAsync(formData);
             toast.success('Image uploaded');
-        } catch {
-            toast.error('Failed to upload image');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to upload image');
         }
         if (sliderFileRef.current) sliderFileRef.current.value = '';
     };
@@ -114,8 +114,8 @@ export default function EditProductPage() {
             await deleteImage.mutateAsync({ id: deleteImageId, product_id: Number(id) });
             toast.success('Image deleted');
             setDeleteImageId(null);
-        } catch {
-            toast.error('Failed to delete image');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to delete image');
         }
     };
 
@@ -124,8 +124,8 @@ export default function EditProductPage() {
             await POST('/delete_product', { id: Number(id) });
             toast.success('Product deleted');
             router.push('/products');
-        } catch {
-            toast.error('Failed to delete product');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to delete product');
         }
     };
 

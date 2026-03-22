@@ -99,8 +99,8 @@ export default function TestimonialsPage() {
                 toast.success('Testimonial updated');
             }
             setModalOpen(false);
-        } catch {
-            toast.error('Something went wrong');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Something went wrong');
         } finally {
             setSaving(false);
         }
@@ -114,8 +114,8 @@ export default function TestimonialsPage() {
             toast.success('Testimonial deleted');
             setDeleteDialogOpen(false);
             setModalOpen(false);
-        } catch {
-            toast.error('Failed to delete');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to delete');
         } finally {
             setSaving(false);
         }
@@ -130,8 +130,8 @@ export default function TestimonialsPage() {
             setImagePreview(null);
             queryClient.invalidateQueries({ queryKey: ['testimonials'] });
             toast.success('Image deleted');
-        } catch {
-            toast.error('Failed to delete image');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to delete image');
         } finally {
             setDeletingImage(false);
         }

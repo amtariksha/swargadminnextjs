@@ -6,6 +6,7 @@ import DataTable, { Column } from '@/components/DataTable';
 import { Plus, MapPin, Trash2 } from 'lucide-react';
 import { POST } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 export default function PincodesPage() {
     const { data: pincodes = [], isLoading } = usePincodes();
@@ -23,7 +24,7 @@ export default function PincodesPage() {
             setNewPincode('');
             queryClient.invalidateQueries({ queryKey: ['pincodes'] });
         } catch (error) {
-            console.error('Failed to add pincode:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to add pincode');
         } finally {
             setIsSubmitting(false);
         }
@@ -35,7 +36,7 @@ export default function PincodesPage() {
             await POST('/delete_pincode', { id });
             queryClient.invalidateQueries({ queryKey: ['pincodes'] });
         } catch (error) {
-            console.error('Failed to delete:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to delete pincode');
         }
     };
 

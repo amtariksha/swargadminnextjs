@@ -4,6 +4,7 @@ import { useState, useRef } from 'react';
 import { useBanners, Banner } from '@/hooks/useData';
 import { Image as ImageIcon, Trash2, Plus, Upload } from 'lucide-react';
 import { POST, DELETE } from '@/lib/api';
+import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 
 const IMAGE_BASE_URL = 'https://node.desicowmilk.com/public/uploads/images';
@@ -33,8 +34,7 @@ export default function BannersPage() {
             await POST('/upload_banner_image', formData as unknown as Record<string, unknown>);
             queryClient.invalidateQueries({ queryKey: ['banners'] });
         } catch (error) {
-            console.error('Upload failed:', error);
-            alert('Failed to upload banner');
+            toast.error(error instanceof Error ? error.message : 'Failed to upload banner');
         } finally {
             setUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -48,7 +48,7 @@ export default function BannersPage() {
             await POST('/delete_banner_image', { id });
             queryClient.invalidateQueries({ queryKey: ['banners'] });
         } catch (error) {
-            console.error('Delete failed:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to delete banner');
         } finally {
             setDeleting(null);
         }

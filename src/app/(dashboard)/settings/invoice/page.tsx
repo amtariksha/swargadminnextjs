@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
 import { FileText, Edit } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface InvoiceSetting {
     id: number;
@@ -47,7 +48,7 @@ export default function InvoiceSettingsPage() {
             setEditItem(null);
             queryClient.invalidateQueries({ queryKey: ['invoice-settings'] });
         } catch (error) {
-            console.error('Update failed:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to update invoice setting');
         } finally {
             setIsSubmitting(false);
         }

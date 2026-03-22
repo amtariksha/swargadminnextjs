@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
 import { Globe, Edit, Upload } from 'lucide-react';
+import { toast } from 'sonner';
 
 const IMAGE_BASE_URL = 'https://node.desicowmilk.com/public/uploads/images';
 
@@ -66,7 +67,7 @@ export default function WebAppSettingsPage() {
             setEditItem(null);
             queryClient.invalidateQueries({ queryKey: ['webapp-settings'] });
         } catch (error) {
-            console.error('Update failed:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to update setting');
         } finally {
             setIsSubmitting(false);
         }

@@ -78,7 +78,7 @@ export default function OrderDetailPage() {
         try {
             await updateOrder.mutateAsync({ id: Number(id), ...data });
             toast.success('Order updated');
-        } catch { toast.error('Failed to update order'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to update order'); }
     };
 
     const handleAssignDriver = async () => {
@@ -87,7 +87,7 @@ export default function OrderDetailPage() {
             await assignOrder.mutateAsync({ user_id: Number(newDriverId), order_id: Number(id) });
             toast.success('Driver assigned');
             setNewDriverId('');
-        } catch { toast.error('Failed to assign driver'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to assign driver'); }
     };
 
     const handleRemoveDriver = async () => {
@@ -95,7 +95,7 @@ export default function OrderDetailPage() {
             await deleteAssignment.mutateAsync({ order_id: Number(id) });
             toast.success('Driver removed');
             setShowRemoveDriver(false);
-        } catch { toast.error('Failed to remove driver'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to remove driver'); }
     };
 
     // Parse weekly days

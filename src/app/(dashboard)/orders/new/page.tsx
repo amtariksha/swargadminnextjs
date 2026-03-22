@@ -125,8 +125,8 @@ export default function CreateOrderPage() {
 
             toast.success('Order created successfully');
             router.push('/orders');
-        } catch {
-            toast.error('Failed to create order');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to create order');
         }
     };
 

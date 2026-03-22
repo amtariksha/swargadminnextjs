@@ -6,6 +6,7 @@ import DataTable, { Column } from '@/components/DataTable';
 import { Plus, Calendar, Trash2, User } from 'lucide-react';
 import { POST } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 export default function HolidaysPage() {
     const { data: holidays = [], isLoading } = useHolidays();
@@ -32,7 +33,7 @@ export default function HolidaysPage() {
             setFormData({ user_id: '', date: '', end_date: '' });
             queryClient.invalidateQueries({ queryKey: ['holidays'] });
         } catch (error) {
-            console.error('Failed to add holiday:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to add holiday');
         } finally {
             setIsSubmitting(false);
         }
@@ -44,7 +45,7 @@ export default function HolidaysPage() {
             await POST('/delete_user_holiday', { id });
             queryClient.invalidateQueries({ queryKey: ['holidays'] });
         } catch (error) {
-            console.error('Failed to delete:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to delete holiday');
         }
     };
 

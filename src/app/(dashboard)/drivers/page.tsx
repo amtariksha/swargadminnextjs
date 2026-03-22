@@ -55,8 +55,8 @@ export default function DriversPage() {
             }
             queryClient.invalidateQueries({ queryKey: ['drivers'] });
             setShowModal(false);
-        } catch {
-            toast.error('Something went Wrong! Please Try Again');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Something went wrong');
         } finally {
             setSaving(false);
         }

@@ -57,8 +57,8 @@ export default function PageEditorPage() {
             await POST('/update_web_page', { page_id: config.pageId, body: content });
             queryClient.invalidateQueries({ queryKey: ['web-page', config.pageId] });
             toast.success('Page saved successfully');
-        } catch {
-            toast.error('Failed to save page');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to save page');
         } finally {
             setIsSaving(false);
         }

@@ -22,7 +22,7 @@ export default function ProductsPage() {
         try {
             await POST('/update_product', { id: product.id, is_active: product.is_active ? 0 : 1 });
             refetch();
-        } catch { toast.error('Failed to update'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to update'); }
     };
 
     const handleQuickUpdate = async () => {
@@ -36,7 +36,7 @@ export default function ProductsPage() {
             toast.success('Updated');
             setQuickEditModal(null);
             refetch();
-        } catch { toast.error('Failed to update'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to update'); }
         finally { setIsSubmitting(false); }
     };
 

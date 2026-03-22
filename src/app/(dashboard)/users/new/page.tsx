@@ -38,8 +38,8 @@ export default function AddUserPage() {
             } else {
                 toast.error(res.message || 'Failed to add user');
             }
-        } catch {
-            toast.error('Failed to add user');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to add user');
         } finally {
             setIsSubmitting(false);
         }

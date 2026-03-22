@@ -112,7 +112,7 @@ export default function SubcategoriesPage() {
             }
             closeModal();
             refetch();
-        } catch { toast.error('Something went wrong'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Something went wrong'); }
         finally { setIsSubmitting(false); }
     };
 
@@ -123,7 +123,7 @@ export default function SubcategoriesPage() {
             toast.success('Image deleted');
             setEditItem({ ...editItem, image: null, image_id: null });
             refetch();
-        } catch { toast.error('Failed to delete image'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to delete image'); }
     };
 
     const handleDelete = async () => {
@@ -133,7 +133,7 @@ export default function SubcategoriesPage() {
             toast.success('Subcategory deleted');
             setDeleteItem(null);
             refetch();
-        } catch { toast.error('Failed to delete'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to delete'); }
     };
 
     const columns: Column<SubcatWithImage>[] = [

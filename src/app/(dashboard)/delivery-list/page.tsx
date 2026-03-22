@@ -275,7 +275,7 @@ export default function DeliveryListPage() {
             await POST('/genrate_order_list', { date: selectedDate });
             toast.success('Delivery list generated successfully');
             refetch();
-        } catch { toast.error('Failed to generate delivery list'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to generate delivery list'); }
         finally { setIsSubmitting(false); }
     };
 
@@ -285,7 +285,7 @@ export default function DeliveryListPage() {
             await POST('/delete_pre_delivery_list', { date: selectedDate });
             toast.success('Delivery list deleted');
             refetch();
-        } catch { toast.error('Failed to delete delivery list'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to delete delivery list'); }
         finally { setIsSubmitting(false); setDeleteDialog(false); }
     };
 
@@ -296,7 +296,7 @@ export default function DeliveryListPage() {
             await POST('/mark_delivery', { orders_id: preDeliveryIds.join(', ') });
             toast.success(`${preDeliveryIds.length} items marked as delivered`);
             refetch();
-        } catch { toast.error('Failed to mark as delivered'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to mark as delivered'); }
         finally { setIsSubmitting(false); }
     };
 
@@ -308,7 +308,7 @@ export default function DeliveryListPage() {
             toast.success('Quantity updated');
             setEditQtyModal(null);
             refetch();
-        } catch { toast.error('Failed to update quantity'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to update quantity'); }
         finally { setIsSubmitting(false); }
     };
 

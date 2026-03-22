@@ -62,8 +62,8 @@ export default function SocialMediaPage() {
             setImageFile(null);
             setImagePreview('');
             queryClient.invalidateQueries({ queryKey: ['social-media'] });
-        } catch {
-            toast.error('Failed to add social media');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to add social media');
         } finally {
             setIsSubmitting(false);
         }
@@ -77,8 +77,8 @@ export default function SocialMediaPage() {
             toast.success('Deleted successfully');
             setDeleteTarget(null);
             queryClient.invalidateQueries({ queryKey: ['social-media'] });
-        } catch {
-            toast.error('Failed to delete');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to delete');
         } finally {
             setIsDeleting(false);
         }

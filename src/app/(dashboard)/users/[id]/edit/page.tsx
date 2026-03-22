@@ -43,8 +43,8 @@ export default function EditUserPage() {
             await updateUser.mutateAsync({ id: Number(id), ...data });
             toast.success('User updated successfully');
             router.push(`/users/${id}`);
-        } catch {
-            toast.error('Failed to update user');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to update user');
         }
     };
 

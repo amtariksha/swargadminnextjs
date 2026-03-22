@@ -46,7 +46,7 @@ export default function TransactionsPage() {
             setShowAddModal(false);
             setTxnForm({ user_id: '', payment_id: '', amount: '', type: '1', description: '' });
             refetch();
-        } catch { toast.error('Failed to add transaction'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to add transaction'); }
     };
 
     const handleRefund = async () => {
@@ -62,7 +62,7 @@ export default function TransactionsPage() {
             toast.success('Refund processed');
             setShowRefundModal(null);
             refetch();
-        } catch { toast.error('Failed to process refund'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to process refund'); }
     };
 
     const handleExport = () => {

@@ -98,7 +98,7 @@ export default function UserDetailPage() {
             setShowHolidayModal(false);
             setHolidayStartDate('');
             setHolidayEndDate('');
-        } catch { toast.error('Failed to add holiday'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to add holiday'); }
     };
 
     const handleDeleteHoliday = async () => {
@@ -107,7 +107,7 @@ export default function UserDetailPage() {
             await deleteHolidayMutation.mutateAsync({ id: deleteHoliday.id });
             toast.success('Holiday removed');
             setDeleteHoliday(null);
-        } catch { toast.error('Failed to remove holiday'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to remove holiday'); }
     };
 
     const handleAddTransaction = async () => {
@@ -120,7 +120,7 @@ export default function UserDetailPage() {
             toast.success('Transaction added');
             setShowTxnModal(false);
             setTxnForm({ amount: '', type: '1', description: '', payment_mode: '1' });
-        } catch { toast.error('Failed to add transaction'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to add transaction'); }
     };
 
     const handleRefund = async () => {
@@ -132,7 +132,7 @@ export default function UserDetailPage() {
             });
             toast.success('Refund processed');
             setShowRefundModal(null);
-        } catch { toast.error('Failed to process refund'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to process refund'); }
     };
 
     const handleSaveAddress = async () => {
@@ -147,7 +147,7 @@ export default function UserDetailPage() {
             setShowAddressModal(false);
             setEditAddress(null);
             setAddrForm({ name: '', s_phone: '', flat_no: '', apartment_name: '', area: '', landmark: '', city: '', pincode: '', lat: '', lng: '' });
-        } catch { toast.error('Failed to save address'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to save address'); }
     };
 
     const handleDeleteAddress = async () => {
@@ -156,7 +156,7 @@ export default function UserDetailPage() {
             await deleteAddressMutation.mutateAsync({ id: deleteAddr.id });
             toast.success('Address deleted');
             setDeleteAddr(null);
-        } catch { toast.error('Failed to delete address'); }
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to delete address'); }
     };
 
     const openEditAddress = (a: Address) => {

@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
 import { CreditCard, Edit, ToggleLeft, ToggleRight } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface PaymentGateway {
     id: number;
@@ -55,7 +56,7 @@ export default function PaymentSettingsPage() {
             setEditItem(null);
             queryClient.invalidateQueries({ queryKey: ['payment-gateways'] });
         } catch (error) {
-            console.error('Update failed:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to update payment gateway');
         } finally {
             setIsSubmitting(false);
         }

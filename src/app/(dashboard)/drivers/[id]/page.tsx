@@ -68,7 +68,7 @@ export default function DriverDetailPage() {
             queryClient.invalidateQueries({ queryKey: ['driver', driverId] });
         } catch (error) {
             console.error('Failed to update driver:', error);
-            toast.error('Failed to update driver');
+            toast.error(error instanceof Error ? error.message : 'Failed to update driver');
         } finally {
             setIsSubmitting(false);
         }

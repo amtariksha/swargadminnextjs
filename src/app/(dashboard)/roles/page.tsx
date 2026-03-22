@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRoles, useCreateRole, useUpdateRole, Role } from '@/hooks/useAdminUsers';
 import DataTable, { Column } from '@/components/DataTable';
 import { Plus, Shield, Edit, X, Check, Lock } from 'lucide-react';
+import { toast } from 'sonner';
 
 // Available pages/permissions
 const AVAILABLE_PERMISSIONS = [
@@ -68,7 +69,7 @@ export default function RolesPage() {
             setFormData({ title: '', permissions: [] });
             setEditingRole(null);
         } catch (error) {
-            console.error('Failed to save role:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to save role');
         }
     };
 

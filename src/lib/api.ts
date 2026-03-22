@@ -66,6 +66,16 @@ export const GET = async <T = unknown>(
     return response.data;
 };
 
+// Check backend business logic errors (HTTP 200 but response code != 200)
+function checkBusinessError(result: { response?: number; status?: boolean; message?: string }) {
+    if (result.response && result.response !== 200) {
+        const error = new Error(result.message || 'Operation failed');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (error as any).serverResponse = result;
+        throw error;
+    }
+}
+
 // Generic POST request
 export const POST = async <T = unknown>(
     endpoint: string,
@@ -80,7 +90,9 @@ export const POST = async <T = unknown>(
         data,
         config
     );
-    return response.data;
+    const result = response.data;
+    checkBusinessError(result);
+    return result;
 };
 
 // Generic PUT request
@@ -91,7 +103,9 @@ export const PUT = async <T = unknown>(
     // For FormData, delete Content-Type so browser sets multipart/form-data with boundary
     const config = data instanceof FormData ? { headers: { 'Content-Type': undefined } } : {};
     const response = await apiClient.put<{ data: T; message?: string }>(endpoint, data, config);
-    return response.data;
+    const result = response.data;
+    checkBusinessError(result);
+    return result;
 };
 
 // Generic DELETE request

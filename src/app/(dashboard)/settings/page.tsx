@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
 import { Settings as SettingsIcon, Edit, ToggleLeft, ToggleRight } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Setting {
     setting_id: number;
@@ -49,7 +50,7 @@ export default function SettingsPage() {
             setEditItem(null);
             queryClient.invalidateQueries({ queryKey: ['settings'] });
         } catch (error) {
-            console.error('Update failed:', error);
+            toast.error(error instanceof Error ? error.message : 'Failed to update setting');
         } finally {
             setIsSubmitting(false);
         }

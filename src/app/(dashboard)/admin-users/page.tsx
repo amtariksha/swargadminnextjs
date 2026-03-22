@@ -79,8 +79,8 @@ export default function AdminUsersPage() {
                 toast.success('Admin user updated');
             }
             setShowModal(false);
-        } catch {
-            toast.error('Something went wrong');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Something went wrong');
         } finally {
             setSaving(false);
         }
@@ -94,8 +94,8 @@ export default function AdminUsersPage() {
             toast.success('Admin user deleted');
             setDeleteDialogOpen(false);
             setShowModal(false);
-        } catch {
-            toast.error('Failed to delete');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to delete');
         } finally {
             setSaving(false);
         }
