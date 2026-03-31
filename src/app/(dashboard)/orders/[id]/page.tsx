@@ -216,7 +216,7 @@ export default function OrderDetailPage() {
                             <select value={newDriverId} onChange={(e) => setNewDriverId(e.target.value)} className={`flex-1 ${selectClassName}`}>
                                 <option value="">Select driver</option>
                                 {[...drivers].sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
-                                    <option key={d.id} value={d.id}>{d.name} - {d.phone}</option>
+                                    <option key={d.id} value={d.user_id}>{d.name} - {d.phone}</option>
                                 ))}
                             </select>
                             <button onClick={handleAssignDriver} disabled={!newDriverId || assignOrder.isPending} className="px-4 py-2 bg-purple-600 text-white text-sm rounded-xl disabled:opacity-50">Assign</button>

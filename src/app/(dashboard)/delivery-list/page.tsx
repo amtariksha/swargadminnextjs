@@ -363,6 +363,7 @@ export default function DeliveryListPage() {
         { key: 'select', header: '', width: '40px',
             render: (item) => (
                 <input type="checkbox" checked={selectedIds.has(item.pre_delivery_id)} disabled={item.status === 3}
+                    onClick={(e) => e.stopPropagation()}
                     onChange={() => toggleSelect(item.pre_delivery_id)}
                     className="w-4 h-4 rounded border-slate-600 text-purple-500 focus:ring-purple-500 bg-slate-800/50 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" />
             ) },

@@ -308,7 +308,8 @@ export function useAssignOrder() {
         },
         onSuccess: (_data, variables) => {
             if (variables.order_id) {
-                queryClient.invalidateQueries({ queryKey: ['order-assignment', variables.order_id] });
+                queryClient.invalidateQueries({ queryKey: ['order-assignment', String(variables.order_id)] });
+                queryClient.invalidateQueries({ queryKey: ['order-assignment', Number(variables.order_id)] });
             }
         },
     });
@@ -322,7 +323,8 @@ export function useDeleteOrderAssignment() {
         },
         onSuccess: (_data, variables) => {
             if (variables.order_id) {
-                queryClient.invalidateQueries({ queryKey: ['order-assignment', variables.order_id] });
+                queryClient.invalidateQueries({ queryKey: ['order-assignment', String(variables.order_id)] });
+                queryClient.invalidateQueries({ queryKey: ['order-assignment', Number(variables.order_id)] });
             }
         },
     });
