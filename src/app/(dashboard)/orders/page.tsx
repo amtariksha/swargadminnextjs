@@ -174,7 +174,7 @@ export default function OrdersPage() {
         },
         { key: 'order_amount', header: 'Amount', width: '90px', render: (o) => <span>₹{o.order_amount || 0}</span> },
         { key: 'qty', header: 'Qty', width: '60px' },
-        { key: 'start_date', header: 'Start Date', width: '100px' },
+        { key: 'start_date', header: 'Start Date', width: '100px', render: (o) => <span>{o.start_date ? String(o.start_date).slice(0, 10) : '-'}</span> },
         { key: 'pincode', header: 'Pincode', width: '80px' },
         {
             key: 'updated_at', header: 'Last Update', width: '160px',

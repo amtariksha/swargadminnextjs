@@ -386,30 +386,17 @@ export default function UserDetailPage() {
                     {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                     <DataTable data={calendarData} columns={[
                         { key: 'id', header: 'ID', width: '60px' },
-                        { key: 'order_type', header: 'Order Type', width: '100px', render: (c: Record<string, unknown>) => String(ORDER_TYPE_LABELS[c.order_type as number] || 'N/A') },
-                        { key: 'title', header: 'Product Title', render: (c: Record<string, unknown>) => String(c.title || '-') },
-                        { key: 'order_amount', header: 'Order Amount', width: '120px', render: (c: Record<string, unknown>) => `₹${c.order_amount ?? 0}` },
-                        { key: 'qty', header: 'Quantity', width: '80px', render: (c: Record<string, unknown>) => String(c.qty || '-') },
-                        { key: 'start_date', header: 'Start Date', width: '120px', render: (c: Record<string, unknown>) => { try { return format(new Date(c.start_date as string), 'yyyy-MM-dd'); } catch { return '-'; } } },
-                        { key: 'subscription_type', header: 'Sub Type', width: '130px', render: (c: Record<string, unknown>) => String(SUB_TYPE_LABELS[c.subscription_type as number] || 'N/A') },
-                        {
-                            key: 'order_status', header: 'Order Status', width: '120px',
-                            render: (c: Record<string, unknown>) => {
-                                if (c.subscription_type !== null && c.subscription_type !== undefined) {
-                                    return (c.order_status as number) === 0 ? 'Active' : 'Stopped';
-                                }
-                                return 'N/A';
-                            },
-                        },
-                        { key: 'created_at', header: 'Created At', width: '170px', render: (c: Record<string, unknown>) => { try { return format(new Date(c.created_at as string), 'yyyy-MM-dd HH:mm:ss'); } catch { return '-'; } } },
-                        { key: 'updated_at', header: 'Updated At', width: '170px', render: (c: Record<string, unknown>) => { try { return format(new Date(c.updated_at as string), 'yyyy-MM-dd HH:mm:ss'); } catch { return '-'; } } },
+                        { key: 'order_id', header: 'Order ID', width: '80px' },
+                        { key: 'title', header: 'Product', render: (c: Record<string, unknown>) => String(c.title || '-') },
                         { key: 'qty_text', header: 'Qty Text', width: '100px', render: (c: Record<string, unknown>) => String(c.qty_text || '-') },
-                        { key: 'stock_qty', header: 'Stock Qty', width: '100px', render: (c: Record<string, unknown>) => String(c.stock_qty ?? '-') },
-                        { key: 'user_holiday_date', header: 'Holiday Date', width: '120px', render: (c: Record<string, unknown>) => { try { return c.user_holiday_date ? format(new Date(c.user_holiday_date as string), 'yyyy-MM-dd') : 'N/A'; } catch { return 'N/A'; } } },
-                        { key: 'pre_order_updates_qty', header: 'Pre-Order Qty', width: '120px', render: (c: Record<string, unknown>) => String(c.pre_order_updates_qty ?? '-') },
-                        { key: 'pre_order_updtes_id', header: 'Pre-Order ID', width: '110px', render: (c: Record<string, unknown>) => String(c.pre_order_updtes_id ?? '-') },
+                        { key: 'delivered_qty', header: 'Delivered Qty', width: '110px', render: (c: Record<string, unknown>) => String(c.delivered_qty ?? '-') },
+                        { key: 'order_amount', header: 'Amount', width: '90px', render: (c: Record<string, unknown>) => `₹${c.order_amount ?? 0}` },
+                        { key: 'payment_mode', header: 'Payment', width: '90px', render: (c: Record<string, unknown>) => (c.payment_mode === 1 ? 'Online' : c.payment_mode === 2 ? 'Cash' : '-') },
+                        { key: 'date', header: 'Date', width: '110px', render: (c: Record<string, unknown>) => String(c.date || '-').slice(0, 10) },
+                        { key: 'mark_delivered_time_stamp', header: 'Time', width: '90px', render: (c: Record<string, unknown>) => { const ts = c.mark_delivered_time_stamp as string; return ts ? ts.slice(11, 16) : '-'; } },
+                        { key: 'subscription_type', header: 'Sub Type', width: '110px', render: (c: Record<string, unknown>) => String(SUB_TYPE_LABELS[c.subscription_type as number] || 'N/A') },
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    ] as Column<any>[]} pageSize={50} searchPlaceholder="Search calendar..." emptyMessage="No calendar entries for this date" />
+                    ] as Column<any>[]} pageSize={50} searchPlaceholder="Search deliveries..." emptyMessage="No deliveries recorded for this date" />
                 </div>
             ),
         },

@@ -528,14 +528,15 @@ export function useUserDeliveryHistory(userId: number | string | undefined, enab
     });
 }
 
-export function useUserCalendar(userId: number | string | undefined, month: string, enabled = true) {
+// Returns actual subscribed_order_delivery records for a user on a specific date
+export function useUserCalendar(userId: number | string | undefined, date: string, enabled = true) {
     return useQuery({
-        queryKey: ['user-calendar', userId, month],
+        queryKey: ['user-calendar', userId, date],
         queryFn: async () => {
-            const response = await GET<Record<string, unknown>[]>(`/get_order_calender/${userId}/${month}`);
+            const response = await GET<Record<string, unknown>[]>(`/get_order_delivered/${userId}/${date}`);
             return response.data || [];
         },
-        enabled: !!userId && !!month && enabled,
+        enabled: !!userId && !!date && enabled,
     });
 }
 

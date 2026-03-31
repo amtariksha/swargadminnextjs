@@ -136,9 +136,8 @@ export default function PerformanceReportPage() {
         report.forEach(item => {
             const { name, mark_delivered_time_stamp } = item;
             if (!name || !mark_delivered_time_stamp) return;
-            const ts = new Date(mark_delivered_time_stamp);
-            const dateKey = format(ts, 'yyyy-MM-dd');
-            const timeStr = format(ts, 'HH:mm:ss');
+            const dateKey = mark_delivered_time_stamp.slice(0, 10);
+            const timeStr = mark_delivered_time_stamp.slice(11, 19);
             if (!map[name]) map[name] = {};
             if (!map[name][dateKey] || map[name][dateKey] < timeStr) {
                 map[name][dateKey] = timeStr;
@@ -153,7 +152,7 @@ export default function PerformanceReportPage() {
         report.forEach(item => {
             const { name, mark_delivered_time_stamp, delivered_qty } = item;
             if (!name || !mark_delivered_time_stamp) return;
-            const dateKey = format(new Date(mark_delivered_time_stamp), 'yyyy-MM-dd');
+            const dateKey = mark_delivered_time_stamp.slice(0, 10);
             if (!map[name]) map[name] = {};
             map[name][dateKey] = (map[name][dateKey] || 0) + (delivered_qty || 0);
         });
@@ -166,7 +165,7 @@ export default function PerformanceReportPage() {
         report.forEach(item => {
             const { name, mark_delivered_time_stamp, order_user_id } = item;
             if (!name || !mark_delivered_time_stamp) return;
-            const dateKey = format(new Date(mark_delivered_time_stamp), 'yyyy-MM-dd');
+            const dateKey = mark_delivered_time_stamp.slice(0, 10);
             if (!map[name]) map[name] = {};
             if (!map[name][dateKey]) map[name][dateKey] = new Set();
             map[name][dateKey].add(order_user_id);
