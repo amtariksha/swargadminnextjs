@@ -237,8 +237,12 @@ export function useOrderAssignment(orderId: number | string | undefined) {
     return useQuery({
         queryKey: ['order-assignment', orderId],
         queryFn: async () => {
-            const response = await GET<OrderAssignment>(`/get_assign_user_order/order/${orderId}`);
-            return response.data;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const response = await GET<any>(`/get_assign_user_order/order/${orderId}`);
+            // Backend returns an array of assignments — take the first (most recent)
+            const data = response.data;
+            const assignments = Array.isArray(data) ? data : (data ? [data] : []);
+            return assignments[0] || null;
         },
         enabled: !!orderId,
     });

@@ -92,7 +92,14 @@ export default function OrderDetailPage() {
 
     const handleRemoveDriver = async () => {
         try {
-            await deleteAssignment.mutateAsync({ order_id: Number(id) });
+            // Backend expects { id: assignmentId }, not order_id
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const assignmentId = (assignment as any)?.id;
+            if (!assignmentId) {
+                toast.error('No assignment found to remove');
+                return;
+            }
+            await deleteAssignment.mutateAsync({ id: assignmentId, order_id: Number(id) });
             toast.success('Driver removed');
             setShowRemoveDriver(false);
         } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to remove driver'); }
@@ -199,7 +206,7 @@ export default function OrderDetailPage() {
                     </div>
                     {assignment ? (
                         <div className="flex items-center justify-between">
-                            <p className="text-white">{assignment.delivery_boy_name || `Driver #${assignment.user_id}`}</p>
+                            <p className="text-white">{(assignment as Record<string, unknown>).name as string || (assignment as Record<string, unknown>).delivery_boy_name as string || `Driver #${assignment.user_id}`} {(assignment as Record<string, unknown>).phone ? <span className="text-slate-400 text-sm ml-2">{(assignment as Record<string, unknown>).phone as string}</span> : null}</p>
                             <button onClick={() => setShowRemoveDriver(true)} className="p-1.5 hover:bg-red-500/20 rounded-lg">
                                 <X className="w-4 h-4 text-red-400" />
                             </button>
