@@ -1,17 +1,24 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useUsers, useProducts, useDrivers, useUserAddresses, useAddAddress, useAddTransaction } from '@/hooks/useData';
+import { useUsers, useProducts, useDrivers, useUserAddresses, useAddTransaction } from '@/hooks/useData';
 import { useCreateOrder, useAssignOrder } from '@/hooks/useOrders';
 import FormField, { inputClassName, selectClassName } from '@/components/FormField';
 import { ArrowLeft, Save, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// Tomorrow's date as YYYY-MM-DD for min date validation
+const getTomorrowDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+};
 
 const orderSchema = z.object({
     user_id: z.number().min(1, 'Select a user'),
@@ -53,8 +60,9 @@ export default function CreateOrderPage() {
             qty: 1,
             subscription_type: 1,
             status: 1,
-            order_status: 0, // 0 = Active, 1 = Stopped
-            order_type: 1,   // 1 = Prepaid (default for subscriptions)
+            order_status: 0,
+            order_type: 1,
+            start_date: getTomorrowDate(),
         },
     });
 
@@ -67,13 +75,27 @@ export default function CreateOrderPage() {
     const { data: addresses = [] } = useUserAddresses(selectedUserId || undefined);
 
     const selectedProduct = useMemo(() => {
-        const product = products.find((p) => p.id === selectedProductId);
-        // Reset subscription type to One Time for non-subscription products
-        if (product && product.subscription !== 1 && subscriptionType !== 1) {
-            setValue('subscription_type', 1);
-        }
-        return product;
+        return products.find((p) => p.id === selectedProductId) || null;
     }, [products, selectedProductId]);
+
+    const isSubscriptionProduct = selectedProduct?.subscription === 1;
+    const isSubscriptionOrder = isSubscriptionProduct && subscriptionType !== 1;
+
+    // When product changes, enforce rules matching React admin
+    useEffect(() => {
+        if (!selectedProduct) return;
+        if (isSubscriptionProduct) {
+            // Subscription product: default to Daily, lock order_type to Prepaid
+            setValue('order_type', 1);
+            if (subscriptionType === 1) {
+                setValue('subscription_type', 3); // Default to Daily
+            }
+        } else {
+            // Non-subscription product: lock to One Time + Pay Now
+            setValue('subscription_type', 1);
+            setValue('order_type', 3);
+        }
+    }, [selectedProduct?.id]);
 
     const orderAmount = selectedProduct
         ? Math.round((selectedProduct.price + selectedProduct.price * (selectedProduct.tax || 0) / 100) * qty * 100) / 100
@@ -124,6 +146,9 @@ export default function CreateOrderPage() {
             const orderData: Record<string, unknown> = {
                 ...data,
                 order_amount: orderAmount,
+                price: selectedProduct?.price,
+                mrp: selectedProduct?.mrp || selectedProduct?.price,
+                tax: selectedProduct?.tax || 0,
                 selected_days_for_weekly: subscriptionType === 2 ? JSON.stringify(selectedDays) : undefined,
                 trasation_id: transactionId,
             };
@@ -143,6 +168,8 @@ export default function CreateOrderPage() {
         }
     };
 
+    const disabledFieldClass = `${inputClassName} !text-slate-500 !bg-slate-800/30 cursor-not-allowed`;
+
     return (
         <div className="space-y-6">
             <div className="flex items-center gap-4">
@@ -156,127 +183,141 @@ export default function CreateOrderPage() {
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="glass rounded-xl p-6 space-y-6">
-                {/* User Selection */}
-                <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                        Customer <span className="text-red-400">*</span>
-                    </label>
-                    {selectedUser ? (
-                        <div className="flex items-center justify-between p-3 bg-slate-900/50 border border-slate-700/50 rounded-xl">
-                            <div>
-                                <p className="text-white font-medium">{selectedUser.name}</p>
-                                <p className="text-xs text-slate-400">{selectedUser.phone} &middot; Wallet: ₹{selectedUser.wallet_amount}</p>
+                {/* User + Product Selection */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* User Selection */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                            User <span className="text-red-400">*</span>
+                        </label>
+                        {selectedUser ? (
+                            <div className="flex items-center justify-between p-3 bg-slate-900/50 border border-slate-700/50 rounded-xl">
+                                <div>
+                                    <p className="text-white font-medium">{selectedUser.name}</p>
+                                    <p className="text-xs text-slate-400">{selectedUser.phone} &middot; Wallet: ₹{selectedUser.wallet_amount}</p>
+                                </div>
+                                <button type="button" onClick={() => { setValue('user_id', 0); setUserSearch(''); }} className="text-sm text-red-400 hover:text-red-300">Change</button>
                             </div>
-                            <button type="button" onClick={() => { setValue('user_id', 0); setUserSearch(''); }} className="text-sm text-red-400 hover:text-red-300">Change</button>
-                        </div>
-                    ) : (
+                        ) : (
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                                <input
+                                    placeholder="Search by name or phone..."
+                                    value={userSearch}
+                                    onChange={(e) => setUserSearch(e.target.value)}
+                                    className={`${inputClassName} pl-10`}
+                                />
+                                {filteredUsers.length > 0 && (
+                                    <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                                        {filteredUsers.slice(0, 10).map((u) => (
+                                            <button key={u.id} type="button"
+                                                onClick={() => { setValue('user_id', u.id); setUserSearch(''); }}
+                                                className="w-full text-left px-4 py-2.5 hover:bg-slate-800 text-sm">
+                                                <p className="text-white">{u.name}</p>
+                                                <p className="text-xs text-slate-400">{u.phone} &middot; ₹{u.wallet_amount}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {errors.user_id && <p className="mt-1 text-xs text-red-400">{errors.user_id.message}</p>}
+                    </div>
+
+                    {/* Product Selection */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                            Product <span className="text-red-400">*</span>
+                        </label>
                         <div className="relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                             <input
-                                placeholder="Search by name or phone..."
-                                value={userSearch}
-                                onChange={(e) => setUserSearch(e.target.value)}
+                                placeholder="Search products..."
+                                value={productSearch}
+                                onChange={(e) => setProductSearch(e.target.value)}
                                 className={`${inputClassName} pl-10`}
                             />
-                            {filteredUsers.length > 0 && (
-                                <div className="absolute z-10 w-full mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-lg max-h-60 overflow-y-auto">
-                                    {filteredUsers.slice(0, 10).map((u) => (
-                                        <button
-                                            key={u.id}
-                                            type="button"
-                                            onClick={() => { setValue('user_id', u.id); setUserSearch(''); }}
-                                            className="w-full text-left px-4 py-2.5 hover:bg-slate-800 text-sm"
-                                        >
-                                            <p className="text-white">{u.name}</p>
-                                            <p className="text-xs text-slate-400">{u.phone} &middot; ₹{u.wallet_amount}</p>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
                         </div>
-                    )}
-                    {errors.user_id && <p className="mt-1 text-xs text-red-400">{errors.user_id.message}</p>}
+                        <div className="mt-2 grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                            {filteredProducts.map((p) => (
+                                <button key={p.id} type="button"
+                                    onClick={() => setValue('product_id', p.id)}
+                                    className={`p-2 rounded-xl text-left text-sm transition-colors ${
+                                        selectedProductId === p.id
+                                            ? 'bg-purple-600/20 border border-purple-500/30 text-purple-300'
+                                            : 'bg-slate-900/50 border border-slate-700/30 text-slate-300 hover:bg-slate-800/50'
+                                    }`}>
+                                    <p className="font-medium truncate">{p.title}</p>
+                                    <p className="text-xs text-slate-400">₹{p.price} {p.subscription === 1 ? '(Subscription)' : ''}</p>
+                                </button>
+                            ))}
+                        </div>
+                        {errors.product_id && <p className="mt-1 text-xs text-red-400">{errors.product_id.message}</p>}
+                    </div>
                 </div>
 
-                {/* Product Selection */}
-                <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                        Product <span className="text-red-400">*</span>
-                    </label>
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                        <input
-                            placeholder="Search products..."
-                            value={productSearch}
-                            onChange={(e) => setProductSearch(e.target.value)}
-                            className={`${inputClassName} pl-10`}
-                        />
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
-                        {filteredProducts.map((p) => (
-                            <button
-                                key={p.id}
-                                type="button"
-                                onClick={() => setValue('product_id', p.id)}
-                                className={`p-2 rounded-xl text-left text-sm transition-colors ${
-                                    selectedProductId === p.id
-                                        ? 'bg-purple-600/20 border border-purple-500/30 text-purple-300'
-                                        : 'bg-slate-900/50 border border-slate-700/30 text-slate-300 hover:bg-slate-800/50'
-                                }`}
-                            >
-                                <p className="font-medium truncate">{p.title}</p>
-                                <p className="text-xs text-slate-400">₹{p.price} &middot; {p.qty_text || p.unit || ''} {p.subscription === 1 ? '📦' : ''}</p>
-                            </button>
-                        ))}
-                    </div>
-                    {errors.product_id && <p className="mt-1 text-xs text-red-400">{errors.product_id.message}</p>}
-                </div>
-
-                {/* Auto-filled product info */}
+                {/* Auto-filled product info — all disabled */}
                 {selectedProduct && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div>
-                            <label className="block text-xs text-slate-500 mb-1">MRP</label>
-                            <input value={`₹${selectedProduct.mrp || selectedProduct.price}`} disabled className={`${inputClassName} !text-slate-500 !bg-slate-800/30`} />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-slate-500 mb-1">Price</label>
-                            <input value={`₹${selectedProduct.price}`} disabled className={`${inputClassName} !text-slate-500 !bg-slate-800/30`} />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-slate-500 mb-1">Tax %</label>
-                            <input value={`${selectedProduct.tax || 0}%`} disabled className={`${inputClassName} !text-slate-500 !bg-slate-800/30`} />
-                        </div>
-                        <div>
-                            <label className="block text-xs text-slate-500 mb-1">Order Amount</label>
-                            <input value={`₹${orderAmount}`} disabled className={`${inputClassName} !text-emerald-400 !bg-slate-800/30 font-semibold`} />
-                        </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <FormField label="MRP" required>
+                            <input value={selectedProduct.mrp || selectedProduct.price} disabled className={disabledFieldClass} />
+                        </FormField>
+                        <FormField label="Price" required>
+                            <input value={selectedProduct.price} disabled className={disabledFieldClass} />
+                        </FormField>
+                        <FormField label="Tax" required>
+                            <input value={selectedProduct.tax || 0} disabled className={disabledFieldClass} />
+                        </FormField>
                     </div>
                 )}
 
-                {/* Order Details */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <FormField label="Quantity" error={errors.qty} required>
-                        <input {...register('qty', { valueAsNumber: true })} type="number" min={1} className={inputClassName} />
-                    </FormField>
-                    <FormField label="Start Date" error={errors.start_date} required>
-                        <input {...register('start_date')} type="date" className={`${inputClassName} cursor-pointer [&::-webkit-calendar-picker-indicator]:cursor-pointer`}
-                            onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
-                    </FormField>
-                    <FormField label="Subscription Type" error={errors.subscription_type} required>
-                        <select {...register('subscription_type', { valueAsNumber: true })} className={selectClassName}
-                            disabled={selectedProduct?.subscription !== 1}>
-                            <option value={1}>One Time</option>
-                            {selectedProduct?.subscription === 1 && (
-                                <>
-                                    <option value={2}>Weekly</option>
-                                    <option value={3}>Daily</option>
-                                    <option value={4}>Alternative Days</option>
-                                </>
-                            )}
-                        </select>
-                    </FormField>
-                </div>
+                {/* Order Amount, Quantity, Start Date */}
+                {selectedProduct && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <FormField label="Order Amount" required>
+                            <input value={orderAmount.toFixed(2)} disabled className={disabledFieldClass} />
+                        </FormField>
+                        <FormField label="Quantity" error={errors.qty} required>
+                            <input {...register('qty', { valueAsNumber: true })} type="number" min={1} className={inputClassName} />
+                        </FormField>
+                        <FormField label="Start From" error={errors.start_date} required>
+                            <input {...register('start_date')} type="date" min={getTomorrowDate()}
+                                className={`${inputClassName} cursor-pointer [&::-webkit-calendar-picker-indicator]:cursor-pointer`}
+                                onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
+                        </FormField>
+                    </div>
+                )}
+
+                {/* Subscription Type + Address */}
+                {selectedProduct && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField label="Subscription Type" error={errors.subscription_type} required>
+                            <select {...register('subscription_type', { valueAsNumber: true })} className={selectClassName}
+                                disabled={!isSubscriptionProduct}>
+                                <option value={1}>One Time Order</option>
+                                {isSubscriptionProduct && (
+                                    <>
+                                        <option value={2}>Weekly</option>
+                                        <option value={3}>Daily</option>
+                                        <option value={4}>Alternative Days</option>
+                                    </>
+                                )}
+                            </select>
+                        </FormField>
+                        {selectedUserId > 0 && addresses.length > 0 && (
+                            <FormField label="Address">
+                                <select {...register('address_id', { valueAsNumber: true })} className={selectClassName}>
+                                    <option value="">Select address</option>
+                                    {addresses.map((a) => (
+                                        <option key={a.id} value={a.id}>
+                                            {[a.flat_no, a.apartment_name, a.area, a.city].filter(Boolean).join(', ')}
+                                        </option>
+                                    ))}
+                                </select>
+                            </FormField>
+                        )}
+                    </div>
+                )}
 
                 {/* Weekly Day Picker */}
                 {subscriptionType === 2 && (
@@ -284,9 +325,7 @@ export default function CreateOrderPage() {
                         <label className="block text-sm font-medium text-slate-300 mb-2">Delivery Days</label>
                         <div className="flex gap-2">
                             {DAY_LABELS.map((day, i) => (
-                                <button
-                                    key={day}
-                                    type="button"
+                                <button key={day} type="button"
                                     onClick={() => setSelectedDays((prev) =>
                                         prev.includes(i) ? prev.filter((d) => d !== i) : [...prev, i]
                                     )}
@@ -294,8 +333,7 @@ export default function CreateOrderPage() {
                                         selectedDays.includes(i)
                                             ? 'bg-purple-600 text-white'
                                             : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'
-                                    }`}
-                                >
+                                    }`}>
                                     {day}
                                 </button>
                             ))}
@@ -303,60 +341,52 @@ export default function CreateOrderPage() {
                     </div>
                 )}
 
-                {/* Subscription products: Prepaid locked, show Active/Stop toggle */}
-                {selectedProduct?.subscription === 1 && subscriptionType !== 1 && (
+                {/* Status + Order Status + Order Type row */}
+                {selectedProduct && (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <FormField label="Order Status">
-                            <select {...register('order_status', { valueAsNumber: true })} className={selectClassName}>
-                                <option value={0}>Active</option>
-                                <option value={1}>Stop</option>
+                        <FormField label="Status">
+                            <select {...register('status', { valueAsNumber: true })} className={selectClassName}>
+                                <option value={1}>Confirmed</option>
+                                <option value={0}>Pending</option>
                             </select>
                         </FormField>
-                        <FormField label="Order Type">
-                            <select className={`${selectClassName} !text-slate-500 !bg-slate-800/30`} disabled value={1}>
-                                <option value={1}>Prepaid</option>
-                            </select>
-                        </FormField>
-                    </div>
-                )}
 
-                {/* Non-subscription (One Time) products: show Order Type dropdown */}
-                {(!selectedProduct || selectedProduct.subscription !== 1 || subscriptionType === 1) && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <FormField label="Order Type" error={errors.order_type} required>
-                            <select {...register('order_type', { valueAsNumber: true })} className={selectClassName}>
-                                <option value={3}>Pay Now</option>
-                                <option value={1}>Prepaid</option>
-                                <option value={2}>Postpaid</option>
-                            </select>
-                        </FormField>
-                        {orderType === 3 && (
-                            <FormField label="Payment Mode">
-                                <select {...register('payment_mode', { valueAsNumber: true })} className={selectClassName}>
-                                    <option value={1}>Online</option>
-                                    <option value={2}>Cash</option>
-                                </select>
+                        {/* Subscription orders: show Order Status toggle + locked Prepaid */}
+                        {isSubscriptionOrder && (
+                            <>
+                                <FormField label="Order Status">
+                                    <select {...register('order_status', { valueAsNumber: true })} className={selectClassName}>
+                                        <option value={0}>Active</option>
+                                        <option value={1}>Stop</option>
+                                    </select>
+                                </FormField>
+                                <FormField label="Order Type">
+                                    <input value="Prepaid" disabled className={disabledFieldClass} />
+                                </FormField>
+                            </>
+                        )}
+
+                        {/* Non-subscription / One Time: show locked Pay Now */}
+                        {!isSubscriptionOrder && (
+                            <FormField label="Order Type">
+                                <input value="Pay Now" disabled className={disabledFieldClass} />
                             </FormField>
                         )}
                     </div>
                 )}
 
-                {/* Address */}
-                {selectedUserId > 0 && addresses.length > 0 && (
-                    <FormField label="Delivery Address">
-                        <select {...register('address_id', { valueAsNumber: true })} className={selectClassName}>
-                            <option value="">Select address</option>
-                            {addresses.map((a) => (
-                                <option key={a.id} value={a.id}>
-                                    {[a.flat_no, a.apartment_name, a.area, a.city].filter(Boolean).join(', ')}
-                                </option>
-                            ))}
+                {/* Payment Mode — only shown for Pay Now */}
+                {orderType === 3 && selectedProduct && !isSubscriptionOrder && (
+                    <FormField label="Payment Mode">
+                        <select {...register('payment_mode', { valueAsNumber: true })} className={selectClassName}>
+                            <option value={1}>Online</option>
+                            <option value={2}>Cash</option>
                         </select>
                     </FormField>
                 )}
 
                 {/* Driver Assignment */}
-                <FormField label="Delivery Partner">
+                <FormField label="Select Delivery Partner">
                     <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className={selectClassName}>
                         <option value="">Select delivery partner (optional)</option>
                         {[...drivers].sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
@@ -371,9 +401,9 @@ export default function CreateOrderPage() {
                         <h3 className="text-sm font-medium text-slate-300 mb-2">Order Summary</h3>
                         <div className="flex justify-between text-sm">
                             <span className="text-slate-400">{selectedProduct.title} x {qty}</span>
-                            <span className="text-white font-semibold">₹{orderAmount}</span>
+                            <span className="text-white font-semibold">₹{orderAmount.toFixed(2)}</span>
                         </div>
-                        {orderType === 3 && selectedUser && (
+                        {orderType === 3 && selectedUser && !isSubscriptionOrder && (
                             <div className={`mt-2 p-2 rounded-lg text-xs ${
                                 (selectedUser.wallet_amount || 0) >= orderAmount
                                     ? 'bg-emerald-900/30 border border-emerald-700/30 text-emerald-400'
@@ -394,7 +424,7 @@ export default function CreateOrderPage() {
                     </button>
                     <button type="submit" disabled={createOrder.isPending} className="flex items-center gap-2 px-6 py-2.5 text-sm text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl hover:from-purple-600 hover:to-pink-600 disabled:opacity-50">
                         <Save className="w-4 h-4" />
-                        {createOrder.isPending ? 'Creating...' : 'Create Order'}
+                        {createOrder.isPending ? 'Creating...' : 'Add New Order'}
                     </button>
                 </div>
             </form>
