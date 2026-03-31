@@ -5,8 +5,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useUsers, useProducts, useDrivers, useUserAddresses, useAddTransaction } from '@/hooks/useData';
-import { useCreateOrder, useAssignOrder } from '@/hooks/useOrders';
+import { useUsers, useProducts, useUserAddresses, useAddTransaction } from '@/hooks/useData';
+import { useCreateOrder } from '@/hooks/useOrders';
 import FormField, { inputClassName, selectClassName } from '@/components/FormField';
 import { ArrowLeft, Save, Search } from 'lucide-react';
 import { toast } from 'sonner';
@@ -30,7 +30,6 @@ const orderSchema = z.object({
     order_status: z.number(),
     order_type: z.number().min(1),
     address_id: z.number().optional(),
-    payment_mode: z.number().optional(),
 });
 
 type OrderFormData = z.infer<typeof orderSchema>;
@@ -42,15 +41,12 @@ export default function CreateOrderPage() {
 
     const { data: users = [] } = useUsers();
     const { data: products = [] } = useProducts();
-    const { data: drivers = [] } = useDrivers();
 
     const [userSearch, setUserSearch] = useState('');
     const [productSearch, setProductSearch] = useState('');
     const [selectedDays, setSelectedDays] = useState<number[]>([]);
-    const [driverId, setDriverId] = useState('');
 
     const createOrder = useCreateOrder();
-    const assignOrder = useAssignOrder();
     const addTxn = useAddTransaction();
 
     const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<OrderFormData>({
@@ -70,7 +66,6 @@ export default function CreateOrderPage() {
     const selectedProductId = watch('product_id');
     const qty = watch('qty');
     const subscriptionType = watch('subscription_type');
-    const orderType = watch('order_type');
 
     const { data: addresses = [] } = useUserAddresses(selectedUserId || undefined);
 
@@ -137,7 +132,7 @@ export default function CreateOrderPage() {
                     payment_id: 'xxx-admin',
                     type: 2,
                     description: `Amount debited for ${data.qty} qty of ${selectedProduct?.title || 'product'}`,
-                    payment_mode: data.payment_mode || 1,
+                    payment_mode: 1,
                 });
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 transactionId = (txnResult as any)?.id || (txnResult as any)?.data?.id || null;
@@ -149,18 +144,12 @@ export default function CreateOrderPage() {
                 price: selectedProduct?.price,
                 mrp: selectedProduct?.mrp || selectedProduct?.price,
                 tax: selectedProduct?.tax || 0,
+                payment_mode: 1,
                 selected_days_for_weekly: subscriptionType === 2 ? JSON.stringify(selectedDays) : undefined,
                 trasation_id: transactionId,
             };
 
-            const result = await createOrder.mutateAsync(orderData);
-            const orderId = (result as { data?: { id?: number } })?.data?.id;
-
-            // Assign driver if selected
-            if (driverId && orderId) {
-                await assignOrder.mutateAsync({ user_id: Number(driverId), order_id: orderId });
-            }
-
+            await createOrder.mutateAsync(orderData);
             toast.success('Order created successfully');
             router.push('/orders');
         } catch (error) {
@@ -375,24 +364,13 @@ export default function CreateOrderPage() {
                     </div>
                 )}
 
-                {/* Payment Mode — only shown for Pay Now */}
-                {orderType === 3 && selectedProduct && !isSubscriptionOrder && (
-                    <FormField label="Payment Mode">
-                        <select {...register('payment_mode', { valueAsNumber: true })} className={selectClassName}>
-                            <option value={1}>Online</option>
-                            <option value={2}>Cash</option>
-                        </select>
-                    </FormField>
-                )}
-
-                {/* Driver Assignment */}
-                <FormField label="Select Delivery Partner">
-                    <select value={driverId} onChange={(e) => setDriverId(e.target.value)} className={selectClassName}>
-                        <option value="">Select delivery partner (optional)</option>
-                        {[...drivers].sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
-                            <option key={d.id} value={d.id}>{d.name} - {d.phone}</option>
-                        ))}
-                    </select>
+                {/* Delivery Partner — assigned from order edit page */}
+                <FormField label="Delivery Partner">
+                    <input
+                        disabled
+                        value="Please assign delivery partner from the order edit page"
+                        className={`${disabledFieldClass} italic`}
+                    />
                 </FormField>
 
                 {/* Order Summary */}
@@ -403,7 +381,7 @@ export default function CreateOrderPage() {
                             <span className="text-slate-400">{selectedProduct.title} x {qty}</span>
                             <span className="text-white font-semibold">₹{orderAmount.toFixed(2)}</span>
                         </div>
-                        {orderType === 3 && selectedUser && !isSubscriptionOrder && (
+                        {!isSubscriptionOrder && selectedUser && (
                             <div className={`mt-2 p-2 rounded-lg text-xs ${
                                 (selectedUser.wallet_amount || 0) >= orderAmount
                                     ? 'bg-emerald-900/30 border border-emerald-700/30 text-emerald-400'
