@@ -53,8 +53,8 @@ export default function CreateOrderPage() {
             qty: 1,
             subscription_type: 1,
             status: 1,
-            order_status: 1,
-            order_type: 1,
+            order_status: 0, // 0 = Active, 1 = Stopped
+            order_type: 1,   // 1 = Prepaid (default for subscriptions)
         },
     });
 
@@ -303,30 +303,43 @@ export default function CreateOrderPage() {
                     </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <FormField label="Order Type" error={errors.order_type} required>
-                        <select {...register('order_type', { valueAsNumber: true })} className={selectClassName}>
-                            <option value={1}>Prepaid</option>
-                            <option value={2}>Postpaid</option>
-                            <option value={3}>Pay Now</option>
-                            <option value={4}>Pay Later</option>
-                        </select>
-                    </FormField>
-                    {orderType === 3 && (
-                        <FormField label="Payment Mode">
-                            <select {...register('payment_mode', { valueAsNumber: true })} className={selectClassName}>
-                                <option value={1}>Online</option>
-                                <option value={2}>Cash</option>
+                {/* Subscription products: Prepaid locked, show Active/Stop toggle */}
+                {selectedProduct?.subscription === 1 && subscriptionType !== 1 && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <FormField label="Order Status">
+                            <select {...register('order_status', { valueAsNumber: true })} className={selectClassName}>
+                                <option value={0}>Active</option>
+                                <option value={1}>Stop</option>
                             </select>
                         </FormField>
-                    )}
-                    <FormField label="Status">
-                        <select {...register('status', { valueAsNumber: true })} className={selectClassName}>
-                            <option value={0}>Pending</option>
-                            <option value={1}>Confirmed</option>
-                        </select>
-                    </FormField>
-                </div>
+                        <FormField label="Order Type">
+                            <select className={`${selectClassName} !text-slate-500 !bg-slate-800/30`} disabled value={1}>
+                                <option value={1}>Prepaid</option>
+                            </select>
+                        </FormField>
+                    </div>
+                )}
+
+                {/* Non-subscription (One Time) products: show Order Type dropdown */}
+                {(!selectedProduct || selectedProduct.subscription !== 1 || subscriptionType === 1) && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <FormField label="Order Type" error={errors.order_type} required>
+                            <select {...register('order_type', { valueAsNumber: true })} className={selectClassName}>
+                                <option value={3}>Pay Now</option>
+                                <option value={1}>Prepaid</option>
+                                <option value={2}>Postpaid</option>
+                            </select>
+                        </FormField>
+                        {orderType === 3 && (
+                            <FormField label="Payment Mode">
+                                <select {...register('payment_mode', { valueAsNumber: true })} className={selectClassName}>
+                                    <option value={1}>Online</option>
+                                    <option value={2}>Cash</option>
+                                </select>
+                            </FormField>
+                        )}
+                    </div>
+                )}
 
                 {/* Address */}
                 {selectedUserId > 0 && addresses.length > 0 && (
