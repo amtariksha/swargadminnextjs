@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { GET, POST, PUT, DELETE } from '@/lib/api';
+import { GET, POST, DELETE } from '@/lib/api';
 
 export interface Order {
     id: number;
@@ -291,7 +291,7 @@ export function useUpdateOrder() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (data: Record<string, unknown>) => {
-            return PUT('/update_order', data);
+            return POST('/update_order', data);
         },
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['orders'] });
