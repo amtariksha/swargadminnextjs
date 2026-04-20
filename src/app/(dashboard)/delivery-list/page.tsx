@@ -49,9 +49,11 @@ interface DriverGroup { driverName: string; products: ProductAgg[]; totalQty: nu
 const DAIRY_PICKUP_DRIVERS = ['00 swarg office', '01  kanakpura', '01 kanakpura'];
 
 // ====== Helpers ======
-const getSubscriptionLabel = (type: number) => {
+// Matches Laravel admin: null/unknown subscription_type → "Normal Order / Non Subs"
+const getSubscriptionLabel = (type: number | null | undefined) => {
     const types: Record<number, string> = { 1: 'One Time Order', 2: 'Weekly', 3: 'Daily', 4: 'Alternative Days' };
-    return types[type] || 'Normal Order';
+    if (type == null) return 'Normal Order / Non Subs';
+    return types[type] || 'Normal Order / Non Subs';
 };
 
 const getStatusLabel = (status: number) => {
@@ -68,8 +70,23 @@ const formatTime = (timestamp: string | null) => {
     try { return format(new Date(timestamp), 'hh:mm a'); } catch { return '-'; }
 };
 
+// UI display — clean version without status suffix
 const composeAddress = (item: DeliveryItem) =>
     [item.flat_no, item.apartment_name, item.area, item.city, item.pincode].filter(Boolean).join(', ') || '-';
+
+// CSV export — exact Laravel parity: "Flat No. - <flat>, <apt>, <area>, <city>, <pincode>, <status>"
+// (The trailing status number is a Laravel admin quirk we preserve for 1:1 export parity.)
+const composeAddressForExport = (item: DeliveryItem) => {
+    const parts: (string | number | null)[] = [
+        item.flat_no ? `Flat No. - ${item.flat_no}` : null,
+        item.apartment_name || null,
+        item.area || null,
+        item.city || null,
+        item.pincode || null,
+        item.status,
+    ];
+    return parts.filter((p) => p !== null && p !== undefined && p !== '').join(', ');
+};
 
 // Group items by driver → products (for routewise + dairy pickup)
 function groupByDriver(items: DeliveryItem[], isDairyPickup: boolean): DriverGroup[] {
@@ -238,14 +255,21 @@ export default function DeliveryListPage() {
         },
     });
 
-    // Deduplicate
+    // Deduplicate — if duplicate pre_delivery_id rows arrive, keep the one
+    // that has a driver assigned (delivery_boy_name). Guards against any
+    // historical one-to-many rows from order_user_assign that might slip
+    // past the backend's latest-assignment subquery.
     const uniqueItems = useMemo(() => {
-        const seen = new Set<number>();
-        return rawItems.filter(item => {
-            if (seen.has(item.pre_delivery_id)) return false;
-            seen.add(item.pre_delivery_id);
-            return true;
+        const byId = new Map<number, DeliveryItem>();
+        rawItems.forEach((item) => {
+            const existing = byId.get(item.pre_delivery_id);
+            if (!existing) { byId.set(item.pre_delivery_id, item); return; }
+            // Prefer the row that has driver info
+            if (!existing.delivery_boy_name && item.delivery_boy_name) {
+                byId.set(item.pre_delivery_id, item);
+            }
         });
+        return Array.from(byId.values());
     }, [rawItems]);
 
     // Tab 1: filtered orders
@@ -313,17 +337,38 @@ export default function DeliveryListPage() {
     };
 
     // ====== Exports ======
-    const exportDeliveryCSV = useCallback(() => {
-        const headers = ['Pre ID', 'Order ID', 'Name', 'Phone', 'Product', 'Qty Text', 'Qty', 'Del Qty', 'Driver', 'Status', 'Del Date', 'Del Time', 'Address', 'Pincode', 'Wallet', 'Start Date', 'Sub Type'];
-        const rows = deliveryItems.map(item => [
-            item.pre_delivery_id, item.id, item.name, item.s_phone, item.title || item.product_title,
+    // Laravel-parity headers + address formatting. Used by both the
+    // search-bar export button (via DataTable onExport) and internal callers.
+    const buildDeliveryCsvRows = useCallback((rows: DeliveryItem[]): string[][] => {
+        const headers = [
+            'Edit', 'Edit Qty',
+            'Pre ID', 'Order ID', 'Name', 'Phone',
+            'Title', 'Quantity Text', 'Quantity', 'Delivered Quantity',
+            'Delivery Boy', 'Delivery Status', 'Delivered Date', 'Delivered Time',
+            'Address', 'Pincode', 'Wallet Balance', 'Start Date', 'Subscription Type',
+        ];
+        const body = rows.map(item => [
+            '', '', // Edit / Edit Qty — UI-only buttons in Laravel, exported as empty cells
+            item.pre_delivery_id, item.id, item.name, item.s_phone,
+            item.title || item.product_title,
             item.qty_text, item.qty, item.mark_delivered_qty ?? '',
-            item.delivery_boy_name || '', getStatusLabel(item.status).label,
-            item.delivered_date || '', formatTime(item.mark_delivered_time_stamp),
-            composeAddress(item), item.pincode, item.wallet_amount, item.start_date, getSubscriptionLabel(item.subscription_type)
+            item.delivery_boy_name || '',
+            getStatusLabel(item.status).label,
+            item.delivered_date || '',
+            item.mark_delivered_time_stamp ? formatTime(item.mark_delivered_time_stamp) : '',
+            composeAddressForExport(item),
+            item.pincode,
+            item.wallet_amount,
+            item.start_date,
+            getSubscriptionLabel(item.subscription_type),
         ]);
-        downloadCSV([headers, ...rows.map(r => r.map(String))], `${selectedDate.replace(/-/g, '')}_Delivery-list.csv`);
-    }, [deliveryItems, selectedDate]);
+        return [headers, ...body.map(r => r.map(v => (v === null || v === undefined ? '' : String(v))))];
+    }, []);
+
+    const exportDeliveryCSV = useCallback((rowsToExport?: DeliveryItem[]) => {
+        const source = rowsToExport ?? deliveryItems;
+        downloadCSV(buildDeliveryCsvRows(source), `${selectedDate.replace(/-/g, '')}_Delivery-list.csv`);
+    }, [deliveryItems, selectedDate, buildDeliveryCsvRows]);
 
     const exportDriverGroupCSV = useCallback((groups: DriverGroup[], filename: string, firstCol: string) => {
         const rows: string[][] = [[firstCol, 'Product Title', 'Quantity Text', 'Quantity']];
@@ -452,10 +497,7 @@ export default function DeliveryListPage() {
                         className="flex items-center gap-2 px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl font-medium disabled:opacity-50">
                         <Trash2 className="w-4 h-4" /> Delete List
                     </button>
-                    <button onClick={exportDeliveryCSV} disabled={deliveryItems.length === 0}
-                        className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-slate-300 hover:text-white disabled:opacity-40">
-                        <Download className="w-4 h-4" /> Export CSV
-                    </button>
+                    {/* Export CSV lives next to the search bar inside the DataTable, per user preference */}
                     {selectedIds.size > 0 && (
                         <button
                             onClick={() => handleMarkDelivered(Array.from(selectedIds)).then(() => setSelectedIds(new Set()))}
@@ -538,9 +580,16 @@ export default function DeliveryListPage() {
                     </div>
 
                     {/* Data Table */}
-                    <DataTable data={deliveryItems} columns={columns} loading={isLoading || isSubmitting} pageSize={50}
-                        searchPlaceholder="Search deliveries..." emptyMessage="No deliveries found for this date"
-                        onRowClick={(item) => router.push(`/orders/${item.id}`)} />
+                    <DataTable
+                        data={deliveryItems}
+                        columns={columns}
+                        loading={isLoading || isSubmitting}
+                        pageSize={50}
+                        searchPlaceholder="Search deliveries..."
+                        emptyMessage="No deliveries found for this date"
+                        onRowClick={(item) => router.push(`/orders/${item.id}`)}
+                        onExport={(filteredRows) => exportDeliveryCSV(filteredRows)}
+                    />
                 </>
             )}
 

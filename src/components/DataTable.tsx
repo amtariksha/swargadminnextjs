@@ -31,6 +31,8 @@ interface DataTableProps<T> {
     onRowClick?: (item: T) => void;
     emptyMessage?: string;
     exportable?: boolean;
+    /** Custom export handler. Receives the currently filtered/sorted rows. If omitted, falls back to default CSV export using column headers. */
+    onExport?: (filteredRows: T[]) => void;
     title?: string;
 }
 
@@ -44,6 +46,7 @@ export default function DataTable<T extends object>({
     onRowClick,
     emptyMessage = 'No data found',
     exportable = true,
+    onExport,
     title,
 }: DataTableProps<T>) {
     const [currentPage, setCurrentPage] = useState(1);
@@ -103,6 +106,12 @@ export default function DataTable<T extends object>({
     };
 
     const handleExport = () => {
+        // If parent provided a custom export handler, delegate to it with the
+        // currently filtered/sorted rows (matches what user sees in the table).
+        if (onExport) {
+            onExport(filteredData);
+            return;
+        }
         const headers = columns.map((col) => col.header).join(',');
         const rows = filteredData.map((item) =>
             columns
