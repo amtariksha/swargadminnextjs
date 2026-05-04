@@ -15,6 +15,8 @@ export interface AdminUser {
         id: number;
         role_id: number;
         role_title: string;
+        /** Page permission keys for this role (matches AVAILABLE_PERMISSIONS in /roles). */
+        permissions?: string[];
     }[];
 }
 
@@ -26,23 +28,41 @@ export interface Role {
     created_at?: string;
 }
 
-// Fetch admin users (role 1 = Super Admin, role 2 = Admin, role 3 = SubAdmin)
+/**
+ * Fetch every admin user across every role.
+ *
+ * Previously hardcoded to roles 1/2/3 (Super Admin / Admin / Sub Admin),
+ * which silently hid any user assigned to a custom role like "Driver" or
+ * "Truck Driver" added via /roles. Now resolves the role list dynamically
+ * via /get_roles, fans out a /get_user/role/{id} call per role, and
+ * dedupes by id (a user can carry multiple roles).
+ */
 export function useAdminUsers() {
     return useQuery({
         queryKey: ['admin-users'],
         queryFn: async () => {
-            // Fetch all admin types: Super Admin (1), Admin (2), Sub-Admin (3)
-            const [superAdmins, admins, subAdmins] = await Promise.all([
-                GET<AdminUser[]>('/get_user/role/1'),
-                GET<AdminUser[]>('/get_user/role/2'),
-                GET<AdminUser[]>('/get_user/role/3'),
-            ]);
-            const combined = [
-                ...(superAdmins.data || []),
-                ...(admins.data || []),
-                ...(subAdmins.data || [])
-            ];
-            return combined;
+            const rolesRes = await GET<Role[]>('/get_roles');
+            const roles = rolesRes.data || [];
+            if (roles.length === 0) return [];
+
+            const perRole = await Promise.all(
+                roles.map((r) => GET<AdminUser[]>(`/get_user/role/${r.id}`))
+            );
+
+            // Flatten + dedupe by user_id (or id) — a user with two roles
+            // appears in two responses; we keep the first occurrence and
+            // rely on its `role` array to list all the assignments.
+            const seen = new Set<number>();
+            const out: AdminUser[] = [];
+            for (const res of perRole) {
+                for (const u of res.data || []) {
+                    const key = u.user_id ?? u.id;
+                    if (key == null || seen.has(key)) continue;
+                    seen.add(key);
+                    out.push(u);
+                }
+            }
+            return out;
         },
     });
 }
