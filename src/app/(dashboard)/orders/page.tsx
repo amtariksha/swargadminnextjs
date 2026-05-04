@@ -9,6 +9,7 @@ import DataTable, { Column } from '@/components/DataTable';
 import { Plus, Eye, Download, Image as ImageIcon } from 'lucide-react';
 import { IMAGE_BASE_URL } from '@/config/tenant';
 
+import { formatApiDate } from '@/lib/dateUtils';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type OrderRow = Record<string, any>;
 
@@ -179,8 +180,7 @@ export default function OrdersPage() {
         {
             key: 'updated_at', header: 'Last Update', width: '160px',
             render: (o) => {
-                try { return <span className="text-sm text-slate-400">{format(new Date(o.updated_at), 'dd-MM-yyyy HH:mm:ss')}</span>; }
-                catch { return <span>-</span>; }
+                return <span className="text-sm text-slate-400">{formatApiDate(o.updated_at, 'dd-MM-yyyy HH:mm:ss')}</span>;
             },
         },
     ];

@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { format, subDays } from 'date-fns';
+import { apiDateMs, formatApiDate } from '@/lib/dateUtils';
 import { useTransactionsByDateRange, useUsers, useAddTransaction, type UserTransaction, type User } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
@@ -25,7 +26,7 @@ export default function TransactionsPage() {
     const addTxnMutation = useAddTransaction();
 
     const sortedTxns = useMemo(() =>
-        [...transactions].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+        [...transactions].sort((a, b) => apiDateMs(b.created_at) - apiDateMs(a.created_at)),
         [transactions]
     );
 
@@ -124,8 +125,7 @@ export default function TransactionsPage() {
             key: 'updated_at', header: 'Date', width: '160px',
             render: (t) => {
                 const d = t.updated_at || t.created_at;
-                try { return <span className="text-slate-400 text-sm">{format(new Date(d), 'dd-MM-yyyy HH:mm:ss')}</span>; }
-                catch { return <span>-</span>; }
+                return <span className="text-slate-400 text-sm">{formatApiDate(d, 'dd-MM-yyyy HH:mm:ss')}</span>;
             },
         },
     ];

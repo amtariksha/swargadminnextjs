@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { formatApiDate, apiDateMs } from '@/lib/dateUtils';
 const ORDER_TYPE_LABELS: Record<number, string> = { 1: 'Prepaid', 2: 'Postpaid', 3: 'Pay Now', 4: 'Pay Later' };
 const SUB_TYPE_LABELS: Record<number, string> = { 1: 'One Time', 2: 'Weekly', 3: 'Daily', 4: 'Alternative' };
 const TXN_DESCRIPTIONS = ['Cash Deposit', 'Recharge', 'Bank Transfer', 'Cheque Payment Via Payment Gateway', 'Refund', 'Referral Bonus'];
@@ -86,7 +87,7 @@ export default function UserDetailPage() {
         if (logFilters.deliveries) deliveryHistory.forEach((d: any) => items.push({ ...d, log_type: 'Delivery', sort_date: d.date || d.created_at }));
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         if (logFilters.calendar) calendarData.forEach((c: any) => items.push({ ...c, log_type: 'Calendar', sort_date: c.start_date || c.created_at }));
-        return items.sort((a, b) => new Date(b.sort_date || 0).getTime() - new Date(a.sort_date || 0).getTime());
+        return items.sort((a, b) => apiDateMs(b.sort_date || 0) - apiDateMs(a.sort_date || 0));
     }, [orders, transactions, holidays, deliveryHistory, calendarData, logFilters]);
 
     // ====== Handlers ======
@@ -186,8 +187,7 @@ export default function UserDetailPage() {
         {
             key: 'sort_date', header: 'Date', width: '150px',
             render: (item) => {
-                try { return <span className="text-sm">{format(new Date(item.sort_date), 'dd MMM yyyy HH:mm')}</span>; }
-                catch { return <span>-</span>; }
+                return <span className="text-sm">{formatApiDate(item.sort_date, 'dd MMM yyyy HH:mm')}</span>;
             },
         },
         { key: 'id', header: 'ID', width: '70px' },
@@ -226,7 +226,7 @@ export default function UserDetailPage() {
                 {o.order_status === 1 ? 'Active' : o.order_status === 2 ? 'Stopped' : 'Pending'}
             </span>,
         },
-        { key: 'created_at', header: 'Date', render: (o) => { try { return format(new Date(o.created_at), 'dd MMM yyyy'); } catch { return '-'; } } },
+        { key: 'created_at', header: 'Date', render: (o) => { return formatApiDate(o.created_at, 'dd MMM yyyy'); } },
     ];
 
     const txnColumns: Column<UserTransaction>[] = [
@@ -250,13 +250,13 @@ export default function UserDetailPage() {
             key: 'type', header: 'Type', width: '90px',
             render: (t) => <span className={`px-2 py-1 rounded-lg text-xs font-medium ${t.type === 1 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>{t.type === 1 ? 'Credit' : 'Debit'}</span>,
         },
-        { key: 'updated_at', header: 'Date', render: (t) => { try { return format(new Date(t.updated_at || t.created_at), 'dd-MM-yyyy HH:mm:ss'); } catch { return '-'; } } },
+        { key: 'updated_at', header: 'Date', render: (t) => { return formatApiDate(t.updated_at || t.created_at, 'dd-MM-yyyy HH:mm:ss'); } },
     ];
 
     const holidayColumns: Column<UserHoliday>[] = [
         { key: 'id', header: 'ID', width: '70px' },
-        { key: 'date', header: 'Date', render: (h) => { try { return format(new Date(h.date), 'dd MMM yyyy'); } catch { return '-'; } } },
-        { key: 'created_at', header: 'Added On', render: (h) => { try { return h.created_at ? format(new Date(h.created_at), 'dd MMM yyyy') : '-'; } catch { return '-'; } } },
+        { key: 'date', header: 'Date', render: (h) => { return formatApiDate(h.date, 'dd MMM yyyy'); } },
+        { key: 'created_at', header: 'Added On', render: (h) => { try { return h.created_at ? formatApiDate(h.created_at, 'dd MMM yyyy') : '-'; } catch { return '-'; } } },
         {
             key: 'id', header: 'Action', render: (h) => (
                 <button onClick={(e) => { e.stopPropagation(); setDeleteHoliday(h); }} className="p-1.5 hover:bg-red-500/20 rounded-lg">
@@ -362,8 +362,8 @@ export default function UserDetailPage() {
                 { key: 'name', header: 'Name', render: (d: Record<string, unknown>) => String(d.name || '-') },
                 { key: 'phone', header: 'Phone Number', width: '130px', render: (d: Record<string, unknown>) => String(d.phone || '-') },
                 { key: 'email', header: 'Email', width: '180px', render: (d: Record<string, unknown>) => String(d.email || '-') },
-                { key: 'date', header: 'Delivery Date', width: '130px', render: (d: Record<string, unknown>) => { try { return format(new Date(d.date as string), 'yyyy-MM-dd'); } catch { return '-'; } } },
-                { key: 'created_at', header: 'Time Stamps', width: '180px', render: (d: Record<string, unknown>) => { try { return format(new Date(d.created_at as string), 'yyyy-MM-dd HH:mm:ss'); } catch { return '-'; } } },
+                { key: 'date', header: 'Delivery Date', width: '130px', render: (d: Record<string, unknown>) => { return formatApiDate(d.date as string, 'yyyy-MM-dd'); } },
+                { key: 'created_at', header: 'Time Stamps', width: '180px', render: (d: Record<string, unknown>) => { return formatApiDate(d.created_at as string, 'yyyy-MM-dd HH:mm:ss'); } },
                 {
                     key: 'payment_mode', header: 'Payment Mode', width: '120px',
                     render: (d: Record<string, unknown>) => {
@@ -429,7 +429,7 @@ export default function UserDetailPage() {
                         <div className="flex items-center gap-3 md:col-span-2">
                             <Calendar className="w-4 h-4 text-slate-500" />
                             <span className="text-slate-400 text-sm">
-                                {user.updated_at ? new Date(user.updated_at).toLocaleDateString('en-IN') : '-'}
+                                {user.updated_at ? formatApiDate(user.updated_at, 'dd MMM yyyy') : '-'}
                             </span>
                         </div>
                     </div>
@@ -513,7 +513,7 @@ export default function UserDetailPage() {
             </Modal>
 
             {/* Delete Confirms */}
-            <ConfirmDialog isOpen={!!deleteHoliday} title="Delete Holiday" message={`Remove holiday on ${deleteHoliday ? format(new Date(deleteHoliday.date), 'dd MMM yyyy') : ''}?`} onConfirm={handleDeleteHoliday} onCancel={() => setDeleteHoliday(null)} variant="danger" confirmText="Delete" isLoading={deleteHolidayMutation.isPending} />
+            <ConfirmDialog isOpen={!!deleteHoliday} title="Delete Holiday" message={`Remove holiday on ${deleteHoliday ? formatApiDate(deleteHoliday.date, 'dd MMM yyyy') : ''}?`} onConfirm={handleDeleteHoliday} onCancel={() => setDeleteHoliday(null)} variant="danger" confirmText="Delete" isLoading={deleteHolidayMutation.isPending} />
             <ConfirmDialog isOpen={!!deleteAddr} title="Delete Address" message={`Delete address "${deleteAddr?.apartment_name || deleteAddr?.flat_no || ''}"?`} onConfirm={handleDeleteAddress} onCancel={() => setDeleteAddr(null)} variant="danger" confirmText="Delete" isLoading={deleteAddressMutation.isPending} />
         </div>
     );

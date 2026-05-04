@@ -8,6 +8,7 @@ import DataTable, { Column } from '@/components/DataTable';
 import { format, subDays } from 'date-fns';
 import { Calendar, BarChart3, RefreshCw, User, TrendingUp, Search, ChevronDown, X } from 'lucide-react';
 
+import { formatApiDate, apiDateMs } from '@/lib/dateUtils';
 interface DeliveryReportItem {
     id: number;
     order_id: number;
@@ -50,11 +51,7 @@ const getOrderTypeLabel = (type: number) => {
 
 const formatDeliveryTime = (timestamp: string | null) => {
     if (!timestamp) return '-';
-    try {
-        return format(new Date(timestamp), 'dd-MM-yyyy, hh:mm a');
-    } catch {
-        return '-';
-    }
+    return formatApiDate(timestamp, 'dd-MM-yyyy, hh:mm a');
 };
 
 export default function DeliveryReportPage() {
@@ -157,7 +154,7 @@ export default function DeliveryReportPage() {
         });
 
         return Object.entries(grouped)
-            .sort(([a], [b]) => new Date(a).getTime() - new Date(b).getTime())
+            .sort(([a], [b]) => apiDateMs(a) - apiDateMs(b))
             .map(([date, values]) => ({ date, ...values }));
     }, [reportItems]);
 
@@ -420,7 +417,7 @@ export default function DeliveryReportPage() {
                                         style={{ height: `${height}%` }}
                                     />
                                     <span className="text-xs text-slate-500 mt-1 rotate-45 origin-left whitespace-nowrap">
-                                        {format(new Date(d.date), 'dd/MM')}
+                                        {formatApiDate(d.date, 'dd/MM')}
                                     </span>
                                 </div>
                             );

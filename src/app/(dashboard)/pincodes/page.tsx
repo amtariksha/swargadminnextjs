@@ -8,6 +8,7 @@ import { POST } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
+import { formatApiDate } from '@/lib/dateUtils';
 export default function PincodesPage() {
     const { data: pincodes = [], isLoading } = usePincodes();
     const queryClient = useQueryClient();
@@ -57,7 +58,7 @@ export default function PincodesPage() {
             header: 'Created',
             render: (item) => (
                 <span className="text-slate-400 text-sm">
-                    {item.created_at ? new Date(item.created_at).toLocaleDateString() : '-'}
+                    {item.created_at ? formatApiDate(item.created_at, 'dd MMM yyyy') : '-'}
                 </span>
             ),
         },

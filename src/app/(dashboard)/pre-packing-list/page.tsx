@@ -6,6 +6,7 @@ import { useUpcomingSubOrders, useUpcomingOrders, UpcomingSubOrder } from '@/hoo
 import DataTable, { Column } from '@/components/DataTable';
 import { CalendarDays, Package, Download, RotateCcw } from 'lucide-react';
 
+import { parseApiDate } from '@/lib/dateUtils';
 interface ProductRow {
     title: string;
     qty_text: string;
@@ -53,7 +54,8 @@ function filterSubscriptionOrders(data: UpcomingSubOrder[], date: string): Upcom
 
     // Filter 2: date checks, subscription patterns
     const filter2 = filter1.filter((el) => {
-        const startDate = new Date(el.start_date);
+        const startDate = parseApiDate(el.start_date);
+        if (!startDate) return false;
         const targetDate = new Date(date);
         startDate.setHours(0, 0, 0, 0);
         targetDate.setHours(0, 0, 0, 0);

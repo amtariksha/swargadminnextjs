@@ -7,6 +7,7 @@ import DataTable, { Column } from '@/components/DataTable';
 import { Settings as SettingsIcon, Edit, ToggleLeft, ToggleRight } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { formatApiDate } from '@/lib/dateUtils';
 interface Setting {
     setting_id: number;
     id?: number;
@@ -92,7 +93,7 @@ export default function SettingsPage() {
             header: 'Updated',
             render: (item) => (
                 <span className="text-slate-400 text-sm">
-                    {item.updated_at ? new Date(item.updated_at).toLocaleString() : 'N/A'}
+                    {item.updated_at ? formatApiDate(item.updated_at, 'dd MMM yyyy HH:mm:ss', 'N/A') : 'N/A'}
                 </span>
             ),
         },

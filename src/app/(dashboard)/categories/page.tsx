@@ -11,6 +11,7 @@ import { POST } from '@/lib/api';
 import { IMAGE_BASE_URL } from '@/config/tenant';
 import { toast } from 'sonner';
 
+import { formatApiDate } from '@/lib/dateUtils';
 // Extended type with fields from backend formatCategoryData
 interface CategoryWithImage extends Category {
     preferences?: number;
@@ -177,8 +178,7 @@ export default function CategoriesPage() {
         {
             key: 'updated_at', header: 'Last Update', width: '180px',
             render: (item) => {
-                try { return <span className="text-sm text-slate-400">{format(new Date(item.updated_at!), 'dd-MM-yyyy HH:mm:ss')}</span>; }
-                catch { return <span className="text-slate-600">-</span>; }
+                return <span className="text-sm text-slate-400">{formatApiDate(item.updated_at!, 'dd-MM-yyyy HH:mm:ss')}</span>;
             },
         },
     ];

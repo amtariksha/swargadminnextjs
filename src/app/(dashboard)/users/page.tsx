@@ -5,6 +5,7 @@ import { useUsers, User } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import { Plus, UserPlus, Users as UsersIcon } from 'lucide-react';
 
+import { parseApiDate } from '@/lib/dateUtils';
 export default function UsersPage() {
     const router = useRouter();
     const { data: users = [], isLoading } = useUsers();
@@ -16,8 +17,8 @@ export default function UsersPage() {
     });
 
     const newUsersLast7Days = filteredUsers.filter(u => {
-        if (!u.created_at) return false;
-        const d = new Date(u.created_at);
+        const d = parseApiDate(u.created_at);
+        if (!d) return false;
         return d.getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000;
     }).length;
 
@@ -107,8 +108,8 @@ export default function UsersPage() {
             header: 'Last Update',
             width: '200px',
             render: (item) => {
-                if (!item.updated_at) return <span className="text-slate-500">-</span>;
-                const d = new Date(item.updated_at);
+                const d = parseApiDate(item.updated_at);
+                if (!d) return <span className="text-slate-500">-</span>;
                 const dd = String(d.getDate()).padStart(2, '0');
                 const mm = String(d.getMonth() + 1).padStart(2, '0');
                 const yyyy = d.getFullYear();

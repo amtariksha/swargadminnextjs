@@ -18,6 +18,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { ArrowLeft, Save, Truck, X, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { formatApiDate } from '@/lib/dateUtils';
 const ORDER_TYPE_LABELS: Record<number, string> = { 1: 'Prepaid', 2: 'Postpaid', 3: 'Pay Now', 4: 'Pay Later' };
 const SUB_TYPE_LABELS: Record<number, string> = { 1: 'One Time', 2: 'Weekly', 3: 'Daily', 4: 'Alternative Days' };
 const DAY_LABELS = ['M', 'T', 'W', 'TH', 'F', 'S', 'SU'];
@@ -123,14 +124,14 @@ export default function OrderDetailPage() {
         },
         { key: 'payment_mode', header: 'Mode', render: (t) => <span className="text-sm">{t.payment_mode === 1 ? 'Online' : t.payment_mode === 2 ? 'Cash' : 'N/A'}</span> },
         { key: 'amount', header: 'Amount', render: (t) => <span className={t.type === 1 ? 'text-green-400' : 'text-red-400'}>₹{t.amount}</span> },
-        { key: 'created_at', header: 'Date', render: (t) => { try { return format(new Date(t.created_at), 'dd MMM yy HH:mm'); } catch { return '-'; } } },
+        { key: 'created_at', header: 'Date', render: (t) => { return formatApiDate(t.created_at, 'dd MMM yy HH:mm'); } },
     ];
 
     const deliveryColumns: Column<SubOrderDelivery>[] = [
         { key: 'id', header: 'ID', width: '70px' },
-        { key: 'date', header: 'Date', render: (d) => { try { return format(new Date(d.date), 'dd MMM yyyy'); } catch { return '-'; } } },
+        { key: 'date', header: 'Date', render: (d) => { return formatApiDate(d.date, 'dd MMM yyyy'); } },
         { key: 'qty', header: 'Qty', render: (d) => String(d.qty || '-') },
-        { key: 'created_at', header: 'Recorded', render: (d) => { try { return format(new Date(d.created_at), 'dd MMM yy HH:mm'); } catch { return '-'; } } },
+        { key: 'created_at', header: 'Recorded', render: (d) => { return formatApiDate(d.created_at, 'dd MMM yy HH:mm'); } },
     ];
 
     if (isLoading) return <div className="space-y-6"><div className="h-8 w-32 bg-slate-800/50 rounded animate-pulse" /><div className="h-96 bg-slate-800/50 rounded-xl animate-pulse" /></div>;

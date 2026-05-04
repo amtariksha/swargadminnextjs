@@ -8,6 +8,7 @@ import { POST } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
+import { formatApiDate } from '@/lib/dateUtils';
 export default function HolidaysPage() {
     const { data: holidays = [], isLoading } = useHolidays();
     const { data: users = [] } = useUsers();
@@ -78,7 +79,7 @@ export default function HolidaysPage() {
             header: 'Created',
             render: (item) => (
                 <span className="text-slate-400 text-sm">
-                    {item.created_at ? new Date(item.created_at).toLocaleDateString() : '-'}
+                    {item.created_at ? formatApiDate(item.created_at, 'dd MMM yyyy') : '-'}
                 </span>
             ),
         },

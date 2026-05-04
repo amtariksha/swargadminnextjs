@@ -8,6 +8,7 @@ import { POST } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
+import { parseApiDate } from '@/lib/dateUtils';
 export default function DriversPage() {
     const queryClient = useQueryClient();
     const { data: drivers = [], isLoading } = useDrivers();
@@ -121,8 +122,8 @@ export default function DriversPage() {
             header: 'Last Update',
             width: '200px',
             render: (item) => {
-                if (!item.updated_at) return <span className="text-slate-500">-</span>;
-                const d = new Date(item.updated_at);
+                const d = parseApiDate(item.updated_at);
+                if (!d) return <span className="text-slate-500">-</span>;
                 const dd = String(d.getDate()).padStart(2, '0');
                 const mm = String(d.getMonth() + 1).padStart(2, '0');
                 const yyyy = d.getFullYear();

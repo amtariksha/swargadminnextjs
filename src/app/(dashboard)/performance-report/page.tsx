@@ -7,6 +7,7 @@ import { useDrivers } from '@/hooks/useData';
 import { format, subDays, eachDayOfInterval, parse } from 'date-fns';
 import { Calendar, Settings, RefreshCw, Clock, Package, Users, TrendingUp, Search, X } from 'lucide-react';
 
+import { formatApiDate } from '@/lib/dateUtils';
 interface DeliveryData {
     name: string;
     mark_delivered_time_stamp: string;
@@ -441,7 +442,7 @@ export default function PerformanceReportPage() {
                                 </th>
                                 {dateColumns.map(d => (
                                     <th key={d} className="text-center px-3 py-3 text-slate-400 font-medium whitespace-nowrap min-w-[100px]">
-                                        {format(new Date(d), 'dd/MM')}
+                                        {formatApiDate(d, 'dd/MM')}
                                     </th>
                                 ))}
                             </tr>

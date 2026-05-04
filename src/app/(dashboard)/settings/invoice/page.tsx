@@ -7,6 +7,7 @@ import DataTable, { Column } from '@/components/DataTable';
 import { FileText, Edit } from 'lucide-react';
 import { toast } from 'sonner';
 
+import { formatApiDate } from '@/lib/dateUtils';
 interface InvoiceSetting {
     id: number;
     title: string;
@@ -86,7 +87,7 @@ export default function InvoiceSettingsPage() {
             header: 'Updated',
             render: (item) => (
                 <span className="text-slate-400 text-sm">
-                    {item.updated_at ? new Date(item.updated_at).toLocaleString() : 'N/A'}
+                    {item.updated_at ? formatApiDate(item.updated_at, 'dd MMM yyyy HH:mm:ss', 'N/A') : 'N/A'}
                 </span>
             ),
         },
