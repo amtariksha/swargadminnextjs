@@ -54,11 +54,21 @@ export interface DriverGroup {
 
 /**
  * Driver name prefixes that count as dairy-pickup (NOT route-delivery).
+ *
  * The match is `driverName.toLowerCase().startsWith(prefix)` so prefixes
- * tolerate trailing route names. Order matters — the first match wins.
+ * tolerate trailing route names — i.e. '00 swarg office' on its own
+ * already catches '00 Swarg office Nisarga Bheema', '00 Swarg office
+ * Kanakpura', etc. The longer entries below are belt-and-suspenders
+ * against a future edit that might tighten the matcher to exact-match.
+ *
+ * To add a new dairy-pickup driver: add their name (lowercased) here OR
+ * just trust that the first numeric prefix is enough if it's "00 ..." or
+ * "01 ...". Order doesn't matter for correctness — Array.some short-
+ * circuits on the first hit.
  */
 export const DAIRY_PICKUP_DRIVERS = [
     '00 swarg office',
+    '00 swarg office nisarga bheema',
     '01  kanakpura',
     '01 kanakpura',
 ];
