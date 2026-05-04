@@ -105,6 +105,18 @@ export function useUpdateAdminUser() {
     });
 }
 
+// Reset admin user password — uses /reset_user_password.
+// Backend hashes with bcrypt (12 rounds) and updates `users.password`.
+// Mutation does NOT invalidate the admin-users list (no row data changes).
+export function useResetAdminPassword() {
+    return useMutation({
+        mutationFn: async (data: { id: number; password: string }) => {
+            const response = await POST('/reset_user_password', data);
+            return response;
+        },
+    });
+}
+
 // Delete admin user mutation — uses /delete_user
 export function useDeleteAdminUser() {
     const queryClient = useQueryClient();

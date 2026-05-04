@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useAdminUsers, useRoles, useCreateAdminUser, useUpdateAdminUser, useDeleteAdminUser, AdminUser } from '@/hooks/useAdminUsers';
+import { useAdminUsers, useRoles, useCreateAdminUser, useUpdateAdminUser, useDeleteAdminUser, useResetAdminPassword, AdminUser } from '@/hooks/useAdminUsers';
 import DataTable, { Column } from '@/components/DataTable';
-import { Plus, UserCog, Shield, Trash2, X, Loader2 } from 'lucide-react';
+import { Plus, UserCog, Shield, Trash2, X, Loader2, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminUsersPage() {
@@ -12,11 +12,15 @@ export default function AdminUsersPage() {
     const createMutation = useCreateAdminUser();
     const updateMutation = useUpdateAdminUser();
     const deleteMutation = useDeleteAdminUser();
+    const resetPasswordMutation = useResetAdminPassword();
 
     const [showModal, setShowModal] = useState(false);
     const [isAddMode, setIsAddMode] = useState(true);
     const [saving, setSaving] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false);
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
 
     // Form state
     const [editId, setEditId] = useState<number | null>(null);
@@ -96,6 +100,41 @@ export default function AdminUsersPage() {
             setShowModal(false);
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to delete');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const openResetPasswordDialog = () => {
+        setNewPassword('');
+        setConfirmPassword('');
+        setResetPasswordDialogOpen(true);
+    };
+
+    const handleResetPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editId) return;
+        if (newPassword.length < 6) {
+            toast.error('Password must be at least 6 characters');
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            toast.error('Passwords do not match');
+            return;
+        }
+        setSaving(true);
+        try {
+            const result = await resetPasswordMutation.mutateAsync({ id: editId, password: newPassword });
+            if (result.response === 200) {
+                toast.success(`Password reset for ${formName}`);
+                setResetPasswordDialogOpen(false);
+                setNewPassword('');
+                setConfirmPassword('');
+            } else {
+                toast.error((result as { message?: string }).message || 'Failed to reset password');
+            }
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to reset password');
         } finally {
             setSaving(false);
         }
@@ -333,6 +372,80 @@ export default function AdminUsersPage() {
                                         <Trash2 className="w-4 h-4" /> Delete
                                     </button>
                                 )}
+                            </div>
+                            {!isAddMode && (
+                                <button
+                                    type="button"
+                                    onClick={openResetPasswordDialog}
+                                    disabled={saving}
+                                    className="w-full py-2.5 bg-slate-800 border border-slate-700 hover:border-amber-500/50 hover:bg-amber-500/10 text-amber-400 rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    <KeyRound className="w-4 h-4" /> Reset Password
+                                </button>
+                            )}
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Reset Password Dialog */}
+            {resetPasswordDialogOpen && (
+                <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4" onClick={() => setResetPasswordDialogOpen(false)}>
+                    <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                                <KeyRound className="w-5 h-5 text-amber-400" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-semibold text-white">Reset Password</h3>
+                                <p className="text-xs text-slate-400">{formName} ({formEmail})</p>
+                            </div>
+                        </div>
+                        <form onSubmit={handleResetPassword} className="space-y-3">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">New password</label>
+                                <input
+                                    type="password"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    required
+                                    minLength={6}
+                                    autoComplete="new-password"
+                                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Confirm password</label>
+                                <input
+                                    type="password"
+                                    value={confirmPassword}
+                                    onChange={(e) => setConfirmPassword(e.target.value)}
+                                    required
+                                    minLength={6}
+                                    autoComplete="new-password"
+                                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                />
+                            </div>
+                            <p className="text-xs text-slate-500">
+                                The user will need to log in again with this new password. They will not be notified automatically.
+                            </p>
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setResetPasswordDialogOpen(false)}
+                                    disabled={saving}
+                                    className="flex-1 px-4 py-2 border border-slate-600 text-slate-300 rounded-lg hover:bg-slate-800 disabled:opacity-50"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={saving || newPassword.length < 6 || newPassword !== confirmPassword}
+                                    className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                                    Reset
+                                </button>
                             </div>
                         </form>
                     </div>
