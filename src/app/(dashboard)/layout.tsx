@@ -11,7 +11,7 @@ export default function DashboardLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const { isLoading, isAuthenticated } = useAuth();
+    const { isLoading, isAuthenticated, isProductionDeliveryOnly } = useAuth();
     const router = useRouter();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -29,10 +29,17 @@ export default function DashboardLayout({
     };
 
     useEffect(() => {
-        if (!isLoading && !isAuthenticated) {
+        if (isLoading) return;
+        if (!isAuthenticated) {
             router.push('/login');
+            return;
         }
-    }, [isLoading, isAuthenticated, router]);
+        // Driver-only users have no business in /(dashboard); send them to
+        // their dedicated page if they navigate here directly via URL.
+        if (isProductionDeliveryOnly) {
+            router.push('/production-delivery');
+        }
+    }, [isLoading, isAuthenticated, isProductionDeliveryOnly, router]);
 
     if (isLoading) {
         return (

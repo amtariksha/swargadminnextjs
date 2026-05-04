@@ -25,6 +25,10 @@ const AVAILABLE_PERMISSIONS = [
     { key: 'notifications', label: 'Notifications', icon: '🔔' },
     { key: 'admin-users', label: 'Admin Users', icon: '👤' },
     { key: 'roles', label: 'Roles', icon: '🔐' },
+    // Driver-facing page: granting only this permission lets the user
+    // log in and reach `/production-delivery` (Routewise / Packing /
+    // Dairy Pickup tabs) — and nothing else.
+    { key: 'production-delivery', label: 'Production Delivery', icon: '🚛' },
 ];
 
 export default function RolesPage() {

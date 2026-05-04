@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { BRANDING } from '@/config/tenant';
+import { useAuth } from '@/lib/auth';
 import {
     LayoutDashboard,
     CalendarDays,
@@ -113,9 +114,68 @@ interface SidebarProps {
     collapsed?: boolean;
 }
 
+/**
+ * Derive a permission key from a NavItem's href.
+ *   /delivery-list                -> 'delivery-list'
+ *   /settings/webapp              -> 'settings'  (settings group lives under one perm)
+ *   /admin-users                  -> 'admin-users'
+ *   ''  / undefined               -> undefined   (group items with no direct href)
+ *
+ * The keys we return MUST match entries in AVAILABLE_PERMISSIONS in
+ * roles/page.tsx — otherwise an admin who restricts a role's permissions
+ * to anything other than "full access" can lose nav entries unexpectedly.
+ * For nav items whose first path segment isn't in AVAILABLE_PERMISSIONS we
+ * return undefined and the filter keeps them visible (safe default).
+ */
+const KNOWN_PERMISSION_KEYS = new Set([
+    'dashboard', 'users', 'drivers', 'orders', 'products', 'categories',
+    'subcategories', 'delivery-list', 'delivery-report', 'transactions',
+    'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
+    'admin-users', 'roles', 'production-delivery',
+]);
+
+const navItemPermission = (item: NavItem): string | undefined => {
+    if (!item.href) return undefined;
+    const seg = item.href.split('/')[1];
+    if (seg && KNOWN_PERMISSION_KEYS.has(seg)) return seg;
+    return undefined;
+};
+
+const filterNav = (
+    items: NavItem[],
+    hasPermission: (key: string) => boolean,
+): NavItem[] => {
+    const result: NavItem[] = [];
+    for (const item of items) {
+        if (item.children) {
+            const filteredChildren = filterNav(item.children, hasPermission);
+            if (filteredChildren.length === 0) continue;
+            result.push({ ...item, children: filteredChildren });
+            continue;
+        }
+        const key = navItemPermission(item);
+        if (!key) {
+            // No permission key derivable — leave visible (safe default).
+            result.push(item);
+            continue;
+        }
+        if (hasPermission(key)) result.push(item);
+    }
+    return result;
+};
+
 export default function Sidebar({ isOpen, onToggle, collapsed = false }: SidebarProps) {
     const pathname = usePathname();
+    const { hasPermission } = useAuth();
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
+
+    // Filter the nav by the active user's role permissions. Full-access users
+    // see everything (hasPermission returns true for every key); specific-perm
+    // users see only the entries their role grants.
+    const visibleNavItems = useMemo(
+        () => filterNav(navItems, hasPermission),
+        [hasPermission]
+    );
 
     const toggleExpand = (name: string) => {
         setExpandedItems(prev =>
@@ -130,7 +190,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
         // For /pages, also match /pages/about, /pages/privacy, etc.
         // For /settings, do NOT match /settings/webapp (sibling routes)
         // Only allow prefix matching when there are no sibling routes sharing the prefix
-        const allChildHrefs = navItems.flatMap(i => i.children?.map(c => c.href) || []);
+        const allChildHrefs = visibleNavItems.flatMap(i => i.children?.map(c => c.href) || []);
         const hasSibling = allChildHrefs.some(h => h !== href && h?.startsWith(href + '/'));
         if (hasSibling) return false;
         return pathname.startsWith(href + '/');
@@ -138,12 +198,12 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
 
     // Auto-expand the group containing the active page
     useEffect(() => {
-        navItems.forEach(item => {
+        visibleNavItems.forEach(item => {
             if (item.children?.some(c => c.href && isActive(c.href!))) {
                 setExpandedItems(prev => prev.includes(item.name) ? prev : [...prev, item.name]);
             }
         });
-    }, [pathname]);
+    }, [pathname, visibleNavItems]);
 
     return (
         <>
@@ -197,7 +257,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                 {/* Navigation */}
                 <nav className={`flex-1 overflow-y-auto py-4 ${collapsed ? 'px-2' : 'px-3'}`}>
                     <ul className="space-y-1">
-                        {navItems.map((item, index) => (
+                        {visibleNavItems.map((item, index) => (
                             <li key={item.name}>
                                 {item.children ? (
                                     collapsed ? (
