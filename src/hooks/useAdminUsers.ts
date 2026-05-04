@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { GET, POST, DELETE } from '@/lib/api';
+import { userIsAdminPanelEligible } from '@/lib/roles';
 
 // Admin User interface
 export interface AdminUser {
@@ -62,7 +63,11 @@ export function useAdminUsers() {
                     out.push(u);
                 }
             }
-            return out;
+            // Drop users whose only roles are delivery-only (e.g. "DRIVER").
+            // They authenticate through the Flutter delivery app, not the
+            // admin panel, and showing them here would imply they're
+            // manageable as admin staff — see src/lib/roles.ts for the rule.
+            return out.filter(userIsAdminPanelEligible);
         },
     });
 }

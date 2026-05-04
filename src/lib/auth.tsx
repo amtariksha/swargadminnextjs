@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { POST } from '@/lib/api';
+import { userIsAdminPanelEligible } from '@/lib/roles';
 
 /**
  * Permission key reserved for the driver-facing /production-delivery page.
@@ -109,10 +110,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             { data: AdminUser; message?: string; response?: number; token?: string };
 
         if (response.response === 200 && response.data) {
+            // Reject before touching localStorage/state — delivery-only users
+            // (e.g. role title 'DRIVER') auth via the Flutter delivery app, not
+            // the admin panel. Their /login call still succeeds at the backend
+            // (same users table, same JWT), so we have to filter them on the
+            // admin-side here.
+            if (!userIsAdminPanelEligible(response.data)) {
+                throw new Error(
+                    'This account is not allowed to access the admin panel. Please use the delivery app.'
+                );
+            }
             const adminData = { ...response.data, token: response.token || '' };
             localStorage.setItem('admin', JSON.stringify(adminData));
             setAdmin(adminData);
-            // Driver-only users land on /production-delivery; everyone else on /.
+            // Production-delivery-only users land on /production-delivery;
+            // every other admin lands on /.
             const { permissions, hasFullAccess } = computePermissions(adminData);
             const driverOnly =
                 !hasFullAccess &&
