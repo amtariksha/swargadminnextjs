@@ -90,6 +90,14 @@ export default function ProductionDeliveryPage() {
     );
     const truckTotalQty = truckSummary.reduce((s, p) => s + p.qty, 0);
 
+    // Pickup summary: same idea as truck-load, but for dairy-pickup drivers.
+    // Total of every product to be collected on the dairy pickup runs.
+    const pickupSummary = useMemo(
+        () => aggregateAcrossGroups(dairyGroups),
+        [dairyGroups]
+    );
+    const pickupTotalQty = pickupSummary.reduce((s, p) => s + p.qty, 0);
+
     const handleExportRoutewise = useCallback(() => {
         const url = driverGroupsToCsvUrl(routewiseGroups, routewiseDate);
         const a = document.createElement('a');
@@ -293,11 +301,48 @@ export default function ProductionDeliveryPage() {
                             <p className="text-slate-400">Loading…</p>
                         </div>
                     ) : (
-                        <DriverGroupTable
-                            groups={dairyGroups}
-                            emptyMsg="No dairy pickup routes for this date."
-                            onExport={handleExportDairy}
-                        />
+                        <>
+                            {/* Pickup summary: total of every product to collect on
+                                the dairy-pickup runs for the selected date. Mirrors
+                                the truck-load summary on the Delivery Truck tab. */}
+                            {pickupSummary.length > 0 && (
+                                <div className="glass rounded-xl overflow-hidden">
+                                    <div className="px-4 py-3 bg-slate-800/50 flex items-center justify-between">
+                                        <h3 className="font-semibold text-white">Pickup Summary</h3>
+                                        <span className="text-sm text-purple-400 font-medium">
+                                            {pickupSummary.length} products · {pickupTotalQty} qty
+                                        </span>
+                                    </div>
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="border-b border-slate-800/50">
+                                                <th className="text-left px-4 py-2 text-xs text-slate-400 font-medium">Product</th>
+                                                <th className="text-left px-4 py-2 text-xs text-slate-400 font-medium w-24">Qty Text</th>
+                                                <th className="text-right px-4 py-2 text-xs text-slate-400 font-medium w-20">Qty</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {pickupSummary.map((p) => (
+                                                <tr key={p.title} className="border-b border-slate-800/30 hover:bg-slate-800/20">
+                                                    <td className="px-4 py-2.5 text-sm text-white">{p.title}</td>
+                                                    <td className="px-4 py-2.5 text-sm text-slate-400">{p.qty_text}</td>
+                                                    <td className="px-4 py-2.5 text-right">
+                                                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-sm font-bold">
+                                                            {p.qty}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                            <DriverGroupTable
+                                groups={dairyGroups}
+                                emptyMsg="No dairy pickup routes for this date."
+                                onExport={handleExportDairy}
+                            />
+                        </>
                     )}
                 </div>
             )}
