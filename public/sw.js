@@ -7,9 +7,14 @@
 
 const CACHE_NAME = 'swarg-admin-v1';
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
     // Activate immediately on first install — no waiting on existing tabs.
     self.skipWaiting();
+});
+
+// Allow the page-side registrar to force a waiting SW to take over.
+self.addEventListener('message', (event) => {
+    if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
