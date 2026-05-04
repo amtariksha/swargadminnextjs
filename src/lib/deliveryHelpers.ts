@@ -165,6 +165,27 @@ export function groupByDriver(items: DeliveryItem[], dairyPickup: boolean): Driv
         });
 }
 
+/**
+ * Sum products across an arbitrary set of driver groups. Used to derive
+ * "what goes on the delivery truck" — the routewise driver groups already
+ * exclude dairy pickup, so this aggregator gives the truck-load summary
+ * without having to re-filter the raw items.
+ */
+export function aggregateAcrossGroups(groups: DriverGroup[]): ProductAgg[] {
+    const map = new Map<string, ProductAgg>();
+    for (const g of groups) {
+        for (const p of g.products) {
+            const existing = map.get(p.title);
+            if (existing) {
+                existing.qty += p.qty;
+            } else {
+                map.set(p.title, { ...p });
+            }
+        }
+    }
+    return Array.from(map.values()).sort((a, b) => a.title.localeCompare(b.title));
+}
+
 /** Aggregate products by title (across all drivers) — for the packing list. */
 export function aggregateProducts(items: DeliveryItem[]): ProductAgg[] {
     const map = new Map<string, ProductAgg>();

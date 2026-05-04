@@ -8,6 +8,7 @@ import DriverGroupTable from '@/components/DriverGroupTable';
 import DateWithTodayButton from '@/components/DateWithTodayButton';
 import {
     type DeliveryItem,
+    aggregateAcrossGroups,
     aggregateProducts,
     dedupeDeliveryItems,
     driverGroupsToCsvUrl,
@@ -25,9 +26,9 @@ interface TabConfig {
 }
 
 const TABS: TabConfig[] = [
-    { id: 'routewise', label: 'Routewise',    icon: <Truck className="w-4 h-4" /> },
-    { id: 'packing',   label: 'Packing List', icon: <Package className="w-4 h-4" /> },
-    { id: 'dairy',     label: 'Dairy Pickup', icon: <Milk className="w-4 h-4" /> },
+    { id: 'routewise', label: 'Delivery Truck', icon: <Truck className="w-4 h-4" /> },
+    { id: 'packing',   label: 'Packing List',   icon: <Package className="w-4 h-4" /> },
+    { id: 'dairy',     label: 'Dairy Pickup',   icon: <Milk className="w-4 h-4" /> },
 ];
 
 /**
@@ -79,6 +80,15 @@ export default function ProductionDeliveryPage() {
         () => aggregateProducts(uniqueItems),
         [uniqueItems]
     );
+    // Truck-load summary: sum of products across the routewise (non-dairy)
+    // groups. Equivalent to packingProducts minus dairyGroups' products.
+    // Drives the "what gets loaded onto the truck" table at the top of the
+    // Delivery Truck tab.
+    const truckSummary = useMemo(
+        () => aggregateAcrossGroups(routewiseGroups),
+        [routewiseGroups]
+    );
+    const truckTotalQty = truckSummary.reduce((s, p) => s + p.qty, 0);
 
     const handleExportRoutewise = useCallback(() => {
         const url = driverGroupsToCsvUrl(routewiseGroups, routewiseDate);
@@ -137,7 +147,7 @@ export default function ProductionDeliveryPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <h2 className="text-lg font-semibold flex items-center gap-2">
                             <Truck className="w-5 h-5 text-purple-400" />
-                            Routewise Products
+                            Delivery Truck
                         </h2>
                         <DateWithTodayButton
                             value={routewiseDate}
@@ -150,11 +160,49 @@ export default function ProductionDeliveryPage() {
                             <p className="text-slate-400">Loading…</p>
                         </div>
                     ) : (
-                        <DriverGroupTable
-                            groups={routewiseGroups}
-                            emptyMsg="No routewise deliveries for this date."
-                            onExport={handleExportRoutewise}
-                        />
+                        <>
+                            {/* Truck-load summary: total of every product going on the
+                                truck for the selected date. Equals the Packing List
+                                minus Dairy Pickup. Helps the loader confirm what to
+                                pull from cold storage before driving out. */}
+                            {truckSummary.length > 0 && (
+                                <div className="glass rounded-xl overflow-hidden">
+                                    <div className="px-4 py-3 bg-slate-800/50 flex items-center justify-between">
+                                        <h3 className="font-semibold text-white">Truck Load Summary</h3>
+                                        <span className="text-sm text-purple-400 font-medium">
+                                            {truckSummary.length} products · {truckTotalQty} qty
+                                        </span>
+                                    </div>
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="border-b border-slate-800/50">
+                                                <th className="text-left px-4 py-2 text-xs text-slate-400 font-medium">Product</th>
+                                                <th className="text-left px-4 py-2 text-xs text-slate-400 font-medium w-24">Qty Text</th>
+                                                <th className="text-right px-4 py-2 text-xs text-slate-400 font-medium w-20">Qty</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {truckSummary.map((p) => (
+                                                <tr key={p.title} className="border-b border-slate-800/30 hover:bg-slate-800/20">
+                                                    <td className="px-4 py-2.5 text-sm text-white">{p.title}</td>
+                                                    <td className="px-4 py-2.5 text-sm text-slate-400">{p.qty_text}</td>
+                                                    <td className="px-4 py-2.5 text-right">
+                                                        <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-sm font-bold">
+                                                            {p.qty}
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                            <DriverGroupTable
+                                groups={routewiseGroups}
+                                emptyMsg="No routewise deliveries for this date."
+                                onExport={handleExportRoutewise}
+                            />
+                        </>
                     )}
                 </div>
             )}
