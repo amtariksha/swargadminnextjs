@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, ReactNode } from 'react';
+import { useState, useMemo, useEffect, useRef, ReactNode } from 'react';
 import {
     ChevronLeft,
     ChevronRight,
@@ -49,10 +49,21 @@ export default function DataTable<T extends object>({
     onExport,
     title,
 }: DataTableProps<T>) {
-    const [currentPage, setCurrentPage] = useState(1);
+    // `loadedPages` is the highest "page" of rows currently rendered. The
+    // table grows incrementally as the operator scrolls — when the sentinel
+    // row at the end of the rendered list intersects the viewport, this
+    // ticks up by one and the next page-worth of rows is appended. The
+    // explicit pagination buttons still navigate (jump-to-first / next / etc)
+    // but for everyday scrolling the table just keeps revealing rows.
+    //
+    // Resets to 1 whenever the search term, sort, or underlying data
+    // changes, so the operator never has to scroll past stale pages after
+    // typing a new search.
+    const [loadedPages, setLoadedPages] = useState(1);
     const [searchTerm, setSearchTerm] = useState('');
     const [sortKey, setSortKey] = useState<string | null>(null);
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+    const sentinelRef = useRef<HTMLTableRowElement | null>(null);
 
     // Filter and sort data
     const filteredData = useMemo(() => {
@@ -89,12 +100,43 @@ export default function DataTable<T extends object>({
         return result;
     }, [data, searchTerm, sortKey, sortDirection]);
 
-    // Pagination
+    // Pagination — see comment on `loadedPages` above. Visible rows are
+    // ALWAYS the first `loadedPages * pageSize` rows of filteredData, so
+    // each scroll-driven tick reveals one more page-worth.
     const totalPages = Math.ceil(filteredData.length / pageSize);
-    const paginatedData = useMemo(() => {
-        const start = (currentPage - 1) * pageSize;
-        return filteredData.slice(start, start + pageSize);
-    }, [filteredData, currentPage, pageSize]);
+    const visibleCount = Math.min(loadedPages * pageSize, filteredData.length);
+    const paginatedData = useMemo(
+        () => filteredData.slice(0, visibleCount),
+        [filteredData, visibleCount]
+    );
+    const hasMore = visibleCount < filteredData.length;
+
+    // Reset the load window when the dataset, search, or sort changes —
+    // otherwise an operator searching for a needle would still see the
+    // last-page-of-haystack row count they had loaded.
+    useEffect(() => {
+        setLoadedPages(1);
+    }, [searchTerm, sortKey, sortDirection, data]);
+
+    // Auto-advance: when the sentinel row at the end of the rendered list
+    // scrolls into view (with a 200px rootMargin so the next batch is
+    // primed slightly before the user actually hits the bottom), bump
+    // loadedPages and append the next page-worth of rows.
+    useEffect(() => {
+        if (!hasMore) return;
+        const node = sentinelRef.current;
+        if (!node) return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((e) => e.isIntersecting)) {
+                    setLoadedPages((p) => p + 1);
+                }
+            },
+            { rootMargin: '200px 0px' }
+        );
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [hasMore, visibleCount]);
 
     const handleSort = (key: string) => {
         if (sortKey === key) {
@@ -148,7 +190,9 @@ export default function DataTable<T extends object>({
                                     value={searchTerm}
                                     onChange={(e) => {
                                         setSearchTerm(e.target.value);
-                                        setCurrentPage(1);
+                                        // loadedPages reset is handled by the
+                                        // useEffect on [searchTerm, ...]; no
+                                        // manual reset needed here.
                                     }}
                                     placeholder={searchPlaceholder}
                                     className="w-full sm:w-64 pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
@@ -168,47 +212,55 @@ export default function DataTable<T extends object>({
                 </div>
             )}
 
-            {/* Pagination - Top */}
-            {totalPages > 1 && (
+            {/* Top status row — shows what's currently loaded vs. total. The
+                explicit pagination buttons jump-load chunks (a power-user
+                shortcut) but for everyday work the operator just scrolls and
+                rows keep revealing. */}
+            {filteredData.length > 0 && (
                 <div className="px-4 py-2.5 border-b border-slate-800/50 flex flex-col sm:flex-row gap-2 items-center justify-between">
                     <p className="text-sm text-slate-400">
-                        Showing {(currentPage - 1) * pageSize + 1} to{' '}
-                        {Math.min(currentPage * pageSize, filteredData.length)} of{' '}
-                        {filteredData.length} results
+                        Showing {visibleCount} of {filteredData.length} results
+                        {hasMore && <span className="ml-2 text-xs text-slate-500">— scroll for more</span>}
                     </p>
-                    <div className="flex items-center gap-1">
-                        <button
-                            onClick={() => setCurrentPage(1)}
-                            disabled={currentPage === 1}
-                            className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            <ChevronsLeft className="w-4 h-4 text-slate-400" />
-                        </button>
-                        <button
-                            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                            disabled={currentPage === 1}
-                            className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            <ChevronLeft className="w-4 h-4 text-slate-400" />
-                        </button>
-                        <span className="px-3 py-1 text-sm text-slate-300">
-                            {currentPage} / {totalPages}
-                        </span>
-                        <button
-                            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                            disabled={currentPage === totalPages}
-                            className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            <ChevronRight className="w-4 h-4 text-slate-400" />
-                        </button>
-                        <button
-                            onClick={() => setCurrentPage(totalPages)}
-                            disabled={currentPage === totalPages}
-                            className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            <ChevronsRight className="w-4 h-4 text-slate-400" />
-                        </button>
-                    </div>
+                    {totalPages > 1 && (
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => setLoadedPages(1)}
+                                disabled={loadedPages === 1}
+                                title="Jump to first page"
+                                className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronsLeft className="w-4 h-4 text-slate-400" />
+                            </button>
+                            <button
+                                onClick={() => setLoadedPages((p) => Math.max(1, p - 1))}
+                                disabled={loadedPages === 1}
+                                title="Drop last loaded page"
+                                className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronLeft className="w-4 h-4 text-slate-400" />
+                            </button>
+                            <span className="px-3 py-1 text-sm text-slate-300">
+                                {loadedPages} / {totalPages}
+                            </span>
+                            <button
+                                onClick={() => setLoadedPages((p) => Math.min(totalPages, p + 1))}
+                                disabled={!hasMore}
+                                title="Load next page"
+                                className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronRight className="w-4 h-4 text-slate-400" />
+                            </button>
+                            <button
+                                onClick={() => setLoadedPages(totalPages)}
+                                disabled={!hasMore}
+                                title="Load all pages"
+                                className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronsRight className="w-4 h-4 text-slate-400" />
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -288,6 +340,18 @@ export default function DataTable<T extends object>({
                                     ))}
                                 </tr>
                             ))
+                        )}
+                        {/* Sentinel row — observed by the IntersectionObserver
+                            in useEffect above. When it scrolls into view the
+                            next page-worth of rows is appended. Rendered as a
+                            single near-invisible row so the table layout stays
+                            stable. */}
+                        {hasMore && !loading && (
+                            <tr ref={sentinelRef} aria-hidden="true">
+                                <td colSpan={columns.length} className="px-4 py-2 text-center text-xs text-slate-500">
+                                    Loading more…
+                                </td>
+                            </tr>
                         )}
                     </tbody>
                 </table>

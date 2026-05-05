@@ -42,6 +42,11 @@ interface NavItem {
     href?: string;
     icon: React.ReactNode;
     children?: NavItem[];
+    /** Override the permission key derived from `href`. Use when the URL
+     *  segment doesn't match the AVAILABLE_PERMISSIONS key — e.g. the CMS
+     *  entry below points at `/admin` (Payload's mount) but is gated by
+     *  the explicit `cms` permission. */
+    permissionKey?: string;
 }
 
 const navItems: NavItem[] = [
@@ -106,6 +111,11 @@ const navItems: NavItem[] = [
     // 16-17
     { name: 'Admin Users', href: '/admin-users', icon: <Users className="w-5 h-5" /> },
     { name: 'Roles & Permissions', href: '/roles', icon: <Settings className="w-5 h-5" /> },
+    // --- CMS --- (Payload, mounted at /admin via Next route group (payload))
+    // The Topbar Operations↔CMS toggle uses the same route. Adding a sidebar
+    // entry lets a role be granted CMS access without exposing the toggle to
+    // everyone — gated by the `cms` permission below.
+    { name: 'CMS', href: '/admin', icon: <Globe className="w-5 h-5" />, permissionKey: 'cms' },
 ];
 
 interface SidebarProps {
@@ -131,10 +141,15 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'dashboard', 'users', 'drivers', 'orders', 'products', 'categories',
     'subcategories', 'delivery-list', 'delivery-report', 'transactions',
     'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
-    'admin-users', 'roles', 'production-delivery',
+    'admin-users', 'roles', 'production-delivery', 'cms',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
+    // Explicit override wins — used by the CMS entry whose href (/admin)
+    // doesn't match its permission key (cms).
+    if (item.permissionKey && KNOWN_PERMISSION_KEYS.has(item.permissionKey)) {
+        return item.permissionKey;
+    }
     if (!item.href) return undefined;
     const seg = item.href.split('/')[1];
     if (seg && KNOWN_PERMISSION_KEYS.has(seg)) return seg;

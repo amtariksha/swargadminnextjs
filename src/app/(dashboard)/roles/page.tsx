@@ -25,6 +25,9 @@ const AVAILABLE_PERMISSIONS = [
     { key: 'notifications', label: 'Notifications', icon: '🔔' },
     { key: 'admin-users', label: 'Admin Users', icon: '👤' },
     { key: 'roles', label: 'Roles', icon: '🔐' },
+    // CMS — Payload admin mounted at /admin. Gates the Topbar
+    // Operations↔CMS toggle AND the Sidebar "CMS" entry.
+    { key: 'cms', label: 'CMS', icon: '🌐' },
     // Driver-facing page: granting only this permission lets the user
     // log in and reach `/production-delivery` (Routewise / Packing /
     // Dairy Pickup tabs) — and nothing else.
