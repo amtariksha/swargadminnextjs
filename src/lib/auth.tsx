@@ -123,6 +123,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const adminData = { ...response.data, token: response.token || '' };
             localStorage.setItem('admin', JSON.stringify(adminData));
             setAdmin(adminData);
+            // Mirror the JWT into an HttpOnly cookie so the embedded Payload
+            // admin at /admin can authenticate via the swarg-jwt strategy.
+            // Failures are non-fatal — the localStorage flow still works for
+            // every other admin route.
+            if (adminData.token) {
+                try {
+                    await fetch('/api/auth/session', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: adminData.token }),
+                    });
+                } catch {
+                    /* cookie sync failed; Payload /admin will require a fresh login */
+                }
+            }
             // Production-delivery-only users land on /production-delivery;
             // every other admin lands on /.
             const { permissions, hasFullAccess } = computePermissions(adminData);
@@ -139,6 +154,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const logout = useCallback(() => {
         localStorage.removeItem('admin');
         setAdmin(null);
+        // Best-effort clear of the Payload bridge cookie. Fire-and-forget so
+        // the redirect below isn't blocked by a slow network round-trip.
+        try {
+            void fetch('/api/auth/session', { method: 'DELETE' });
+        } catch {
+            /* ignore */
+        }
         router.push('/login');
     }, [router]);
 

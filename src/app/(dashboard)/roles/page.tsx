@@ -32,6 +32,10 @@ const AVAILABLE_PERMISSIONS = [
     // log in and reach `/production-delivery` (Routewise / Packing /
     // Dairy Pickup tabs) — and nothing else.
     { key: 'production-delivery', label: 'Production Delivery', icon: '🚛' },
+    // Payload CMS admin gate — required to log into /admin (the embedded
+    // Payload UI for new.swargfood.com). Verified by the JWT auth strategy
+    // in src/payload/strategies/jwtAuth.ts.
+    { key: 'payload_admin', label: 'Payload CMS Admin', icon: '🛠️' },
 ];
 
 export default function RolesPage() {

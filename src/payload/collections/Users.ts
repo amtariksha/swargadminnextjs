@@ -1,8 +1,14 @@
 import type { CollectionConfig } from 'payload'
+import { swargJwtStrategy } from '../strategies/jwtAuth'
 
 export const Users: CollectionConfig = {
   slug: 'users',
-  auth: true,
+  auth: {
+    // Local email/password login stays enabled as a bootstrap fallback. Once
+    // every operator has a Node.js admin account with the `payload_admin`
+    // permission, this can be flipped to `disableLocalStrategy: true`.
+    strategies: [swargJwtStrategy],
+  },
   admin: {
     useAsTitle: 'email',
   },
