@@ -142,23 +142,49 @@ export const swargJwtStrategy: AuthStrategy = {
     try {
       const cookieHeader = headers.get('cookie')
       const token = parseCookie(cookieHeader, SWARG_ADMIN_TOKEN_COOKIE)
-      if (!token) return { user: null }
+      if (!token) {
+        console.info('[swargJwt] no cookie present')
+        return { user: null }
+      }
 
       const secret = process.env.JWT_SECRET
       if (!secret) {
-        console.warn('[swargJwtStrategy] JWT_SECRET is not configured; skipping')
+        console.warn('[swargJwt] JWT_SECRET is not configured; skipping')
         return { user: null }
       }
 
       const claims = verifyHs256(token, secret)
-      if (!claims) return { user: null }
+      if (!claims) {
+        console.warn('[swargJwt] JWT verification failed (bad signature, alg mismatch, or expired)')
+        return { user: null }
+      }
+      console.info('[swargJwt] JWT verified for userId:', claims.userId)
 
       const me = await fetchAdminMe(token)
-      if (!me) return { user: null }
-      if (!hasPayloadAdminPermission(me.roles)) return { user: null }
+      if (!me) {
+        const backend = process.env.SWARG_BACKEND_URL || 'https://node.desicowmilk.com'
+        const tenant = process.env.SWARG_TENANT || 'swarg'
+        console.warn(
+          '[swargJwt] /admin/me failed or returned no data. Verify endpoint is deployed at:',
+          `${backend.replace(/\/$/, '')}/api/${tenant}/admin/me`
+        )
+        return { user: null }
+      }
+      console.info('[swargJwt] /admin/me ok. User:', me.user.email, 'Roles:', me.roles.map(r => r.title))
+
+      if (!hasPayloadAdminPermission(me.roles)) {
+        console.warn(
+          '[swargJwt] user lacks payload_admin permission. Roles+perms:',
+          me.roles.map(r => ({ title: r.title, permissions: r.permissions }))
+        )
+        return { user: null }
+      }
 
       const email = me.user.email?.toLowerCase().trim()
-      if (!email) return { user: null }
+      if (!email) {
+        console.warn('[swargJwt] /admin/me returned no email')
+        return { user: null }
+      }
 
       const existing = await payload.find({
         collection: 'users',
@@ -169,6 +195,7 @@ export const swargJwtStrategy: AuthStrategy = {
 
       let userDoc = existing.docs[0]
       if (!userDoc) {
+        console.info('[swargJwt] creating shadow Payload user for', email)
         userDoc = await payload.create({
           collection: 'users',
           data: {
@@ -181,6 +208,7 @@ export const swargJwtStrategy: AuthStrategy = {
         })
       }
 
+      console.info('[swargJwt] AUTH OK for', email)
       return {
         user: {
           ...userDoc,
@@ -189,7 +217,7 @@ export const swargJwtStrategy: AuthStrategy = {
         },
       }
     } catch (err) {
-      console.error('[swargJwtStrategy] authenticate failed:', err)
+      console.error('[swargJwt] authenticate threw:', err)
       return { user: null }
     }
   },
