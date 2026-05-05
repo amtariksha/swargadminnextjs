@@ -179,14 +179,16 @@ export default function DeliveryListPage() {
     const buildDeliveryCsvRows = useCallback((rows: DeliveryItem[]): string[][] => {
         const headers = [
             'Edit', 'Edit Qty',
-            'Pre ID', 'Order ID', 'Name', 'Phone',
+            'Pre ID', 'Order ID', 'Txn ID', 'Amount',
+            'Name', 'Phone',
             'Title', 'Quantity Text', 'Quantity', 'Delivered Quantity',
             'Delivery Boy', 'Delivery Status', 'Delivered Date', 'Delivered Time',
             'Address', 'Pincode', 'Wallet Balance', 'Start Date', 'Subscription Type',
         ];
         const body = rows.map(item => [
             '', '', // Edit / Edit Qty — UI-only buttons in Laravel, exported as empty cells
-            item.pre_delivery_id, item.id, item.name, item.s_phone,
+            item.pre_delivery_id, item.id, item.trasation_id ?? '', item.order_amount ?? 0,
+            item.name, item.s_phone,
             item.title || item.product_title,
             item.qty_text, item.qty, item.mark_delivered_qty ?? '',
             item.delivery_boy_name || '',
@@ -253,6 +255,10 @@ export default function DeliveryListPage() {
             render: (item) => <button onClick={(e) => { e.stopPropagation(); setEditQtyModal({ item, newQty: item.qty }); }} disabled={item.status === 3} className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-30" title="Edit quantity"><Edit className="w-3 h-3 text-blue-400" /></button> },
         { key: 'pre_delivery_id', header: 'Pre ID', width: colW('pre_delivery_id', '80px', '120px') },
         { key: 'id', header: 'Order ID', width: colW('id', '80px', '120px') },
+        { key: 'trasation_id', header: 'Txn ID', width: colW('trasation_id', '80px', '120px'),
+            render: (item) => <span className="text-xs text-slate-400">{item.trasation_id ?? '-'}</span> },
+        { key: 'order_amount', header: 'Amount', width: colW('order_amount', '90px', '120px'),
+            render: (item) => <span>₹{item.order_amount ?? 0}</span> },
         { key: 'name', header: 'Name', width: colW('name', '150px', '250px') },
         { key: 's_phone', header: 'Phone', width: colW('s_phone', '120px', '180px') },
         { key: 'title', header: 'Product', width: colW('title', '200px', '350px') },

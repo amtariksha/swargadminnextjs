@@ -129,12 +129,12 @@ export default function OrdersPage() {
 
     // Export CSV
     const handleExport = useCallback(() => {
-        const headers = ['ID', 'Transaction ID', 'Product', 'Order Type', 'Status', 'Order Status', 'Sub Type', 'Name', 'Phone', 'Wallet', 'Amount', 'Qty', 'Start Date', 'Pincode', 'Last Update'];
+        const headers = ['ID', 'Transaction ID', 'Product', 'Order Type', 'Status', 'Order Status', 'Sub Type', 'Name', 'Phone', 'Wallet', 'Amount', 'Qty', 'Start Date', 'Pincode', 'Created', 'Last Update'];
         const rows = filteredOrders.map(o => [
             o.id, o.trasation_id || '', o.title || '', ORDER_TYPE[o.order_type] || '',
             STATUS[o.status] || '', getOrderStatus(o), getSubTypeLabel(o.subscription_type),
             o.name || '', o.s_phone || '', o.wallet_amount || 0, o.order_amount || 0,
-            o.qty || '', o.start_date || '', o.pincode || '', o.updated_at || ''
+            o.qty || '', o.start_date || '', o.pincode || '', o.created_at || '', o.updated_at || ''
         ]);
         const csv = [headers, ...rows.map(r => r.map(c => `"${c}"`))].map(r => r.join(',')).join('\n');
         const blob = new Blob([csv], { type: 'text/csv' });
@@ -177,6 +177,12 @@ export default function OrdersPage() {
         { key: 'qty', header: 'Qty', width: '60px' },
         { key: 'start_date', header: 'Start Date', width: '100px', render: (o) => <span>{o.start_date ? String(o.start_date).slice(0, 10) : '-'}</span> },
         { key: 'pincode', header: 'Pincode', width: '80px' },
+        {
+            key: 'created_at', header: 'Created', width: '160px',
+            render: (o) => {
+                return <span className="text-sm text-slate-400">{formatApiDate(o.created_at, 'dd-MM-yyyy HH:mm:ss')}</span>;
+            },
+        },
         {
             key: 'updated_at', header: 'Last Update', width: '160px',
             render: (o) => {

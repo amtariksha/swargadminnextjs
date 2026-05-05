@@ -36,6 +36,11 @@ export interface DeliveryItem {
     start_date: string;
     subscription_type: number;
     order_type: number;
+    /** Order's `trasation_id` (note Laravel-era misspelt column name).
+     *  Lets the delivery list show which transaction paid for the row. */
+    trasation_id: number | null;
+    /** Order amount in rupees — the customer-facing total per delivery. */
+    order_amount: number | null;
 }
 
 export interface ProductAgg {
