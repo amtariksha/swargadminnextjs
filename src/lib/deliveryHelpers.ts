@@ -36,11 +36,18 @@ export interface DeliveryItem {
     start_date: string;
     subscription_type: number;
     order_type: number;
-    /** Order's `trasation_id` (note Laravel-era misspelt column name).
-     *  Lets the delivery list show which transaction paid for the row. */
+    /** Transaction id for THIS delivery. For subscription orders this is
+     *  the per-day wallet-debit (matched on delivery_date), not the
+     *  order-level `trasation_id` (which can be months stale).  Null
+     *  when the delivery hasn't been marked yet. */
     trasation_id: number | null;
     /** Order amount in rupees — the customer-facing total per delivery. */
     order_amount: number | null;
+    /** Per-unit product price snapshotted on the order at creation. */
+    product_price: number | null;
+    /** Amount actually charged in the per-delivery transaction. Null
+     *  when the delivery hasn't been marked yet (no debit row exists). */
+    trasation_amount: number | null;
 }
 
 export interface ProductAgg {

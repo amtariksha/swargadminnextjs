@@ -179,7 +179,7 @@ export default function DeliveryListPage() {
     const buildDeliveryCsvRows = useCallback((rows: DeliveryItem[]): string[][] => {
         const headers = [
             'Edit', 'Edit Qty',
-            'Pre ID', 'Order ID', 'Txn ID', 'Amount',
+            'Pre ID', 'Order ID', 'Txn ID', 'Price', 'Amount', 'Deducted',
             'Name', 'Phone',
             'Title', 'Quantity Text', 'Quantity', 'Delivered Quantity',
             'Delivery Boy', 'Delivery Status', 'Delivered Date', 'Delivered Time',
@@ -187,7 +187,8 @@ export default function DeliveryListPage() {
         ];
         const body = rows.map(item => [
             '', '', // Edit / Edit Qty — UI-only buttons in Laravel, exported as empty cells
-            item.pre_delivery_id, item.id, item.trasation_id ?? '', item.order_amount ?? 0,
+            item.pre_delivery_id, item.id,
+            item.trasation_id ?? '', item.product_price ?? 0, item.order_amount ?? 0, item.trasation_amount ?? '',
             item.name, item.s_phone,
             item.title || item.product_title,
             item.qty_text, item.qty, item.mark_delivered_qty ?? '',
@@ -257,8 +258,12 @@ export default function DeliveryListPage() {
         { key: 'id', header: 'Order ID', width: colW('id', '80px', '120px') },
         { key: 'trasation_id', header: 'Txn ID', width: colW('trasation_id', '80px', '120px'),
             render: (item) => <span className="text-xs text-slate-400">{item.trasation_id ?? '-'}</span> },
+        { key: 'product_price', header: 'Price', width: colW('product_price', '80px', '110px'),
+            render: (item) => <span>₹{item.product_price ?? 0}</span> },
         { key: 'order_amount', header: 'Amount', width: colW('order_amount', '90px', '120px'),
             render: (item) => <span>₹{item.order_amount ?? 0}</span> },
+        { key: 'trasation_amount', header: 'Deducted', width: colW('trasation_amount', '90px', '120px'),
+            render: (item) => <span className={item.trasation_amount == null ? 'text-slate-500' : ''}>{item.trasation_amount == null ? '-' : `₹${item.trasation_amount}`}</span> },
         { key: 'name', header: 'Name', width: colW('name', '150px', '250px') },
         { key: 's_phone', header: 'Phone', width: colW('s_phone', '120px', '180px') },
         { key: 'title', header: 'Product', width: colW('title', '200px', '350px') },
