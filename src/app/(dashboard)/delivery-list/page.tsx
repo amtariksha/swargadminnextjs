@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
@@ -89,6 +89,14 @@ export default function DeliveryListPage() {
     const [editQtyModal, setEditQtyModal] = useState<{ item: DeliveryItem; newQty: number } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [generateDialog, setGenerateDialog] = useState(false);
+    // Progress overlay shown while genrate_order_list is running.
+    // The endpoint can take a few seconds to a minute on large dates.
+    const [genProgress, setGenProgress] = useState<{
+        active: boolean;
+        startedAt: number;
+        result?: { inserted: number; skipped_existing: number; took_ms: number };
+        error?: string;
+    } | null>(null);
     const [deleteDialog, setDeleteDialog] = useState(false);
     const [filters, setFilters] = useState({ delivered: false, not_delivered: false, delivered_diff_qty: false });
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -132,12 +140,34 @@ export default function DeliveryListPage() {
     const handleGenerateList = async () => {
         setGenerateDialog(false);
         setIsSubmitting(true);
+        const startedAt = Date.now();
+        setGenProgress({ active: true, startedAt });
         try {
-            await POST('/genrate_order_list', { date: selectedDate });
-            toast.success('Delivery list generated successfully');
+            const response = await POST<{
+                date: string;
+                inserted: number;
+                skipped_existing: number;
+                took_ms: number;
+            }>('/genrate_order_list', { date: selectedDate });
+            const data = response?.data;
+            const result = data
+                ? {
+                    inserted: data.inserted ?? 0,
+                    skipped_existing: data.skipped_existing ?? 0,
+                    took_ms: data.took_ms ?? Date.now() - startedAt,
+                  }
+                : { inserted: 0, skipped_existing: 0, took_ms: Date.now() - startedAt };
+            setGenProgress({ active: false, startedAt, result });
+            const summary = `Created ${result.inserted} new entries (skipped ${result.skipped_existing} existing) in ${(result.took_ms / 1000).toFixed(1)}s`;
+            toast.success(summary);
             refetch();
-        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to generate delivery list'); }
-        finally { setIsSubmitting(false); }
+        } catch (error) {
+            const msg = error instanceof Error ? error.message : 'Failed to generate delivery list';
+            setGenProgress({ active: false, startedAt, error: msg });
+            toast.error(msg);
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handleDeleteList = async () => {
@@ -471,6 +501,13 @@ export default function DeliveryListPage() {
             {/* Dialogs */}
             {generateDialog && <PasscodeDialog title="Generate Delivery List" selectedDate={selectedDate} onConfirm={handleGenerateList} onCancel={() => setGenerateDialog(false)} />}
             {deleteDialog && <PasscodeDialog title="Delete Delivery List" selectedDate={selectedDate} onConfirm={handleDeleteList} onCancel={() => setDeleteDialog(false)} />}
+            {genProgress && (
+                <GenerateProgressModal
+                    state={genProgress}
+                    selectedDate={selectedDate}
+                    onClose={() => setGenProgress(null)}
+                />
+            )}
 
             {/* Edit Qty Modal */}
             {editQtyModal && (
@@ -500,6 +537,127 @@ export default function DeliveryListPage() {
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+// ====== Generate Progress Modal ======
+// Indeterminate progress bar with live elapsed-time counter while
+// genrate_order_list is running. After the request settles, switches to a
+// summary view so the admin can see what changed before dismissing.
+interface GenProgressState {
+    active: boolean;
+    startedAt: number;
+    result?: { inserted: number; skipped_existing: number; took_ms: number };
+    error?: string;
+}
+
+function GenerateProgressModal({
+    state,
+    selectedDate,
+    onClose,
+}: {
+    state: GenProgressState;
+    selectedDate: string;
+    onClose: () => void;
+}) {
+    const [now, setNow] = useState<number>(Date.now());
+
+    useEffect(() => {
+        if (!state.active) return;
+        const interval = setInterval(() => setNow(Date.now()), 100);
+        return () => clearInterval(interval);
+    }, [state.active]);
+
+    const elapsedSeconds = ((state.active ? now : state.startedAt + (state.result?.took_ms ?? 0)) - state.startedAt) / 1000;
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="glass rounded-2xl p-6 w-full max-w-md mx-4">
+                {state.active && (
+                    <>
+                        <div className="flex items-center gap-3 mb-3">
+                            <RefreshCw className="w-6 h-6 text-purple-400 animate-spin" />
+                            <h2 className="text-lg font-bold text-white">Generating Delivery List</h2>
+                        </div>
+                        <p className="text-sm text-slate-400 mb-1">
+                            Date: <span className="text-white font-medium">{selectedDate}</span>
+                        </p>
+                        <p className="text-xs text-slate-500 mb-4">
+                            Scanning subscriptions, applying wallet rules, and creating delivery rows.
+                        </p>
+                        {/* Indeterminate progress bar */}
+                        <div className="h-2 w-full bg-slate-800/60 rounded-full overflow-hidden mb-3 relative">
+                            <div className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-[progress-slide_1.4s_ease-in-out_infinite]" />
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-slate-400">
+                            <span>Elapsed: <span className="text-white font-medium">{elapsedSeconds.toFixed(1)}s</span></span>
+                            <span>Don&apos;t close this tab</span>
+                        </div>
+                        <style jsx>{`
+                            @keyframes progress-slide {
+                                0% { left: -33%; }
+                                100% { left: 100%; }
+                            }
+                            div[class*="animate-\\[progress-slide"] {
+                                animation: progress-slide 1.4s ease-in-out infinite;
+                            }
+                        `}</style>
+                    </>
+                )}
+
+                {!state.active && state.result && (
+                    <>
+                        <div className="flex items-center gap-3 mb-4">
+                            <Check className="w-6 h-6 text-green-400" />
+                            <h2 className="text-lg font-bold text-white">List Generated</h2>
+                        </div>
+                        <div className="space-y-2 mb-5">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-400">Date</span>
+                                <span className="text-white font-medium">{selectedDate}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-400">New entries created</span>
+                                <span className="text-green-400 font-medium">{state.result.inserted}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-400">Skipped (already existed)</span>
+                                <span className="text-slate-300 font-medium">{state.result.skipped_existing}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-400">Time taken</span>
+                                <span className="text-white font-medium">{(state.result.took_ms / 1000).toFixed(1)}s</span>
+                            </div>
+                        </div>
+                        <button
+                            onClick={onClose}
+                            className="w-full px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium"
+                        >
+                            Close
+                        </button>
+                    </>
+                )}
+
+                {!state.active && state.error && (
+                    <>
+                        <div className="flex items-center gap-3 mb-3">
+                            <AlertTriangle className="w-6 h-6 text-red-400" />
+                            <h2 className="text-lg font-bold text-white">Generation Failed</h2>
+                        </div>
+                        <p className="text-sm text-red-300 mb-4">{state.error}</p>
+                        <p className="text-xs text-slate-500 mb-4">
+                            If this was a network/timeout error, the database may still have been updated. Refresh the table to verify.
+                        </p>
+                        <button
+                            onClick={onClose}
+                            className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl font-medium"
+                        >
+                            Close
+                        </button>
+                    </>
+                )}
+            </div>
         </div>
     );
 }
