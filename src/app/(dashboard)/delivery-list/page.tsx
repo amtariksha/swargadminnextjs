@@ -30,33 +30,57 @@ const formatTime = (timestamp: string | null) => {
 };
 
 // ====== Passcode Dialog ======
-function PasscodeDialog({ title, selectedDate, onConfirm, onCancel }: {
-    title: string; selectedDate: string; onConfirm: () => void; onCancel: () => void;
+// strictToday=true: when the selected date is *today*, requires the passcode
+// "TODAY" + YYYYMMDD (e.g. TODAY20260505). Used by the Delete flow because
+// deleting today's list mid-route would wipe the data drivers are actively
+// using — the extra characters force deliberate typing.
+// strictToday=false (default): today still accepts plain "TODAY".
+// Future dates always use plain YYYYMMDD regardless of this flag.
+function PasscodeDialog({ title, selectedDate, onConfirm, onCancel, strictToday = false }: {
+    title: string;
+    selectedDate: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+    strictToday?: boolean;
 }) {
     const [passcode, setPasscode] = useState('');
     const [error, setError] = useState('');
     const today = format(new Date(), 'yyyy-MM-dd');
-    const expectedPasscode = selectedDate.replace(/-/g, '');
+    const dateDigits = selectedDate.replace(/-/g, '');     // e.g. 20260505
     const isToday = selectedDate === today;
 
     const handleSubmit = () => {
+        const entered = passcode.toUpperCase();
         if (isToday) {
-            if (passcode.toUpperCase() === 'TODAY') { onConfirm(); return; }
+            const required = strictToday ? `TODAY${dateDigits}` : 'TODAY';
+            if (entered === required) { onConfirm(); return; }
             setError('Incorrect passcode');
             return;
         }
-        if (passcode === expectedPasscode) { onConfirm(); return; }
+        // Future dates: YYYYMMDD (case-insensitive — only digits)
+        if (entered === dateDigits) { onConfirm(); return; }
         setError('Incorrect passcode');
     };
+
+    // Build a friendly hint so admins know the format without revealing the code itself.
+    const hintFormat = isToday
+        ? (strictToday ? 'TODAYYYYYMMDD (e.g. TODAY20260505)' : 'TODAY')
+        : 'YYYYMMDD (8 digits)';
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
             <div className="glass rounded-2xl p-6 w-full max-w-md mx-4">
                 <div className="flex items-center gap-3 mb-4">
-                    <AlertTriangle className="w-6 h-6 text-amber-400" />
+                    <AlertTriangle className={`w-6 h-6 ${strictToday && isToday ? 'text-red-400' : 'text-amber-400'}`} />
                     <h2 className="text-xl font-bold text-white">{title}</h2>
                 </div>
-                <p className="text-sm text-slate-400 mb-4">Date: <span className="text-white font-medium">{selectedDate}</span></p>
+                <p className="text-sm text-slate-400 mb-1">Date: <span className="text-white font-medium">{selectedDate}</span></p>
+                {strictToday && isToday && (
+                    <p className="text-xs text-red-300 mb-3">
+                        ⚠ Deleting today&apos;s list will erase data the drivers are actively using. Type the full safety code to confirm.
+                    </p>
+                )}
+                <p className="text-xs text-slate-500 mb-3">Passcode format: <span className="text-slate-300 font-mono">{hintFormat}</span></p>
                 <input type="text" value={passcode}
                     onChange={(e) => { setPasscode(e.target.value); setError(''); }}
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
@@ -500,7 +524,7 @@ export default function DeliveryListPage() {
 
             {/* Dialogs */}
             {generateDialog && <PasscodeDialog title="Generate Delivery List" selectedDate={selectedDate} onConfirm={handleGenerateList} onCancel={() => setGenerateDialog(false)} />}
-            {deleteDialog && <PasscodeDialog title="Delete Delivery List" selectedDate={selectedDate} onConfirm={handleDeleteList} onCancel={() => setDeleteDialog(false)} />}
+            {deleteDialog && <PasscodeDialog title="Delete Delivery List" selectedDate={selectedDate} onConfirm={handleDeleteList} onCancel={() => setDeleteDialog(false)} strictToday />}
             {genProgress && (
                 <GenerateProgressModal
                     state={genProgress}
