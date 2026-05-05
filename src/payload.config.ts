@@ -26,6 +26,11 @@ export default buildConfig({
       connectionString: process.env.DATABASE_URI || '',
       ssl: { rejectUnauthorized: false },
     },
+    // Set PAYLOAD_PUSH=true in Vercel to let drizzle-kit push the current
+    // collection schema to Postgres on boot (default: dev only). Use as a
+    // one-shot to sync missing columns; turn back off once stable and adopt
+    // proper migrations via `payload migrate:create` for ongoing changes.
+    push: process.env.PAYLOAD_PUSH === 'true',
   }),
   collections: [Pages, Posts, Media, Users],
   secret: process.env.PAYLOAD_SECRET || 'default-secret-change-me',
