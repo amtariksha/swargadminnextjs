@@ -201,7 +201,6 @@ export const swargJwtStrategy: AuthStrategy = {
           data: {
             email,
             name: me.user.name ?? '',
-            role: 'admin',
             password: crypto.randomBytes(32).toString('hex'),
           },
           overrideAccess: true,
