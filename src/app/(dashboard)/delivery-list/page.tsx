@@ -147,7 +147,15 @@ export default function DeliveryListPage() {
         if (selectedDriver) result = result.filter(item => item.order_assign_user === selectedDriver || item.delivery_boy_id === selectedDriver);
         if (filters.delivered) result = result.filter(item => item.status === 3);
         if (filters.not_delivered) result = result.filter(item => item.status !== 3);
-        if (filters.delivered_diff_qty) result = result.filter(item => item.mark_delivered_qty !== null && item.qty !== item.mark_delivered_qty);
+        // "Different qty delivered" must compare actual-delivered against
+        // the LIVE scheduled qty, not the original orders.qty — otherwise an
+        // edit from 1→3 followed by a correct 3-qty delivery would falsely
+        // show as "different".
+        if (filters.delivered_diff_qty) result = result.filter(item => {
+            if (item.mark_delivered_qty == null) return false;
+            const live = item.delivered_qty || item.qty;
+            return item.mark_delivered_qty !== live;
+        });
         return result;
     }, [uniqueItems, selectedDriver, filters]);
 
@@ -245,7 +253,10 @@ export default function DeliveryListPage() {
             item.trasation_id ?? '', item.product_price ?? 0, item.order_amount ?? 0, item.trasation_amount ?? '',
             item.name, item.s_phone,
             item.title || item.product_title,
-            item.qty_text, item.qty, item.mark_delivered_qty ?? '',
+            // "Quantity" = LIVE scheduled qty (delivered_qty when edited, else
+            // orders.qty). Required so the printed/exported list matches the
+            // routewise/packing aggregations and the driver's actual route sheet.
+            item.qty_text, item.delivered_qty || item.qty, item.mark_delivered_qty ?? '',
             item.delivery_boy_name || '',
             getStatusLabel(item.status).label,
             item.delivered_date || '',
@@ -307,7 +318,10 @@ export default function DeliveryListPage() {
                     className="w-4 h-4 rounded border-slate-600 text-purple-500 focus:ring-purple-500 bg-slate-800/50 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" />
             ) },
         { key: 'edit_qty', header: 'Qty Edit', width: colW('edit_qty', '70px', '120px'),
-            render: (item) => <button onClick={(e) => { e.stopPropagation(); setEditQtyModal({ item, newQty: item.qty }); }} disabled={item.status === 3} className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-30" title="Edit quantity"><Edit className="w-3 h-3 text-blue-400" /></button> },
+            // Seed the modal with the LIVE scheduled qty (delivered_qty) — not
+            // the static orders.qty — so re-opening Edit on a previously-edited
+            // row shows what was last saved instead of the original order qty.
+            render: (item) => <button onClick={(e) => { e.stopPropagation(); setEditQtyModal({ item, newQty: item.delivered_qty || item.qty }); }} disabled={item.status === 3} className="p-1.5 hover:bg-slate-800/50 rounded-lg disabled:opacity-30" title="Edit quantity"><Edit className="w-3 h-3 text-blue-400" /></button> },
         { key: 'pre_delivery_id', header: 'Pre ID', width: colW('pre_delivery_id', '80px', '120px') },
         { key: 'id', header: 'Order ID', width: colW('id', '80px', '120px') },
         { key: 'trasation_id', header: 'Txn ID', width: colW('trasation_id', '80px', '120px'),
@@ -322,9 +336,25 @@ export default function DeliveryListPage() {
         { key: 's_phone', header: 'Phone', width: colW('s_phone', '120px', '180px') },
         { key: 'title', header: 'Product', width: colW('title', '200px', '350px') },
         { key: 'qty_text', header: 'Qty Text', width: colW('qty_text', '120px', '200px') },
-        { key: 'qty', header: 'Qty', width: colW('qty', '70px', '100px'), render: (item) => <span className="font-semibold">{item.qty}</span> },
+        // "Qty" shows the LIVE scheduled qty (delivered_qty if edited, else
+        // orders.qty). When admin edits via Qty Edit, this column updates and
+        // the value is highlighted so the edit is immediately visible.
+        { key: 'qty', header: 'Qty', width: colW('qty', '70px', '100px'),
+            render: (item) => {
+                const live = item.delivered_qty || item.qty;
+                const wasEdited = typeof item.delivered_qty === 'number' && item.delivered_qty !== item.qty;
+                return <span className={`font-semibold ${wasEdited ? 'text-amber-400' : ''}`} title={wasEdited ? `Edited from ${item.qty}` : undefined}>{live}</span>;
+            } },
+        // "Del Qty" shows what was actually delivered (set when driver/admin
+        // marks delivery). Highlighted red when it differs from the SCHEDULED
+        // (live) qty — i.e. the customer got something different from what
+        // was on the route sheet.
         { key: 'mark_delivered_qty', header: 'Del Qty', width: colW('mark_delivered_qty', '80px', '120px'),
-            render: (item) => { const isDiff = item.mark_delivered_qty !== null && item.mark_delivered_qty !== item.qty; return <span className={`font-medium ${isDiff ? 'text-red-400' : ''}`}>{item.mark_delivered_qty ?? '-'}</span>; } },
+            render: (item) => {
+                const live = item.delivered_qty || item.qty;
+                const isDiff = item.mark_delivered_qty !== null && item.mark_delivered_qty !== live;
+                return <span className={`font-medium ${isDiff ? 'text-red-400' : ''}`}>{item.mark_delivered_qty ?? '-'}</span>;
+            } },
         { key: 'delivery_boy_name', header: 'Driver', width: colW('delivery_boy_name', '150px', '250px'), render: (item) => <span>{item.delivery_boy_name || 'Unassigned'}</span> },
         { key: 'status', header: 'Status', width: colW('status', '120px', '160px'),
             render: (item) => { const s = getStatusLabel(item.status); return <span className={`font-semibold ${s.color}`}>{s.label}</span>; } },

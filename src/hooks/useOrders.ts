@@ -42,6 +42,9 @@ export interface DeliveryItem {
     product_id: number;
     product_title: string;
     qty: number;
+    /** Live scheduled qty after admin/driver-app edits (from delivery row).
+     *  Always prefer this over `qty` for routewise / packing / printed output. */
+    delivered_qty: number;
     qty_text: string;
     delivery_boy_id: number | null;
     delivery_boy_name: string | null;

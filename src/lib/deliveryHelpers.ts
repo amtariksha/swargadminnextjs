@@ -19,6 +19,13 @@ export interface DeliveryItem {
     title: string;
     product_title: string;
     qty: number;
+    /** Live quantity scheduled for delivery — reflects edits made via the
+     *  Qty Edit button (admin) or the driver app pre-mark adjustment. Comes
+     *  from the `delivery` row, NOT the order. ALWAYS use this (with `qty`
+     *  fallback) for routewise / packing / dairy aggregations and for any
+     *  print-out a driver will see — `qty` is the static order quantity at
+     *  creation time and won't reflect operator edits. */
+    delivered_qty: number;
     qty_text: string;
     mark_delivered_qty: number | null;
     delivery_boy_id: number | null;
@@ -86,6 +93,24 @@ export const DAIRY_PICKUP_DRIVERS = [
 ];
 
 // ====== Helpers ======
+
+/**
+ * Resolve the live, current quantity for a delivery row.
+ *
+ * Prefers `delivered_qty` (from the `delivery` table, mutated by admin
+ * Qty Edit and driver-app pre-mark adjustments) over the static `qty`
+ * (from the `orders` table, snapshot at order creation). The latter
+ * never changes after admin edits — using it in routewise/packing/
+ * dairy aggregations is exactly the bug that put wrong totals on the
+ * driver's printed list.
+ *
+ * Falls back to `qty` when `delivered_qty` is missing / 0 / undefined.
+ */
+function liveQty(item: DeliveryItem): number {
+    const dq = item.delivered_qty;
+    if (typeof dq === 'number' && dq > 0) return dq;
+    return item.qty || 1;
+}
 
 /**
  * Match Laravel admin: null/unknown subscription_type renders as
@@ -161,14 +186,15 @@ export function groupByDriver(items: DeliveryItem[], dairyPickup: boolean): Driv
         const products = driverMap.get(driver)!;
         const key = item.product_title || item.title;
         if (!key) return;
+        const q = liveQty(item);
         const existing = products.get(key);
         if (existing) {
-            existing.qty += item.qty || 1;
+            existing.qty += q;
         } else {
             products.set(key, {
                 title: key,
                 qty_text: item.qty_text || '',
-                qty: item.qty || 1,
+                qty: q,
             });
         }
     });
@@ -214,14 +240,15 @@ export function aggregateProducts(items: DeliveryItem[]): ProductAgg[] {
     items.forEach((item) => {
         const key = item.product_title || item.title;
         if (!key) return;
+        const q = liveQty(item);
         const existing = map.get(key);
         if (existing) {
-            existing.qty += item.qty || 1;
+            existing.qty += q;
         } else {
             map.set(key, {
                 title: key,
                 qty_text: item.qty_text || '',
-                qty: item.qty || 1,
+                qty: q,
             });
         }
     });
