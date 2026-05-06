@@ -104,11 +104,21 @@ export const DAIRY_PICKUP_DRIVERS = [
  * dairy aggregations is exactly the bug that put wrong totals on the
  * driver's printed list.
  *
- * Falls back to `qty` when `delivered_qty` is missing / 0 / undefined.
+ * **Zero is a meaningful value** — when the operator edits qty to 0
+ * via the Qty Edit modal, it means "skip this delivery today" (not
+ * "fall back to original qty"). The previous version of this helper
+ * fell back to `item.qty` when `delivered_qty <= 0`, which silently
+ * undid the operator's intent. We now treat `0` as a valid live qty;
+ * the aggregators below filter it out so 0-qty rows don't appear on
+ * route sheets at all.
+ *
+ * Falls back to `qty` only when `delivered_qty` is genuinely missing
+ * (null/undefined/non-numeric) — i.e. legacy rows from before the
+ * delivery-list generator started populating the column.
  */
 function liveQty(item: DeliveryItem): number {
     const dq = item.delivered_qty;
-    if (typeof dq === 'number' && dq > 0) return dq;
+    if (dq != null && Number.isFinite(dq)) return dq;
     return item.qty || 1;
 }
 
@@ -187,6 +197,11 @@ export function groupByDriver(items: DeliveryItem[], dairyPickup: boolean): Driv
         const key = item.product_title || item.title;
         if (!key) return;
         const q = liveQty(item);
+        // Skip "don't deliver" rows — operator-zeroed via Qty Edit.
+        // Without this, a row edited 36→0 still showed on the route sheet
+        // because the aggregator (a) would never reach 0 if seeded fresh
+        // and (b) would inherit a prior 36 if a sibling row aggregated first.
+        if (q === 0) return;
         const existing = products.get(key);
         if (existing) {
             existing.qty += q;
@@ -241,6 +256,7 @@ export function aggregateProducts(items: DeliveryItem[]): ProductAgg[] {
         const key = item.product_title || item.title;
         if (!key) return;
         const q = liveQty(item);
+        if (q === 0) return; // skip operator-zeroed rows — same rationale as groupByDriver
         const existing = map.get(key);
         if (existing) {
             existing.qty += q;
