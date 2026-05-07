@@ -49,7 +49,8 @@ export const Customers: CollectionConfig = {
     { name: 'lastOrderAt', type: 'date' },
 
     // Legacy
-    { name: 'legacyWpId', type: 'number' },
+    { name: 'legacyWpId', type: 'number', admin: { description: 'Deprecated — kept for backward compat. Migration script writes to wpId (text) instead.' } },
+    { name: 'wpId', type: 'text', index: true, admin: { hidden: true, description: 'Legacy WordPress user ID for migration idempotency.' } },
     { name: 'isLegacy', type: 'checkbox', defaultValue: false, admin: { position: 'sidebar' } },
   ],
   timestamps: true,

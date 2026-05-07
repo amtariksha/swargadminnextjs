@@ -32,6 +32,7 @@ export const Reviews: CollectionConfig = {
       admin: { position: 'sidebar' },
     },
     { name: 'adminReply', type: 'textarea' },
+    { name: 'wpId', type: 'text', index: true, admin: { hidden: true, description: 'Legacy WordPress comment ID for migration idempotency.' } },
   ],
   timestamps: true,
 }

@@ -145,13 +145,31 @@ export const Orders: CollectionConfig = {
     { name: 'trackingNumber', type: 'text' },
     { name: 'trackingUrl', type: 'text' },
 
+    // Delivery scheduling (replaces "Order Delivery Date for WooCommerce")
+    {
+      name: 'requestedDeliveryDate',
+      type: 'date',
+      admin: { date: { pickerAppearance: 'dayOnly' }, description: 'Customer-selected delivery date. Required at checkout.' },
+    },
+    {
+      name: 'deliverySlot',
+      type: 'select',
+      options: [
+        { label: 'Morning (5–8 AM)', value: 'morning' },
+        { label: 'Day (11 AM – 6 PM)', value: 'day' },
+        { label: 'Evening (6–9 PM)', value: 'evening' },
+      ],
+      admin: { description: 'Optional time-window preference.' },
+    },
+
     // Notes
     { name: 'notes', type: 'textarea', admin: { description: 'Customer notes' } },
     { name: 'internalNotes', type: 'textarea', admin: { description: 'Staff-only notes' } },
     { name: 'invoiceUrl', type: 'text' },
 
     // Legacy
-    { name: 'legacyWpId', type: 'number', admin: { position: 'sidebar' } },
+    { name: 'legacyWpId', type: 'number', admin: { position: 'sidebar', description: 'Deprecated — kept for backward compat.' } },
+    { name: 'wpId', type: 'text', index: true, admin: { hidden: true, description: 'Legacy WooCommerce shop_order ID for migration idempotency.' } },
     { name: 'isLegacy', type: 'checkbox', defaultValue: false, admin: { position: 'sidebar' } },
   ],
   timestamps: true,

@@ -32,5 +32,6 @@ export const Categories: CollectionConfig = {
     { name: 'sortOrder', type: 'number', defaultValue: 0 },
     { name: 'isActive', type: 'checkbox', defaultValue: true },
     { name: 'parent', type: 'relationship', relationTo: 'categories', admin: { description: 'Parent category for nesting' } },
+    { name: 'wpId', type: 'text', index: true, admin: { hidden: true, description: 'Legacy WordPress term ID for migration idempotency.' } },
   ],
 }

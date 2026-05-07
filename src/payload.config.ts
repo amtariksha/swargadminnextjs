@@ -5,21 +5,28 @@ import { buildConfig, PayloadRequest } from 'payload'
 import { fileURLToPath } from 'url'
 
 // Collections
+import { CartSessions } from './collections/CartSessions'
 import { Categories } from './collections/Categories'
 import { Conversations } from './collections/Conversations'
 import { Coupons } from './collections/Coupons'
 import { Customers } from './collections/Customers'
+import { FAQs } from './collections/FAQs'
 import { Media } from './collections/Media'
 import { Orders } from './collections/Orders'
 import { Pages } from './collections/Pages'
 import { Posts } from './collections/Posts'
 import { Products } from './collections/Products'
+import { Recipes } from './collections/Recipes'
 import { Reviews } from './collections/Reviews'
 import { ShippingClasses } from './collections/ShippingClasses'
 import { ShippingZones } from './collections/ShippingZones'
+import { StoreLocations } from './collections/StoreLocations'
 import { SubCategories } from './collections/SubCategories'
 import { Subscribers } from './collections/Subscribers'
+import { Tags } from './collections/Tags'
 import { TaxRates } from './collections/TaxRates'
+import { TeamMembers } from './collections/TeamMembers'
+import { Testimonials } from './collections/Testimonials'
 import { Users } from './collections/Users'
 
 // Globals
@@ -72,6 +79,7 @@ export default buildConfig({
     Products,
     Categories,
     SubCategories,
+    Tags,
     Orders,
     Customers,
     TaxRates,
@@ -79,17 +87,28 @@ export default buildConfig({
     ShippingClasses,
     Coupons,
     Reviews,
+    CartSessions,
     // Content
     Pages,
     Posts,
+    Recipes,
     Media,
+    // Marketing / About
+    Testimonials,
+    TeamMembers,
+    StoreLocations,
+    FAQs,
     // Communication
     Conversations,
     Subscribers,
     // Admin
     Users,
   ],
-  cors: [getServerSideURL()].filter(Boolean),
+  cors: [
+    getServerSideURL(),
+    'https://new.swargfood.com',
+    'https://swargfood.com',
+  ].filter(Boolean),
   globals: [
     Header,
     Footer,

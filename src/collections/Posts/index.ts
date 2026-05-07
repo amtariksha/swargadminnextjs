@@ -215,6 +215,7 @@ export const Posts: CollectionConfig<'posts'> = {
       ],
     },
     slugField(),
+    { name: 'wpId', type: 'text', index: true, admin: { hidden: true, description: 'Legacy WordPress post ID for migration idempotency.' } },
   ],
   hooks: {
     afterChange: [revalidatePost],

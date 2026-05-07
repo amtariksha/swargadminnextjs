@@ -38,6 +38,7 @@ export const Media: CollectionConfig = {
         },
       }),
     },
+    { name: 'wpId', type: 'text', index: true, admin: { hidden: true, description: 'Legacy WordPress attachment ID for migration idempotency.' } },
   ],
   upload: {
     // Upload to the public/media directory in Next.js making them publicly accessible even outside of Payload

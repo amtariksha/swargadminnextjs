@@ -18,5 +18,6 @@ export const SubCategories: CollectionConfig = {
     { name: 'image', type: 'upload', relationTo: 'media' },
     { name: 'isActive', type: 'checkbox', defaultValue: true },
     { name: 'sortOrder', type: 'number', defaultValue: 0 },
+    { name: 'wpId', type: 'text', index: true, admin: { hidden: true, description: 'Legacy WordPress term ID for migration idempotency.' } },
   ],
 }

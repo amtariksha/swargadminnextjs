@@ -180,5 +180,6 @@ export const Products: CollectionConfig = {
     { name: 'lastSyncedAt', type: 'date', admin: { position: 'sidebar', readOnly: true } },
     { name: 'isActive', type: 'checkbox', defaultValue: true, admin: { position: 'sidebar' } },
     { name: 'publishedDate', type: 'date', admin: { position: 'sidebar' } },
+    { name: 'wpId', type: 'text', index: true, admin: { hidden: true, description: 'Legacy WordPress / WooCommerce product ID for migration idempotency.' } },
   ],
 }

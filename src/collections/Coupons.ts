@@ -54,5 +54,6 @@ export const Coupons: CollectionConfig = {
       defaultValue: true,
       admin: { position: 'sidebar' },
     },
+    { name: 'wpId', type: 'text', index: true, admin: { hidden: true, description: 'Legacy WordPress / WooCommerce shop_coupon ID for migration idempotency.' } },
   ],
 }

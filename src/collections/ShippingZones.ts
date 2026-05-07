@@ -87,6 +87,19 @@ export const ShippingZones: CollectionConfig = {
         { name: 'active', type: 'checkbox', defaultValue: true },
       ],
     },
+    {
+      name: 'availablePaymentMethods',
+      type: 'select',
+      hasMany: true,
+      options: [
+        { label: 'Razorpay (cards / UPI / wallets)', value: 'razorpay' },
+        { label: 'Cash on Delivery', value: 'cod' },
+        { label: 'UPI (direct)', value: 'upi' },
+      ],
+      admin: {
+        description: 'Payment methods allowed for orders shipping to this zone. Empty = all methods allowed.',
+      },
+    },
     { name: 'isActive', type: 'checkbox', defaultValue: true },
   ],
 }

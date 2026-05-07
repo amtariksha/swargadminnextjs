@@ -5,8 +5,12 @@ import { authenticatedOrPublished } from '../../access/authenticatedOrPublished'
 import { Archive } from '../../blocks/ArchiveBlock/config'
 import { CallToAction } from '../../blocks/CallToAction/config'
 import { Content } from '../../blocks/Content/config'
+import { FAQAccordion } from '../../blocks/FAQAccordion/config'
 import { FormBlock } from '../../blocks/Form/config'
 import { MediaBlock } from '../../blocks/MediaBlock/config'
+import { StoreLocator } from '../../blocks/StoreLocator/config'
+import { TeamGrid } from '../../blocks/TeamGrid/config'
+import { TestimonialsSlider } from '../../blocks/TestimonialsSlider/config'
 import { hero } from '@/heros/config'
 import { slugField } from 'payload'
 import { populatePublishedAt } from '../../hooks/populatePublishedAt'
@@ -72,7 +76,17 @@ export const Pages: CollectionConfig<'pages'> = {
             {
               name: 'layout',
               type: 'blocks',
-              blocks: [CallToAction, Content, MediaBlock, Archive, FormBlock],
+              blocks: [
+                CallToAction,
+                Content,
+                MediaBlock,
+                Archive,
+                FormBlock,
+                FAQAccordion,
+                TestimonialsSlider,
+                StoreLocator,
+                TeamGrid,
+              ],
               required: true,
               admin: {
                 initCollapsed: true,
@@ -118,6 +132,7 @@ export const Pages: CollectionConfig<'pages'> = {
       },
     },
     slugField(),
+    { name: 'wpId', type: 'text', index: true, admin: { hidden: true, description: 'Legacy WordPress page ID for migration idempotency.' } },
   ],
   hooks: {
     afterChange: [revalidatePage],
