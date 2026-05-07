@@ -7,6 +7,7 @@ import DataTable, { Column } from '@/components/DataTable';
 import { CalendarDays, Package, Download, RotateCcw } from 'lucide-react';
 
 import { parseApiDate } from '@/lib/dateUtils';
+import { parseWeeklyDays } from '@/lib/weeklyDays';
 interface ProductRow {
     title: string;
     qty_text: string;
@@ -16,17 +17,6 @@ interface ProductRow {
 // Get day code (0=Sunday, 1=Monday, ..., 6=Saturday)
 function getDayCode(dateStr: string): number {
     return new Date(dateStr).getDay();
-}
-
-// Parse weekly day schedule JSON (handles malformed JSON from Laravel)
-function parseWeeklyDays(str: string | undefined): Array<{ dayCode: number; qty: number }> {
-    if (!str) return [];
-    try {
-        const fixed = str.replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":');
-        return JSON.parse(fixed);
-    } catch {
-        return [];
-    }
 }
 
 // Filter subscription orders based on holidays, wallet, subscription eligibility

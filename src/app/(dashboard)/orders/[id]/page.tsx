@@ -19,6 +19,7 @@ import { ArrowLeft, Save, Truck, X, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { formatApiDate } from '@/lib/dateUtils';
+import { parseWeeklyDays } from '@/lib/weeklyDays';
 const ORDER_TYPE_LABELS: Record<number, string> = { 1: 'Prepaid', 2: 'Postpaid', 3: 'Pay Now', 4: 'Pay Later' };
 const SUB_TYPE_LABELS: Record<number, string> = { 1: 'One Time', 2: 'Weekly', 3: 'Daily', 4: 'Alternative Days' };
 const DAY_LABELS = ['M', 'T', 'W', 'TH', 'F', 'S', 'SU'];
@@ -108,46 +109,18 @@ export default function OrderDetailPage() {
 
     // Parse weekly delivery days into a Set of DAY_LABELS indices.
     //
-    // Storage format from the Flutter app is a JSON-encoded list of objects:
-    //   [{"dayCode":"1","qty":"1"},{"dayCode":"3","qty":"1"}, …]
-    // dayCode follows JS Date.getDay() — 0=Sun, 1=Mon, …, 6=Sat.
+    // dayCode follows JS Date.getDay() — 0=Sun, 1=Mon, …, 6=Sat. The
+    // shared `parseWeeklyDays` helper accepts every shape the column has
+    // shipped in (canonical, Flutter unquoted-key, flat-int, flat-string).
     //
-    // DAY_LABELS = ['M','T','W','TH','F','S','SU'] starts at Monday, so the
-    // mapping is `labelIndex = dayCode === 0 ? 6 : dayCode - 1`.
-    //
-    // The previous implementation returned the raw object array and the
-    // renderer did `weeklyDays.includes('M')` which never matched an
-    // object — every day cell rendered grey regardless of selection.
-    //
-    // Also tolerates the Laravel-era malformed JSON the calendar code
-    // already handles (single-quoted keys), and a second legacy shape
-    // where the raw value is just an array of label strings.
+    // DAY_LABELS = ['M','T','W','TH','F','S','SU'] starts at Monday, so
+    // the mapping is `labelIndex = dayCode === 0 ? 6 : dayCode - 1`.
     const weeklyActiveLabels: Set<string> = (() => {
-        const raw = orderData?.selected_days_for_weekly;
-        if (!raw) return new Set();
-        const tryParse = (s: string): unknown => {
-            try { return JSON.parse(s); }
-            catch {
-                try {
-                    // Fix Laravel-era unquoted keys/values, e.g. {dayCode: 1, qty: 1}
-                    const fixed = s.replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":');
-                    return JSON.parse(fixed);
-                } catch { return null; }
-            }
-        };
-        const parsed = typeof raw === 'string' ? tryParse(raw) : raw;
-        if (!Array.isArray(parsed)) return new Set();
+        const entries = parseWeeklyDays(orderData?.selected_days_for_weekly);
         const out = new Set<string>();
-        for (const entry of parsed) {
-            if (entry && typeof entry === 'object' && 'dayCode' in entry) {
-                const dc = Number((entry as { dayCode: string | number }).dayCode);
-                if (Number.isFinite(dc)) {
-                    const idx = dc === 0 ? 6 : dc - 1;
-                    if (idx >= 0 && idx < DAY_LABELS.length) out.add(DAY_LABELS[idx]);
-                }
-            } else if (typeof entry === 'string' && DAY_LABELS.includes(entry)) {
-                out.add(entry);
-            }
+        for (const { dayCode } of entries) {
+            const idx = dayCode === 0 ? 6 : dayCode - 1;
+            if (idx >= 0 && idx < DAY_LABELS.length) out.add(DAY_LABELS[idx]);
         }
         return out;
     })();
