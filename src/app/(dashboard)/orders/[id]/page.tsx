@@ -106,14 +106,50 @@ export default function OrderDetailPage() {
         } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to remove driver'); }
     };
 
-    // Parse weekly days
-    const weeklyDays: string[] = (() => {
-        try {
-            const raw = orderData?.selected_days_for_weekly;
-            if (!raw) return [];
-            if (typeof raw === 'string') return JSON.parse(raw);
-            return raw;
-        } catch { return []; }
+    // Parse weekly delivery days into a Set of DAY_LABELS indices.
+    //
+    // Storage format from the Flutter app is a JSON-encoded list of objects:
+    //   [{"dayCode":"1","qty":"1"},{"dayCode":"3","qty":"1"}, …]
+    // dayCode follows JS Date.getDay() — 0=Sun, 1=Mon, …, 6=Sat.
+    //
+    // DAY_LABELS = ['M','T','W','TH','F','S','SU'] starts at Monday, so the
+    // mapping is `labelIndex = dayCode === 0 ? 6 : dayCode - 1`.
+    //
+    // The previous implementation returned the raw object array and the
+    // renderer did `weeklyDays.includes('M')` which never matched an
+    // object — every day cell rendered grey regardless of selection.
+    //
+    // Also tolerates the Laravel-era malformed JSON the calendar code
+    // already handles (single-quoted keys), and a second legacy shape
+    // where the raw value is just an array of label strings.
+    const weeklyActiveLabels: Set<string> = (() => {
+        const raw = orderData?.selected_days_for_weekly;
+        if (!raw) return new Set();
+        const tryParse = (s: string): unknown => {
+            try { return JSON.parse(s); }
+            catch {
+                try {
+                    // Fix Laravel-era unquoted keys/values, e.g. {dayCode: 1, qty: 1}
+                    const fixed = s.replace(/(['"])?([a-zA-Z0-9_]+)(['"])?:/g, '"$2":');
+                    return JSON.parse(fixed);
+                } catch { return null; }
+            }
+        };
+        const parsed = typeof raw === 'string' ? tryParse(raw) : raw;
+        if (!Array.isArray(parsed)) return new Set();
+        const out = new Set<string>();
+        for (const entry of parsed) {
+            if (entry && typeof entry === 'object' && 'dayCode' in entry) {
+                const dc = Number((entry as { dayCode: string | number }).dayCode);
+                if (Number.isFinite(dc)) {
+                    const idx = dc === 0 ? 6 : dc - 1;
+                    if (idx >= 0 && idx < DAY_LABELS.length) out.add(DAY_LABELS[idx]);
+                }
+            } else if (typeof entry === 'string' && DAY_LABELS.includes(entry)) {
+                out.add(entry);
+            }
+        }
+        return out;
     })();
 
     const txnColumns: Column<OrderTransaction>[] = [
@@ -183,12 +219,12 @@ export default function OrderDetailPage() {
                 </div>
 
                 {/* Weekly Days Display */}
-                {subType === 2 && weeklyDays.length > 0 && (
+                {subType === 2 && (
                     <div className="mb-6">
                         <p className="text-xs text-slate-500 mb-2">Weekly Delivery Days</p>
                         <div className="flex gap-2">
-                            {DAY_LABELS.map((day, i) => {
-                                const isActive = weeklyDays.includes(day) || weeklyDays.includes(String(i));
+                            {DAY_LABELS.map((day) => {
+                                const isActive = weeklyActiveLabels.has(day);
                                 return (
                                     <span key={day} className={`w-9 h-9 flex items-center justify-center rounded-lg text-xs font-bold ${isActive ? 'bg-purple-500/30 text-purple-300 border border-purple-500/50' : 'bg-slate-800/30 text-slate-600'}`}>
                                         {day}
@@ -196,33 +232,55 @@ export default function OrderDetailPage() {
                                 );
                             })}
                         </div>
+                        {weeklyActiveLabels.size === 0 && (
+                            <p className="text-xs text-slate-500 mt-2 italic">No delivery days set on this order.</p>
+                        )}
                     </div>
                 )}
 
-                {/* Driver Assignment */}
+                {/* Driver Assignment.
+                    Both branches (assigned / unassigned) keep the dropdown
+                    visible so the operator can change the driver in one
+                    click — calling /add_order_assign with a new user_id
+                    just inserts a fresh row, and the backend uses
+                    `MAX(id) per order_id` to pick the active assignment
+                    (see deliveryController.getGeneratedOrderListByDate).
+                    No need to delete-then-add. The X button stays as an
+                    explicit "remove all assignments" affordance. */}
                 <div className="p-4 bg-slate-900/30 rounded-xl border border-slate-800/50">
                     <div className="flex items-center gap-2 mb-3">
                         <Truck className="w-4 h-4 text-purple-400" />
                         <h3 className="text-sm font-medium text-slate-300">Delivery Partner</h3>
                     </div>
-                    {assignment ? (
-                        <div className="flex items-center justify-between">
-                            <p className="text-white">{(assignment as Record<string, unknown>).name as string || (assignment as Record<string, unknown>).delivery_boy_name as string || `Driver #${assignment.user_id}`} {(assignment as Record<string, unknown>).phone ? <span className="text-slate-400 text-sm ml-2">{(assignment as Record<string, unknown>).phone as string}</span> : null}</p>
-                            <button onClick={() => setShowRemoveDriver(true)} className="p-1.5 hover:bg-red-500/20 rounded-lg">
+                    {assignment && (
+                        <div className="flex items-center justify-between mb-3 p-2 bg-slate-800/40 rounded-lg">
+                            <div>
+                                <p className="text-xs text-slate-500">Currently assigned</p>
+                                <p className="text-white">
+                                    {(assignment as Record<string, unknown>).name as string ||
+                                     (assignment as Record<string, unknown>).delivery_boy_name as string ||
+                                     `Driver #${assignment.user_id}`}
+                                    {(assignment as Record<string, unknown>).phone ? (
+                                        <span className="text-slate-400 text-sm ml-2">{(assignment as Record<string, unknown>).phone as string}</span>
+                                    ) : null}
+                                </p>
+                            </div>
+                            <button onClick={() => setShowRemoveDriver(true)} className="p-1.5 hover:bg-red-500/20 rounded-lg" title="Remove driver">
                                 <X className="w-4 h-4 text-red-400" />
                             </button>
                         </div>
-                    ) : (
-                        <div className="flex gap-2">
-                            <select value={newDriverId} onChange={(e) => setNewDriverId(e.target.value)} className={`flex-1 ${selectClassName}`}>
-                                <option value="">Select driver</option>
-                                {[...drivers].sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
-                                    <option key={d.id} value={d.user_id}>{d.name} - {d.phone}</option>
-                                ))}
-                            </select>
-                            <button onClick={handleAssignDriver} disabled={!newDriverId || assignOrder.isPending} className="px-4 py-2 bg-purple-600 text-white text-sm rounded-xl disabled:opacity-50">Assign</button>
-                        </div>
                     )}
+                    <div className="flex gap-2">
+                        <select value={newDriverId} onChange={(e) => setNewDriverId(e.target.value)} className={`flex-1 ${selectClassName}`}>
+                            <option value="">{assignment ? 'Change driver…' : 'Select driver'}</option>
+                            {[...drivers].sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
+                                <option key={d.id} value={d.user_id}>{d.name} - {d.phone}</option>
+                            ))}
+                        </select>
+                        <button onClick={handleAssignDriver} disabled={!newDriverId || assignOrder.isPending} className="px-4 py-2 bg-purple-600 text-white text-sm rounded-xl disabled:opacity-50">
+                            {assignment ? 'Update' : 'Assign'}
+                        </button>
+                    </div>
                 </div>
             </div>
 
