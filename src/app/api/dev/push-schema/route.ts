@@ -7,9 +7,14 @@
  * bypasses that check by calling drizzle-kit's `pushSchema` directly with
  * the in-memory schema Payload already built.
  *
- * Auth: Bearer token matching SCHEMA_PUSH_SECRET env var.
+ * Auth: token check via SCHEMA_PUSH_SECRET env var. Accepts the token via
+ * either the `Authorization: Bearer <token>` header (curl-friendly) OR a
+ * `?token=<token>` query string (browser-friendly).
  *
- * Usage:
+ * Browser usage:
+ *   https://admin.desicowmilk.com/api/dev/push-schema?token=YOUR_SECRET
+ *
+ * curl usage:
  *   curl -X POST -H "Authorization: Bearer $SECRET" \
  *     https://admin.desicowmilk.com/api/dev/push-schema
  *
@@ -43,24 +48,17 @@ interface PostgresAdapterLike {
   tablesFilter?: string[]
   extensions?: { postgis?: boolean }
   requireDrizzleKit: () => DrizzleKitModule
-  execute: (args: { drizzle: unknown; raw: string }) => Promise<{ rows: unknown[] }>
-  tables: { payload_migrations: unknown }
 }
 
-export async function POST(req: NextRequest) {
-  const expected = process.env.SCHEMA_PUSH_SECRET
-  if (!expected) {
-    return NextResponse.json(
-      { error: 'SCHEMA_PUSH_SECRET env var is not configured.' },
-      { status: 500 },
-    )
-  }
+const isAuthorized = (req: NextRequest, expected: string): boolean => {
+  const header = req.headers.get('authorization') ?? ''
+  if (header === `Bearer ${expected}`) return true
+  const queryToken = req.nextUrl.searchParams.get('token')
+  if (queryToken && queryToken === expected) return true
+  return false
+}
 
-  const auth = req.headers.get('authorization') ?? ''
-  if (auth !== `Bearer ${expected}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
+const runPush = async (): Promise<NextResponse> => {
   try {
     const payload = await getPayload({ config })
     const adapter = payload.db as unknown as PostgresAdapterLike
@@ -77,7 +75,6 @@ export async function POST(req: NextRequest) {
     const { apply, hasDataLoss, warnings, statementsToExecute } = result
 
     // Apply unconditionally — caller is the operator and accepts the risk.
-    // Warnings + hasDataLoss are returned in the response for review.
     await apply()
 
     return NextResponse.json({
@@ -95,3 +92,23 @@ export async function POST(req: NextRequest) {
     )
   }
 }
+
+const handle = async (req: NextRequest): Promise<NextResponse> => {
+  const expected = process.env.SCHEMA_PUSH_SECRET
+  if (!expected) {
+    return NextResponse.json(
+      { error: 'SCHEMA_PUSH_SECRET env var is not configured. Set it in Vercel and redeploy.' },
+      { status: 500 },
+    )
+  }
+  if (!isAuthorized(req, expected)) {
+    return NextResponse.json(
+      { error: 'Unauthorized. Pass the token via Authorization: Bearer <token> or ?token=<token>.' },
+      { status: 401 },
+    )
+  }
+  return runPush()
+}
+
+export const GET = handle
+export const POST = handle
