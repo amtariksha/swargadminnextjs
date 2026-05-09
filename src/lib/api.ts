@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { getApiUrl } from '@/config/tenant';
+import { ApiError, apiErrorFromResponse, parseApiError } from './api-error';
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
@@ -30,30 +31,49 @@ apiClient.interceptors.request.use(
     (error) => Promise.reject(error)
 );
 
-// Response interceptor for error handling
+/**
+ * Response interceptor for error handling.
+ *
+ * Phase 3 of the error rollout:
+ *   - Parses every non-2xx response into a typed [ApiError]
+ *     (via parseApiError → apiErrorFromResponse).
+ *   - 401 → /login redirect ONLY when the typed `code` is
+ *     `token_expired` or `token_invalid`. Other 401s (e.g.
+ *     `insufficient_role`) bubble up so the screen can render
+ *     "you don't have access" inline.
+ *   - 5xx blips and network errors no longer bounce to login —
+ *     they propagate so the caller can show a banner + retry.
+ *
+ * The string-match heuristic (`includes('expired')` etc.) survives
+ * as a fallback for legacy endpoints that haven't gained the
+ * canonical `code` field yet.
+ */
 apiClient.interceptors.response.use(
     (response) => response,
     (error: AxiosError) => {
-        if (error.response?.status === 401) {
-            const errorData = error.response.data as { message?: string; error?: string } | undefined;
-            const errorMessage = (errorData?.message || errorData?.error || '').toLowerCase();
+        const apiError = parseApiError(error);
+
+        if (typeof window !== 'undefined' &&
+            apiError.status === 401 &&
+            !window.location.pathname.includes('/login')) {
 
             const hadToken = error.config?.headers?.Authorization?.toString().startsWith('Bearer ');
-            const isTokenInvalidOrExpired =
-                errorMessage.includes('expired') ||
-                errorMessage.includes('invalid token') ||
-                errorMessage.includes('jwt') ||
-                errorMessage.includes('malformed');
 
-            const isLoginPage = typeof window !== 'undefined' &&
-                window.location.pathname.includes('/login');
+            // Prefer the typed `code` field; fall back to string match.
+            const legacyMessage = (apiError.envelope.message as string | undefined ?? '').toLowerCase();
+            const isTokenInvalid = apiError.isTokenExpired ||
+                legacyMessage.includes('expired') ||
+                legacyMessage.includes('invalid token') ||
+                legacyMessage.includes('jwt') ||
+                legacyMessage.includes('malformed');
 
-            if (hadToken && isTokenInvalidOrExpired && !isLoginPage && typeof window !== 'undefined') {
+            if (hadToken && isTokenInvalid) {
                 localStorage.removeItem('admin');
                 window.location.href = '/login';
             }
         }
-        return Promise.reject(error);
+
+        return Promise.reject(apiError);
     }
 );
 
@@ -66,13 +86,43 @@ export const GET = async <T = unknown>(
     return response.data;
 };
 
-// Check backend business logic errors (HTTP 200 but response code != 200)
-function checkBusinessError(result: { response?: number; status?: boolean; message?: string }) {
-    if (result.response && result.response !== 200) {
-        const error = new Error(result.message || 'Operation failed');
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (error as any).serverResponse = result;
-        throw error;
+/**
+ * Check backend business-logic errors (HTTP 200 but response code != 200).
+ *
+ * Phase 3 — throws a real [ApiError] instead of a plain Error so
+ * the rest of the app can do `instanceof ApiError` consistently.
+ */
+function checkBusinessError(
+    result: {
+        response?: number;
+        status?: boolean;
+        message?: string | string[];
+        code?: string;
+        errors?: Record<string, string[]>;
+        details?: Record<string, unknown>;
+        request_id?: string;
+        statusCode?: number;
+    } | undefined,
+    httpStatus: number,
+    headers: Record<string, string>,
+) {
+    if (!result) return;
+    const inBandStatus = result.statusCode ?? result.response;
+    if (inBandStatus != null && inBandStatus !== 200 && inBandStatus < 300) {
+        // HTTP 200 carrying an in-band failure (legacy response:201).
+        // Rebuild the ApiError as if the HTTP layer had thrown.
+        throw apiErrorFromResponse({
+            status: inBandStatus,
+            data: result,
+            headers,
+        });
+    }
+    if (result.status === false) {
+        throw apiErrorFromResponse({
+            status: inBandStatus ?? httpStatus,
+            data: result,
+            headers,
+        });
     }
 }
 
@@ -91,7 +141,7 @@ export const POST = async <T = unknown>(
         config
     );
     const result = response.data;
-    checkBusinessError(result);
+    checkBusinessError(result, response.status, response.headers as Record<string, string>);
     return result;
 };
 
@@ -104,7 +154,7 @@ export const PUT = async <T = unknown>(
     const config = data instanceof FormData ? { headers: { 'Content-Type': undefined } } : {};
     const response = await apiClient.put<{ data: T; message?: string }>(endpoint, data, config);
     const result = response.data;
-    checkBusinessError(result);
+    checkBusinessError(result, response.status, response.headers as Record<string, string>);
     return result;
 };
 
@@ -114,7 +164,12 @@ export const DELETE = async <T = unknown>(
     data?: Record<string, unknown>
 ): Promise<{ data: T; message?: string }> => {
     const response = await apiClient.delete<{ data: T; message?: string }>(endpoint, { data });
+    const result = response.data as { response?: number; status?: boolean };
+    checkBusinessError(result, response.status, response.headers as Record<string, string>);
     return response.data;
 };
+
+// Re-export typed error class so consumers can import from one place.
+export { ApiError };
 
 export default apiClient;
