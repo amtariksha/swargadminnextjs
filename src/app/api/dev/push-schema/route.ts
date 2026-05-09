@@ -23,6 +23,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
+// Direct ESM import so Turbopack's tracer sees the dependency and Vercel
+// bundles it. Payload's adapter uses createRequire('drizzle-kit/api') which
+// the tracer can't follow → "Cannot find module" at runtime on Vercel.
+import { pushSchema as drizzlePushSchema } from 'drizzle-kit/api'
 
 interface PushSchemaResult {
   apply: () => Promise<void>
@@ -31,23 +35,12 @@ interface PushSchemaResult {
   statementsToExecute?: string[]
 }
 
-interface DrizzleKitModule {
-  pushSchema: (
-    schema: unknown,
-    drizzle: unknown,
-    schemaFilters?: string[],
-    tablesFilter?: string[],
-    extensionsFilters?: string[],
-  ) => Promise<PushSchemaResult>
-}
-
 interface PostgresAdapterLike {
   drizzle: unknown
   schema: unknown
   schemaName?: string
   tablesFilter?: string[]
   extensions?: { postgis?: boolean }
-  requireDrizzleKit: () => DrizzleKitModule
 }
 
 const isAuthorized = (req: NextRequest, expected: string): boolean => {
@@ -63,14 +56,13 @@ const runPush = async (): Promise<NextResponse> => {
     const payload = await getPayload({ config })
     const adapter = payload.db as unknown as PostgresAdapterLike
 
-    const { pushSchema } = adapter.requireDrizzleKit()
-    const result = await pushSchema(
-      adapter.schema,
-      adapter.drizzle,
+    const result = (await drizzlePushSchema(
+      adapter.schema as never,
+      adapter.drizzle as never,
       adapter.schemaName ? [adapter.schemaName] : undefined,
       adapter.tablesFilter,
       adapter.extensions?.postgis ? ['postgis'] : undefined,
-    )
+    )) as unknown as PushSchemaResult
 
     const { apply, hasDataLoss, warnings, statementsToExecute } = result
 
