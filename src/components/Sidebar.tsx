@@ -35,6 +35,10 @@ import {
     ClipboardList,
     BarChart3,
     TrendingUp,
+    MessageCircle,
+    Inbox,
+    Megaphone,
+    Target,
 } from 'lucide-react';
 
 interface NavItem {
@@ -93,8 +97,25 @@ const navItems: NavItem[] = [
     { name: 'Pincodes', href: '/pincodes', icon: <MapPin className="w-5 h-5" /> },
     { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-5 h-5" /> },
     { name: 'Notifications', href: '/notifications', icon: <Bell className="w-5 h-5" /> },
-    // --- Archive --- (divider after 14)
+    // --- Communications (WhatsApp) --- (divider after 14)
     // 15
+    {
+        name: 'WhatsApp',
+        icon: <MessageCircle className="w-5 h-5" />,
+        permissionKey: 'whatsapp',
+        children: [
+            { name: 'Inbox', href: '/whatsapp', icon: <Inbox className="w-4 h-4" /> },
+            { name: 'Contacts', href: '/whatsapp/contacts', icon: <Users className="w-4 h-4" /> },
+            { name: 'Broadcast', href: '/whatsapp/broadcast', icon: <Megaphone className="w-4 h-4" /> },
+            { name: 'Templates', href: '/whatsapp/templates', icon: <FileText className="w-4 h-4" /> },
+            { name: 'Payments', href: '/whatsapp/payments', icon: <CreditCard className="w-4 h-4" /> },
+            { name: 'Ad Campaigns', href: '/whatsapp/ad-campaigns', icon: <Target className="w-4 h-4" /> },
+            { name: 'Analytics', href: '/whatsapp/analytics', icon: <BarChart3 className="w-4 h-4" /> },
+            { name: 'Settings', href: '/whatsapp/settings', icon: <Settings className="w-4 h-4" /> },
+        ],
+    },
+    // --- Archive --- (divider after 15)
+    // 16
     {
         name: 'Archive',
         icon: <CalendarDays className="w-5 h-5" />,
@@ -107,8 +128,8 @@ const navItems: NavItem[] = [
             { name: 'Low Wallet', href: '/notifications/low-wallet', icon: <Wallet className="w-4 h-4" /> },
         ],
     },
-    // --- Admin --- (divider after 15)
-    // 16-17
+    // --- Admin --- (divider after 16)
+    // 17-18
     { name: 'Admin Users', href: '/admin-users', icon: <Users className="w-5 h-5" /> },
     { name: 'Roles & Permissions', href: '/roles', icon: <Settings className="w-5 h-5" /> },
     // --- CMS --- (Payload, mounted at /admin via Next route group (payload))
@@ -141,7 +162,7 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'dashboard', 'users', 'drivers', 'orders', 'products', 'categories',
     'subcategories', 'delivery-list', 'delivery-report', 'transactions',
     'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
-    'admin-users', 'roles', 'production-delivery', 'cms',
+    'admin-users', 'roles', 'production-delivery', 'cms', 'whatsapp',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
@@ -364,7 +385,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                     </Link>
                                 )}
                                 {/* Section dividers */}
-                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 10 || index === 11 || index === 14 || index === 15) && (
+                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 10 || index === 11 || index === 14 || index === 15 || index === 16) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>

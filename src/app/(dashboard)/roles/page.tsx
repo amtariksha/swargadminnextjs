@@ -28,6 +28,12 @@ const AVAILABLE_PERMISSIONS = [
     // CMS — Payload admin mounted at /admin. Gates the Topbar
     // Operations↔CMS toggle AND the Sidebar "CMS" entry.
     { key: 'cms', label: 'CMS', icon: '🌐' },
+    // WhatsApp CRM — merged-in WACRM section under /whatsapp/**.
+    // Granting this exposes the WhatsApp section in the Sidebar (Inbox,
+    // Contacts, Broadcast, Templates, Payments, Ad Campaigns, Analytics,
+    // Settings). Full-access roles (empty permissions array) automatically
+    // see this entry too. Default: ON for super-admin, OFF for other roles.
+    { key: 'whatsapp', label: 'WhatsApp', icon: '💬' },
     // Driver-facing page: granting only this permission lets the user
     // log in and reach `/production-delivery` (Routewise / Packing /
     // Dairy Pickup tabs) — and nothing else.
