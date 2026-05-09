@@ -6,6 +6,13 @@ const nextConfig: NextConfig = {
   // because withPayload injects a webpack config. See payloadcms/payload#14354.
   turbopack: {},
 
+  // drizzle-kit is normally a dev-only dep, but the /api/dev/push-schema
+  // route loads it at runtime via Payload's adapter to apply schema diffs
+  // in production (Payload's pushDevSchema is hardcoded to skip when
+  // NODE_ENV === 'production'). Keep it out of the bundle and load it
+  // from node_modules at runtime instead.
+  serverExternalPackages: ['drizzle-kit'],
+
   // Legacy-path compatibility for the WACRM merge.
   //
   // External services (Meta WhatsApp Cloud API, MSG91, Razorpay, Facebook
