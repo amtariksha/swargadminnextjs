@@ -8,7 +8,7 @@ import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { inputClassName } from '@/components/FormField';
 import { Plus, Package, Eye, Image as ImageIcon } from 'lucide-react';
-import { POST } from '@/lib/api';
+import { POST, ApiError } from '@/lib/api';
 import { IMAGE_BASE_URL } from '@/config/tenant';
 import { toast } from 'sonner';
 
@@ -23,7 +23,10 @@ export default function ProductsPage() {
         try {
             await POST('/update_product', { id: product.id, is_active: product.is_active ? 0 : 1 });
             refetch();
-        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to update'); }
+        } catch (error) {
+            toast.error(error instanceof ApiError ? error.userMessage
+                : (error instanceof Error ? error.message : 'Failed to update'));
+        }
     };
 
     const handleQuickUpdate = async () => {
@@ -37,7 +40,10 @@ export default function ProductsPage() {
             toast.success('Updated');
             setQuickEditModal(null);
             refetch();
-        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to update'); }
+        } catch (error) {
+            toast.error(error instanceof ApiError ? error.userMessage
+                : (error instanceof Error ? error.message : 'Failed to update'));
+        }
         finally { setIsSubmitting(false); }
     };
 

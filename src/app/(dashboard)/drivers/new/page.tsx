@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { POST } from '@/lib/api';
+import { POST, ApiError } from '@/lib/api';
 import { ArrowLeft, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -36,7 +36,10 @@ export default function AddDriverPage() {
             router.push('/drivers');
         } catch (error) {
             console.error('Failed to add driver:', error);
-            toast.error(error instanceof Error ? error.message : 'Failed to add driver');
+            const msg = error instanceof ApiError
+                ? error.userMessage
+                : (error instanceof Error ? error.message : 'Failed to add driver');
+            toast.error(msg);
         } finally {
             setIsSubmitting(false);
         }

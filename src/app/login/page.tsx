@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { BRANDING } from '@/config/tenant';
 import { LogIn, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { ApiError } from '@/lib/api';
 
 export default function LoginPage() {
     const { login } = useAuth();
@@ -21,7 +22,10 @@ export default function LoginPage() {
         try {
             await login(email, password);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Login failed');
+            const msg = err instanceof ApiError
+                ? err.userMessage
+                : (err instanceof Error ? err.message : 'Login failed');
+            setError(msg);
         } finally {
             setIsLoading(false);
         }
