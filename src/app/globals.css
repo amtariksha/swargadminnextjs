@@ -251,3 +251,129 @@ html:not(.dark) ::-webkit-scrollbar-thumb {
         transform: rotate(360deg);
     }
 }
+
+/* ────────────────────────────────────────────────────────────────────
+ * WhatsApp section — theme alignment with admin panel
+ *
+ * WACRM-derived components were built light-by-default with bg-white,
+ * bg-slate-50/100, text-slate-700/800/900 and an emerald accent. The
+ * admin panel runs slate/purple, dark-by-default. Rather than rewrite
+ * every component, we scope a set of overrides under `.whatsapp-shell`
+ * (added in src/app/(dashboard)/whatsapp/layout.tsx).
+ *
+ * Two layers:
+ *  1. Dark-mode overrides — flip light backgrounds → slate-900/950, dark
+ *     text → light, light borders → slate-700/800. So the section
+ *     respects the admin panel's dark-by-default mode.
+ *  2. Accent recolor (both modes) — emerald primary → purple, matching
+ *     admin panel's purple/pink palette. Reds/ambers/greens for
+ *     status / destructive / success stay untouched.
+ *
+ * The admin panel's existing `html:not(.dark)` rules (which flip
+ * slate-900 → slate-50 etc.) handle light mode automatically because
+ * after layer 1 our components reference the slate-dark utilities.
+ * ──────────────────────────────────────────────────────────────────── */
+
+/* ── Layer 1: dark-mode background/text/border flip ─────────────── */
+html.dark .whatsapp-shell .bg-white {
+    background-color: rgb(15 23 42) !important; /* slate-900 */
+}
+html.dark .whatsapp-shell .bg-slate-50 {
+    background-color: rgb(2 6 23) !important; /* slate-950 */
+}
+html.dark .whatsapp-shell .bg-slate-100 {
+    background-color: rgb(30 41 59) !important; /* slate-800 */
+}
+html.dark .whatsapp-shell .bg-slate-50\/60,
+html.dark .whatsapp-shell .bg-slate-50\/80 {
+    background-color: rgba(2, 6, 23, 0.6) !important;
+}
+html.dark .whatsapp-shell .bg-slate-100\/50,
+html.dark .whatsapp-shell .bg-slate-100\/60 {
+    background-color: rgba(30, 41, 59, 0.5) !important;
+}
+
+html.dark .whatsapp-shell .text-slate-900 {
+    color: rgb(248 250 252) !important; /* slate-50 */
+}
+html.dark .whatsapp-shell .text-slate-800 {
+    color: rgb(241 245 249) !important; /* slate-100 */
+}
+html.dark .whatsapp-shell .text-slate-700 {
+    color: rgb(226 232 240) !important; /* slate-200 */
+}
+html.dark .whatsapp-shell .text-slate-600 {
+    color: rgb(203 213 225) !important; /* slate-300 */
+}
+html.dark .whatsapp-shell .text-slate-500 {
+    color: rgb(148 163 184) !important; /* slate-400 */
+}
+html.dark .whatsapp-shell .text-slate-400 {
+    color: rgb(100 116 139) !important; /* slate-500 */
+}
+
+html.dark .whatsapp-shell .border-slate-100 {
+    border-color: rgb(30 41 59) !important; /* slate-800 */
+}
+html.dark .whatsapp-shell .border-slate-200 {
+    border-color: rgb(51 65 85) !important; /* slate-700 */
+}
+html.dark .whatsapp-shell .border-slate-300 {
+    border-color: rgb(71 85 105) !important; /* slate-600 */
+}
+
+/* Inputs default to white in WACRM; in dark mode flip the surface. */
+html.dark .whatsapp-shell input,
+html.dark .whatsapp-shell select,
+html.dark .whatsapp-shell textarea {
+    background-color: rgb(15 23 42); /* slate-900 */
+    color: rgb(241 245 249); /* slate-100 */
+    border-color: rgb(51 65 85); /* slate-700 */
+}
+html.dark .whatsapp-shell input::placeholder,
+html.dark .whatsapp-shell textarea::placeholder {
+    color: rgb(100 116 139); /* slate-500 */
+}
+
+/* Hover variants used by chat list items, contact rows, table rows. */
+html.dark .whatsapp-shell .hover\:bg-slate-50:hover,
+html.dark .whatsapp-shell .hover\:bg-slate-50\/50:hover {
+    background-color: rgba(30, 41, 59, 0.5) !important;
+}
+html.dark .whatsapp-shell .hover\:bg-slate-100:hover {
+    background-color: rgb(30 41 59) !important; /* slate-800 */
+}
+
+/* Soft tinted info backgrounds (badges, alert strips) — preserve hue
+   but bump contrast for dark surface. */
+html.dark .whatsapp-shell .bg-purple-50 { background-color: rgba(168, 85, 247, 0.12) !important; }
+html.dark .whatsapp-shell .bg-blue-50   { background-color: rgba(59, 130, 246, 0.15) !important; }
+html.dark .whatsapp-shell .bg-amber-50  { background-color: rgba(245, 158, 11, 0.12) !important; }
+html.dark .whatsapp-shell .bg-red-50    { background-color: rgba(239, 68, 68, 0.12) !important; }
+
+/* ── Layer 2: emerald → purple accent (both modes) ──────────────── */
+.whatsapp-shell .bg-emerald-600 { background-color: rgb(147 51 234) !important; } /* purple-600 */
+.whatsapp-shell .bg-emerald-500 { background-color: rgb(168 85 247) !important; } /* purple-500 */
+.whatsapp-shell .bg-emerald-100 { background-color: rgba(168, 85, 247, 0.15) !important; }
+.whatsapp-shell .bg-emerald-50  { background-color: rgba(168, 85, 247, 0.08) !important; }
+.whatsapp-shell .hover\:bg-emerald-700:hover { background-color: rgb(126 34 206) !important; } /* purple-700 */
+.whatsapp-shell .hover\:bg-emerald-600:hover { background-color: rgb(147 51 234) !important; }
+.whatsapp-shell .hover\:bg-emerald-50:hover  { background-color: rgba(168, 85, 247, 0.08) !important; }
+.whatsapp-shell .border-emerald-500 { border-color: rgb(168 85 247) !important; }
+.whatsapp-shell .border-emerald-200 { border-color: rgba(168, 85, 247, 0.3) !important; }
+.whatsapp-shell .text-emerald-600 { color: rgb(168 85 247) !important; }
+.whatsapp-shell .text-emerald-700 { color: rgb(147 51 234) !important; }
+.whatsapp-shell .text-emerald-500 { color: rgb(192 132 252) !important; } /* purple-400 */
+.whatsapp-shell .text-emerald-800 { color: rgb(126 34 206) !important; }
+.whatsapp-shell .focus\:ring-emerald-500:focus { --tw-ring-color: rgb(168 85 247) !important; }
+.whatsapp-shell .focus\:border-emerald-500:focus { border-color: rgb(168 85 247) !important; }
+.whatsapp-shell .ring-emerald-500 { --tw-ring-color: rgb(168 85 247) !important; }
+
+/* In dark mode, brighten emerald-as-purple text/borders for contrast. */
+html.dark .whatsapp-shell .text-emerald-600,
+html.dark .whatsapp-shell .text-emerald-700 {
+    color: rgb(216 180 254) !important; /* purple-300 */
+}
+html.dark .whatsapp-shell .border-emerald-200 {
+    border-color: rgba(168, 85, 247, 0.4) !important;
+}

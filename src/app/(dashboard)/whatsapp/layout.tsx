@@ -20,7 +20,18 @@ export default function WhatsappSectionLayout({
 }) {
     return (
         <TooltipProvider delayDuration={200}>
-            <div className="-m-4 lg:-m-6 h-[calc(100vh-64px)] flex flex-col">
+            {/*
+              The `.whatsapp-shell` class is the scope hook for the dark-mode
+              overrides in src/app/globals.css. WACRM-derived components were
+              built light-by-default (bg-white / bg-slate-50 / emerald
+              accents); the global rules under `html.dark .whatsapp-shell ...`
+              flip those classes so this section blends with the admin
+              panel's slate/purple dark theme — and inversely respects the
+              admin panel's existing `html:not(.dark)` overrides for light
+              mode. Without this class WhatsApp pages stay light-themed even
+              when the rest of the admin is dark.
+            */}
+            <div className="whatsapp-shell -m-4 lg:-m-6 h-[calc(100vh-64px)] flex flex-col">
                 {children}
             </div>
         </TooltipProvider>
