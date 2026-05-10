@@ -39,7 +39,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" data-theme="dark">
       <body className={`${inter.className} bg-slate-950 text-white dark:bg-slate-950 dark:text-white antialiased transition-colors duration-200`}>
         <QueryProvider>
           <AuthProvider>
