@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { useProducts, Product } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import { QueryError } from '@/components/QueryError';
 import { inputClassName } from '@/components/FormField';
 import { Plus, Package, Eye, Image as ImageIcon } from 'lucide-react';
 import { POST, ApiError } from '@/lib/api';
@@ -15,7 +16,7 @@ import { toast } from 'sonner';
 import { formatApiDate } from '@/lib/dateUtils';
 export default function ProductsPage() {
     const router = useRouter();
-    const { data: products = [], isLoading, refetch } = useProducts();
+    const { data: products = [], isLoading, isError, error, refetch } = useProducts();
     const [quickEditModal, setQuickEditModal] = useState<{ product: Product; type: 'preferences' | 'stock_qty'; value: string } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -152,9 +153,18 @@ export default function ProductsPage() {
                 </div>
             </div>
 
-            <DataTable data={products} columns={columns} loading={isLoading} pageSize={50}
-                searchPlaceholder="Search products..."
-                onRowClick={(item) => router.push(`/products/${item.id}`)} />
+            {isError ? (
+                <QueryError
+                    error={error}
+                    onRetry={() => refetch()}
+                    title="Could not load products"
+                    variant="card"
+                />
+            ) : (
+                <DataTable data={products} columns={columns} loading={isLoading} pageSize={50}
+                    searchPlaceholder="Search products..."
+                    onRowClick={(item) => router.push(`/products/${item.id}`)} />
+            )}
 
             {/* Quick Edit Modal (Preferences / Stock) */}
             {quickEditModal && (
