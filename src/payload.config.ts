@@ -1,4 +1,5 @@
 import { postgresAdapter } from '@payloadcms/db-postgres'
+import { resendAdapter } from '@payloadcms/email-resend'
 import sharp from 'sharp'
 import path from 'path'
 import { buildConfig, PayloadRequest } from 'payload'
@@ -120,6 +121,25 @@ export default buildConfig({
   plugins,
   secret: process.env.PAYLOAD_SECRET || 'default-secret-change-me',
   sharp,
+  // Email adapter. Replaces the WP "Gmail SMTP" plugin. When RESEND_API_KEY
+  // is unset (local dev / preview), Payload silently falls back to its
+  // "console" adapter and prints email bodies to stdout instead of sending.
+  // Generate the key at https://resend.com/api-keys and verify the sending
+  // domain (DNS records — SPF + DKIM — provided in the Resend dashboard).
+  ...(process.env.RESEND_API_KEY
+    ? {
+        email: resendAdapter({
+          apiKey: process.env.RESEND_API_KEY,
+          defaultFromAddress: process.env.EMAIL_FROM || 'orders@swargfood.com',
+          defaultFromName: process.env.EMAIL_FROM_NAME || 'Swarg Food',
+          // Set EMAIL_OVERRIDE_TO=<your-test-inbox> on preview/staging to
+          // redirect ALL emails to one inbox instead of real customers.
+          ...(process.env.EMAIL_OVERRIDE_TO
+            ? { overrideRecipientAddress: process.env.EMAIL_OVERRIDE_TO }
+            : {}),
+        }),
+      }
+    : {}),
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },

@@ -14,6 +14,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@payloadcms/admin-bar": "^3.84.1",
     "@payloadcms/db-postgres": "^3.84.1",
+    "@payloadcms/email-resend": "^3.84.1",
     "@payloadcms/live-preview-react": "^3.84.1",
     "@payloadcms/next": "^3.84.1",
     "@payloadcms/plugin-form-builder": "^3.84.1",
