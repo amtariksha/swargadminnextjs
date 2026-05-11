@@ -3,6 +3,7 @@ import { nestedDocsPlugin } from '@payloadcms/plugin-nested-docs'
 import { redirectsPlugin } from '@payloadcms/plugin-redirects'
 import { seoPlugin } from '@payloadcms/plugin-seo'
 import { searchPlugin } from '@payloadcms/plugin-search'
+import { vercelBlobStorage } from '@payloadcms/storage-vercel-blob'
 import { Plugin } from 'payload'
 import { revalidateRedirects } from '@/hooks/revalidateRedirects'
 import { GenerateTitle, GenerateURL } from '@payloadcms/plugin-seo/types'
@@ -88,5 +89,17 @@ export const plugins: Plugin[] = [
         return [...defaultFields, ...searchFields]
       },
     },
+  }),
+  // Vercel Blob storage for the Media collection. Required because Vercel's
+  // serverless filesystem is read-only — Payload's default disk-staticDir
+  // adapter throws 500 on every upload. When BLOB_READ_WRITE_TOKEN is unset
+  // (local dev), the plugin disables itself and Payload falls back to the
+  // disk adapter, which works locally.
+  vercelBlobStorage({
+    enabled: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+    token: process.env.BLOB_READ_WRITE_TOKEN,
+    collections: { media: true },
+    // Suffix uploads to avoid filename collisions across many WP attachments.
+    addRandomSuffix: true,
   }),
 ]
