@@ -42,6 +42,8 @@ const AVAILABLE_PERMISSIONS = [
     // Payload UI for new.swargfood.com). Verified by the JWT auth strategy
     // in src/payload/strategies/jwtAuth.ts.
     { key: 'payload_admin', label: 'Payload CMS Admin', icon: '🛠️' },
+    // Product Sync UI — links MySQL ops products with Payload web products.
+    { key: 'product-sync', label: 'Product Sync', icon: '🔗' },
 ];
 
 export default function RolesPage() {

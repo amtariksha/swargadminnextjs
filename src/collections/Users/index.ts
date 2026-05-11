@@ -21,6 +21,11 @@ export const Users: CollectionConfig = {
     // swarg_admin_token cookie) into Payload. Payload's local email/password
     // strategy stays enabled as a bootstrap fallback.
     strategies: [swargJwtStrategy],
+    // Enables per-user API keys for server-to-server calls (e.g. the
+    // swargnodejsbackend stock-sync helper). Generate a key in the admin
+    // UI by editing a service-account user → "Enable API Key" → save →
+    // copy the revealed key once. Header format: `users API-Key <token>`.
+    useAPIKey: true,
   },
   fields: [
     {
