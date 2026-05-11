@@ -20,6 +20,12 @@ export interface PayloadProduct {
   stockQty?: number
   inStock?: boolean
   stockStatus?: string
+  price?: number
+  mrp?: number
+  salePrice?: number
+  displayWeight?: string
+  weight?: number
+  isActive?: boolean
   lastSyncedAt?: string | null
 }
 
@@ -76,6 +82,20 @@ interface SyncStockArgs {
   stockQty: number
 }
 
+export interface SyncFieldsArgs {
+  payloadProductId: number
+  /** New stock count. */
+  stockQty?: number
+  /** Sale price (MySQL `price`). */
+  price?: number
+  /** MRP (MySQL `mrp`). */
+  mrp?: number
+  /** Display weight string (MySQL `qty_text`). */
+  displayWeight?: string
+  /** Active flag (MySQL `is_active`). */
+  isActive?: boolean
+}
+
 /**
  * Mutation: update a Payload product's `mysqlProductId` (link/unlink) or
  * `stockQty` + `lastSyncedAt` (sync). Both go through Payload's REST PATCH
@@ -117,6 +137,34 @@ export function useSyncStockToPayload() {
         stockStatus: stockQty > 0 ? 'in_stock' : 'out_of_stock',
         lastSyncedAt: new Date().toISOString(),
       })
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['payload-products'] }),
+  })
+}
+
+/**
+ * Pushes multiple MySQL-side fields to Payload in one PATCH. Only the
+ * fields included in `args` are sent — undefined keys are omitted.
+ * Always stamps `lastSyncedAt` on success.
+ */
+export function useSyncFieldsToPayload() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (args: SyncFieldsArgs) => {
+      const body: Record<string, unknown> = {
+        lastSyncedAt: new Date().toISOString(),
+      }
+      if (args.stockQty !== undefined) {
+        body.stockQty = args.stockQty
+        body.inStock = args.stockQty > 0
+        body.stockStatus = args.stockQty > 0 ? 'in_stock' : 'out_of_stock'
+      }
+      if (args.price !== undefined) body.price = args.price
+      if (args.mrp !== undefined) body.mrp = args.mrp
+      if (args.displayWeight !== undefined) body.displayWeight = args.displayWeight
+      if (args.isActive !== undefined) body.isActive = args.isActive
+
+      await patchPayloadProduct(args.payloadProductId, body)
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['payload-products'] }),
   })

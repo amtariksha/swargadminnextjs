@@ -23,8 +23,9 @@ import { useProducts, type Product as MysqlProduct } from '@/hooks/useData'
 import {
   usePayloadProducts,
   useLinkPayloadProduct,
-  useSyncStockToPayload,
+  useSyncFieldsToPayload,
   type PayloadProduct,
+  type SyncFieldsArgs,
 } from '@/hooks/usePayloadProducts'
 
 type Row = {
@@ -53,11 +54,48 @@ const findBestMatch = (
   )
 }
 
+/** Build the full set of MySQL → Payload field mappings for a sync push. */
+function buildSyncPayload(mp: MysqlProduct, payloadProductId: number): SyncFieldsArgs {
+  return {
+    payloadProductId,
+    stockQty: mp.stock_qty ?? 0,
+    price: mp.price,
+    mrp: mp.mrp,
+    displayWeight: mp.qty_text ?? undefined,
+    isActive: mp.is_active ? Boolean(mp.is_active) : false,
+  }
+}
+
+/** Compact MySQL ↔ Payload diff for one field — for the inline cell badge. */
+function FieldCompare({
+  mysql,
+  payload,
+  format,
+}: {
+  mysql: string | number | boolean | undefined | null
+  payload: string | number | boolean | undefined | null
+  format?: (v: string | number | boolean | null | undefined) => string
+}) {
+  const fmt = format ?? ((v) => (v == null || v === '' ? '—' : String(v)))
+  const m = fmt(mysql)
+  const p = fmt(payload)
+  const match = m === p
+  return (
+    <div className="text-xs leading-tight">
+      <div className="text-white">{m}</div>
+      <div className={match ? 'text-slate-500' : 'text-amber-400'}>
+        ↳ {p}
+        {!match && <span className="ml-1">•</span>}
+      </div>
+    </div>
+  )
+}
+
 export default function ProductSyncPage() {
   const { data: mysqlProducts = [], isLoading: msLoading } = useProducts()
   const { data: payloadProducts = [], isLoading: pLoading, refetch } = usePayloadProducts()
   const linkMutation = useLinkPayloadProduct()
-  const syncMutation = useSyncStockToPayload()
+  const syncMutation = useSyncFieldsToPayload()
 
   const [filter, setFilter] = useState('')
   const [hideLinked, setHideLinked] = useState(false)
@@ -120,17 +158,14 @@ export default function ProductSyncPage() {
     }
   }
 
-  const handleSyncStock = async (row: Row) => {
+  const handleSyncRow = async (row: Row) => {
     if (!row.linked) {
       toast.error('Not linked yet')
       return
     }
     try {
-      await syncMutation.mutateAsync({
-        payloadProductId: row.linked.id,
-        stockQty: row.mp.stock_qty ?? 0,
-      })
-      toast.success(`Stock pushed: ${row.mp.stock_qty ?? 0}`)
+      await syncMutation.mutateAsync(buildSyncPayload(row.mp, row.linked.id))
+      toast.success(`Synced "${row.mp.title}"`)
     } catch (e) {
       toast.error((e as Error).message || 'Sync failed')
     }
@@ -159,7 +194,7 @@ export default function ProductSyncPage() {
     else toast.success(`Linked ${ok} product(s) by title`)
   }
 
-  // Bulk: push stock for every linked product.
+  // Bulk: push stock + price + mrp + qty + active for every linked product.
   const handleSyncAllStock = async () => {
     setBusy(true)
     let ok = 0
@@ -167,10 +202,7 @@ export default function ProductSyncPage() {
     for (const r of rows) {
       if (!r.linked) continue
       try {
-        await syncMutation.mutateAsync({
-          payloadProductId: r.linked.id,
-          stockQty: r.mp.stock_qty ?? 0,
-        })
+        await syncMutation.mutateAsync(buildSyncPayload(r.mp, r.linked.id))
         ok += 1
       } catch {
         fail += 1
@@ -179,7 +211,7 @@ export default function ProductSyncPage() {
     setBusy(false)
     await refetch()
     if (fail > 0) toast.warning(`Pushed ${ok}, failed ${fail}`)
-    else toast.success(`Pushed stock for ${ok} product(s)`)
+    else toast.success(`Pushed all fields for ${ok} product(s)`)
   }
 
   return (
@@ -204,10 +236,11 @@ export default function ProductSyncPage() {
           <button
             onClick={handleSyncAllStock}
             disabled={busy || linkedCount === 0}
+            title="Push stock, price, MRP, qty/weight, and active flag from MySQL → Payload for every linked product"
             className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl text-sm font-medium hover:from-indigo-600 hover:to-purple-600 disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${busy ? 'animate-spin' : ''}`} />
-            Push stock to Payload ({linkedCount} linked)
+            Sync all fields ({linkedCount} linked)
           </button>
         </div>
       </div>
@@ -248,101 +281,141 @@ export default function ProductSyncPage() {
           <div className="p-8 text-center text-slate-400">No products match the filter.</div>
         ) : (
           <table className="w-full text-sm">
-            <thead className="text-left text-slate-400 border-b border-slate-700/50">
+            <thead className="text-left text-slate-400 border-b border-slate-700/50 text-xs uppercase tracking-wider">
               <tr>
                 <th className="p-3 font-medium">MySQL product</th>
-                <th className="p-3 font-medium text-right">Stock</th>
                 <th className="p-3 font-medium">Payload product</th>
-                <th className="p-3 font-medium text-right">Payload stock</th>
+                <th className="p-3 font-medium text-right">Stock</th>
+                <th className="p-3 font-medium text-right">Price</th>
+                <th className="p-3 font-medium text-right">MRP</th>
+                <th className="p-3 font-medium">Qty / weight</th>
+                <th className="p-3 font-medium">Active</th>
                 <th className="p-3 font-medium">Last sync</th>
                 <th className="p-3 font-medium text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {visibleRows.map((r) => (
-                <tr key={r.mp.id} className="border-b border-slate-800/50 hover:bg-slate-800/20">
-                  <td className="p-3">
-                    <div className="text-white">{r.mp.title}</div>
-                    <div className="text-xs text-slate-500">id={r.mp.id}</div>
-                  </td>
-                  <td className="p-3 text-right text-white">{r.mp.stock_qty ?? '—'}</td>
-                  <td className="p-3">
-                    {r.linked ? (
-                      <div className="flex items-center gap-2">
-                        <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                        <span className="text-white">{r.linked.title}</span>
-                        <span className="text-xs text-slate-500">id={r.linked.id}</span>
+              {visibleRows.map((r) => {
+                const mpActive = r.mp.is_active ? Boolean(r.mp.is_active) : false
+                return (
+                  <tr key={r.mp.id} className="border-b border-slate-800/50 hover:bg-slate-800/20 align-top">
+                    {/* MySQL product cell */}
+                    <td className="p-3">
+                      <div className="text-white">{r.mp.title}</div>
+                      <div className="text-xs text-slate-500">
+                        id={r.mp.id}
+                        {r.mp.cat_title && ` · ${r.mp.cat_title}`}
+                        {r.mp.sub_cat_title && ` › ${r.mp.sub_cat_title}`}
                       </div>
-                    ) : r.suggestion ? (
-                      <div className="flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
-                        <span className="text-amber-200">{r.suggestion.title}</span>
-                        <span className="text-xs text-amber-500/70">(suggested)</span>
-                      </div>
-                    ) : (
-                      <select
-                        className="bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-xs text-white max-w-[260px]"
-                        defaultValue=""
-                        onChange={(e) => {
-                          const id = parseInt(e.target.value, 10)
-                          if (Number.isFinite(id)) {
-                            void handleLink(r.mp.id, id)
-                          }
-                        }}
-                      >
-                        <option value="" disabled>
-                          — pick a Payload product —
-                        </option>
-                        {unlinkedPayload.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.title}
+                    </td>
+                    {/* Payload product cell (linked / suggested / picker) */}
+                    <td className="p-3">
+                      {r.linked ? (
+                        <div className="flex items-center gap-2">
+                          <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                          <div>
+                            <div className="text-white">{r.linked.title}</div>
+                            <div className="text-xs text-slate-500">id={r.linked.id}</div>
+                          </div>
+                        </div>
+                      ) : r.suggestion ? (
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                          <div>
+                            <div className="text-amber-200">{r.suggestion.title}</div>
+                            <div className="text-xs text-amber-500/70">suggested</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <select
+                          className="bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-xs text-white max-w-[220px]"
+                          defaultValue=""
+                          onChange={(e) => {
+                            const id = parseInt(e.target.value, 10)
+                            if (Number.isFinite(id)) {
+                              void handleLink(r.mp.id, id)
+                            }
+                          }}
+                        >
+                          <option value="" disabled>
+                            — pick a Payload product —
                           </option>
-                        ))}
-                      </select>
-                    )}
-                  </td>
-                  <td className="p-3 text-right text-white">
-                    {r.linked?.stockQty ?? '—'}
-                  </td>
-                  <td className="p-3 text-xs text-slate-500">
-                    {r.linked?.lastSyncedAt
-                      ? new Date(r.linked.lastSyncedAt).toLocaleString()
-                      : '—'}
-                  </td>
-                  <td className="p-3 text-right space-x-1 whitespace-nowrap">
-                    {r.linked ? (
-                      <>
+                          {unlinkedPayload.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.title}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </td>
+                    {/* Field comparisons (MySQL value → Payload value) */}
+                    <td className="p-3 text-right">
+                      <FieldCompare mysql={r.mp.stock_qty} payload={r.linked?.stockQty} />
+                    </td>
+                    <td className="p-3 text-right">
+                      <FieldCompare
+                        mysql={r.mp.price}
+                        payload={r.linked?.price}
+                        format={(v) => (v == null ? '—' : `₹${v}`)}
+                      />
+                    </td>
+                    <td className="p-3 text-right">
+                      <FieldCompare
+                        mysql={r.mp.mrp}
+                        payload={r.linked?.mrp}
+                        format={(v) => (v == null ? '—' : `₹${v}`)}
+                      />
+                    </td>
+                    <td className="p-3">
+                      <FieldCompare mysql={r.mp.qty_text} payload={r.linked?.displayWeight} />
+                    </td>
+                    <td className="p-3">
+                      <FieldCompare
+                        mysql={mpActive}
+                        payload={r.linked?.isActive}
+                        format={(v) => (v ? 'yes' : 'no')}
+                      />
+                    </td>
+                    <td className="p-3 text-xs text-slate-500 whitespace-nowrap">
+                      {r.linked?.lastSyncedAt
+                        ? new Date(r.linked.lastSyncedAt).toLocaleString()
+                        : '—'}
+                    </td>
+                    <td className="p-3 text-right space-x-1 whitespace-nowrap">
+                      {r.linked ? (
+                        <>
+                          <button
+                            onClick={() => handleSyncRow(r)}
+                            disabled={syncMutation.isPending}
+                            title="Push all MySQL fields to Payload (stock, price, MRP, qty, active)"
+                            className="px-2 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded text-xs hover:bg-indigo-500/30 disabled:opacity-50"
+                          >
+                            Sync now
+                          </button>
+                          <button
+                            onClick={() => handleUnlink(r.linked!.id)}
+                            disabled={linkMutation.isPending}
+                            title="Unlink"
+                            className="px-2 py-1 bg-slate-700/50 text-slate-300 border border-slate-600/50 rounded text-xs hover:bg-slate-700 disabled:opacity-50"
+                          >
+                            <X className="w-3 h-3 inline" />
+                          </button>
+                        </>
+                      ) : r.suggestion ? (
                         <button
-                          onClick={() => handleSyncStock(r)}
-                          disabled={syncMutation.isPending}
-                          title="Push MySQL stock to Payload"
-                          className="px-2 py-1 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded text-xs hover:bg-indigo-500/30 disabled:opacity-50"
-                        >
-                          Sync stock
-                        </button>
-                        <button
-                          onClick={() => handleUnlink(r.linked!.id)}
+                          onClick={() => handleLink(r.mp.id, r.suggestion!.id)}
                           disabled={linkMutation.isPending}
-                          title="Unlink"
-                          className="px-2 py-1 bg-slate-700/50 text-slate-300 border border-slate-600/50 rounded text-xs hover:bg-slate-700 disabled:opacity-50"
+                          className="px-2 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded text-xs hover:bg-amber-500/30 disabled:opacity-50"
                         >
-                          <X className="w-3 h-3 inline" />
+                          Accept link
                         </button>
-                      </>
-                    ) : r.suggestion ? (
-                      <button
-                        onClick={() => handleLink(r.mp.id, r.suggestion!.id)}
-                        disabled={linkMutation.isPending}
-                        className="px-2 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded text-xs hover:bg-amber-500/30 disabled:opacity-50"
-                      >
-                        Accept link
-                      </button>
-                    ) : (
-                      <span className="text-xs text-slate-500">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                      ) : (
+                        <span className="text-xs text-slate-500">—</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         )}
