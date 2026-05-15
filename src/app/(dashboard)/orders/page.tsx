@@ -6,7 +6,7 @@ import { format, addDays } from 'date-fns';
 import { GET } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 import DataTable, { Column } from '@/components/DataTable';
-import { Plus, Eye, Download, Image as ImageIcon } from 'lucide-react';
+import { Plus, Eye, Download, Image as ImageIcon, Search as SearchIcon, X as XIcon } from 'lucide-react';
 import { IMAGE_BASE_URL } from '@/config/tenant';
 
 import { formatApiDate } from '@/lib/dateUtils';
@@ -76,13 +76,46 @@ export default function OrdersPage() {
         localStorage.setItem('filters-orders', JSON.stringify(filters));
     }, [filters]);
 
-    const { data: orders = [], isLoading } = useQuery({
-        queryKey: ['orders-all'],
+    // Server-side search. The backend's GET /get_order has a default
+    // 180-day window — orders older than that aren't in the response.
+    // When the search box has content, fire a separate query that hits
+    // /get_order?search=<q>: the backend bypasses the 180-day cap and
+    // matches across order id, transaction id, customer name, customer
+    // phone, shipping name, and shipping phone (LIKE %q% for the strings).
+    // Results are capped at 100 rows server-side.
+    const [searchInput, setSearchInput] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+
+    // 300ms debounce so the API isn't hit on every keystroke
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 300);
+        return () => clearTimeout(t);
+    }, [searchInput]);
+
+    const isSearchActive = debouncedSearch.length > 0;
+
+    const { data: defaultOrders = [], isLoading: defaultLoading } = useQuery({
+        queryKey: ['orders-default'],
         queryFn: async () => {
             const response = await GET<OrderRow[]>('/get_order');
             return response.data || [];
         },
+        // Don't run the (heavier) default query while the operator is
+        // actively searching — saves bandwidth + a 180-day fetch.
+        enabled: !isSearchActive,
     });
+
+    const { data: searchOrders = [], isLoading: searchLoading, isFetching: searchFetching } = useQuery({
+        queryKey: ['orders-search', debouncedSearch],
+        queryFn: async () => {
+            const response = await GET<OrderRow[]>(`/get_order?search=${encodeURIComponent(debouncedSearch)}`);
+            return response.data || [];
+        },
+        enabled: isSearchActive,
+    });
+
+    const orders = isSearchActive ? searchOrders : defaultOrders;
+    const isLoading = isSearchActive ? (searchLoading || searchFetching) : defaultLoading;
 
     const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
 
@@ -211,6 +244,44 @@ export default function OrdersPage() {
                 </div>
             </div>
 
+            {/* Search bar — server-side, matches across order id, transaction id,
+                customer name, customer phone, shipping name + phone.
+                Bypasses the 180-day default window so old orders are reachable. */}
+            <div className="glass rounded-xl p-4 space-y-2">
+                <div className="relative">
+                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <input
+                        type="text"
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        placeholder="Search by order ID, transaction ID, customer name, or phone number"
+                        aria-label="Search orders"
+                        className="w-full pl-9 pr-9 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                    />
+                    {searchInput && (
+                        <button
+                            type="button"
+                            onClick={() => setSearchInput('')}
+                            aria-label="Clear search"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-slate-700/50"
+                        >
+                            <XIcon className="w-4 h-4 text-slate-400" />
+                        </button>
+                    )}
+                </div>
+                <p className="text-xs text-slate-500">
+                    {isSearchActive ? (
+                        <>
+                            Searching across <span className="text-slate-300">order ID, transaction ID, customer name, customer phone, shipping name, shipping phone</span>.
+                            Search bypasses the 180-day window and returns up to 100 matches.
+                            {!isLoading && <> Found <span className="text-slate-300">{orders.length}</span> match{orders.length === 1 ? '' : 'es'} for &quot;{debouncedSearch}&quot;.</>}
+                        </>
+                    ) : (
+                        <>Showing orders from the last 180 days. Type any of: <span className="text-slate-300">order ID, transaction ID, customer name, customer phone</span> to search the entire orders table.</>
+                    )}
+                </p>
+            </div>
+
             {/* Filters */}
             <div className="glass rounded-xl p-4">
                 <div className="flex flex-wrap gap-x-6 gap-y-2">
@@ -225,9 +296,12 @@ export default function OrdersPage() {
                 </div>
             </div>
 
-            {/* Table */}
+            {/* Table — DataTable's built-in search is disabled because the
+                search above is server-side and bypasses the 180-day cap.
+                Keeping the table's internal search would silently filter
+                the loaded set and confuse the operator. */}
             <DataTable data={filteredOrders} columns={columns} loading={isLoading} pageSize={50}
-                searchPlaceholder="Search orders..."
+                searchable={false}
                 onRowClick={(o) => router.push(`/orders/${o.id}`)} />
         </div>
     );
