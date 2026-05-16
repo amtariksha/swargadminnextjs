@@ -44,7 +44,11 @@ export default function CreateOrderPage() {
 
     const [userSearch, setUserSearch] = useState('');
     const [productSearch, setProductSearch] = useState('');
-    const [selectedDays, setSelectedDays] = useState<number[]>([]);
+    // Weekly per-day quantities, keyed by dayCode (0=Sun..6=Sat — JS
+    // Date.getDay() convention, matches the delivery cron). A day is
+    // "selected" iff its dayCode is a key here. Replicates the old admin
+    // panel's per-day quantity steppers (swarg-admin-node/NewOrder.jsx).
+    const [weeklyQty, setWeeklyQty] = useState<Record<number, number>>({});
 
     const createOrder = useCreateOrder();
     const addTxn = useAddTransaction();
@@ -121,6 +125,12 @@ export default function CreateOrderPage() {
 
     const onSubmit = async (data: OrderFormData) => {
         try {
+            // Weekly orders must have at least one delivery day picked.
+            if (data.subscription_type === 2 && Object.keys(weeklyQty).length === 0) {
+                toast.error('Select at least one delivery day for a weekly order.');
+                return;
+            }
+
             // For Pay Now (type 3): check wallet balance first
             if (data.order_type === 3) {
                 const user = users.find((u) => u.id === data.user_id);
@@ -158,6 +168,12 @@ export default function CreateOrderPage() {
             // generator default the per-day qty to 1 — orders 27286 + 27482
             // were created this way and under-delivered.
             const isWeekly = subscriptionType === 2;
+            // Canonical weekly schedule: [{dayCode, qty}] with the operator's
+            // per-day quantity from the steppers. dayCode order doesn't
+            // matter to the generator; sort ascending for tidy storage.
+            const weeklyEntries = Object.entries(weeklyQty)
+                .map(([dc, q]) => ({ dayCode: Number(dc), qty: q }))
+                .sort((a, b) => a.dayCode - b.dayCode);
             const orderData: Record<string, unknown> = {
                 ...data,
                 qty: isWeekly ? 1 : data.qty,
@@ -167,7 +183,7 @@ export default function CreateOrderPage() {
                 tax: selectedProduct?.tax || 0,
                 payment_mode: 1,
                 selected_days_for_weekly: isWeekly
-                    ? JSON.stringify(selectedDays.map((d) => ({ dayCode: d, qty: data.qty })))
+                    ? JSON.stringify(weeklyEntries)
                     : undefined,
                 trasation_id: transactionId,
             };
@@ -331,25 +347,71 @@ export default function CreateOrderPage() {
                     </div>
                 )}
 
-                {/* Weekly Day Picker */}
+                {/* Weekly Day Picker + per-day quantity (replicates the old
+                    admin panel's "Set Per Day Quantity" steppers). Toggle a
+                    day on/off; each selected day carries its own quantity. */}
                 {subscriptionType === 2 && (
                     <div>
                         <label className="block text-sm font-medium text-slate-300 mb-2">Delivery Days</label>
-                        <div className="flex gap-2">
-                            {DAY_LABELS.map((day, i) => (
-                                <button key={day} type="button"
-                                    onClick={() => setSelectedDays((prev) =>
-                                        prev.includes(i) ? prev.filter((d) => d !== i) : [...prev, i]
-                                    )}
-                                    className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                        selectedDays.includes(i)
-                                            ? 'bg-purple-600 text-white'
-                                            : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'
-                                    }`}>
-                                    {day}
-                                </button>
-                            ))}
+                        <div className="flex gap-2 flex-wrap">
+                            {DAY_LABELS.map((day, i) => {
+                                const isSelected = i in weeklyQty;
+                                return (
+                                    <button key={day} type="button"
+                                        onClick={() => setWeeklyQty((prev) => {
+                                            const next = { ...prev };
+                                            if (i in next) {
+                                                delete next[i];           // toggle off
+                                            } else {
+                                                next[i] = 1;              // toggle on — default qty 1
+                                            }
+                                            return next;
+                                        })}
+                                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                            isSelected
+                                                ? 'bg-purple-600 text-white'
+                                                : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'
+                                        }`}>
+                                        {day}
+                                    </button>
+                                );
+                            })}
                         </div>
+
+                        {/* Per-day quantity steppers for each selected day */}
+                        {Object.keys(weeklyQty).length > 0 && (
+                            <div className="mt-4 space-y-2">
+                                <p className="text-xs text-slate-500">Quantity per delivery day</p>
+                                {DAY_LABELS.map((day, i) => {
+                                    if (!(i in weeklyQty)) return null;
+                                    const q = weeklyQty[i];
+                                    return (
+                                        <div key={day} className="flex items-center justify-between bg-slate-800/40 rounded-lg px-3 py-2">
+                                            <span className="text-sm font-medium text-slate-300">{day}</span>
+                                            <div className="flex items-center gap-3">
+                                                <button type="button"
+                                                    aria-label={`Decrease ${day} quantity`}
+                                                    onClick={() => setWeeklyQty((prev) => ({
+                                                        ...prev, [i]: Math.max(1, (prev[i] || 1) - 1),
+                                                    }))}
+                                                    className="w-7 h-7 flex items-center justify-center rounded-md border border-slate-600 text-slate-300 hover:bg-slate-700">
+                                                    −
+                                                </button>
+                                                <span className="w-8 text-center text-sm font-semibold text-white">{q}</span>
+                                                <button type="button"
+                                                    aria-label={`Increase ${day} quantity`}
+                                                    onClick={() => setWeeklyQty((prev) => ({
+                                                        ...prev, [i]: (prev[i] || 1) + 1,
+                                                    }))}
+                                                    className="w-7 h-7 flex items-center justify-center rounded-md border border-emerald-600 text-emerald-400 hover:bg-slate-700">
+                                                    +
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 )}
 
