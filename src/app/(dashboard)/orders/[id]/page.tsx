@@ -107,7 +107,7 @@ export default function OrderDetailPage() {
         } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to remove driver'); }
     };
 
-    // Parse weekly delivery days into a Set of DAY_LABELS indices.
+    // Parse weekly delivery days into a label→qty map.
     //
     // dayCode follows JS Date.getDay() — 0=Sun, 1=Mon, …, 6=Sat. The
     // shared `parseWeeklyDays` helper accepts every shape the column has
@@ -115,12 +115,12 @@ export default function OrderDetailPage() {
     //
     // DAY_LABELS = ['M','T','W','TH','F','S','SU'] starts at Monday, so
     // the mapping is `labelIndex = dayCode === 0 ? 6 : dayCode - 1`.
-    const weeklyActiveLabels: Set<string> = (() => {
+    const weeklyDayQty: Map<string, number> = (() => {
         const entries = parseWeeklyDays(orderData?.selected_days_for_weekly);
-        const out = new Set<string>();
-        for (const { dayCode } of entries) {
+        const out = new Map<string, number>();
+        for (const { dayCode, qty } of entries) {
             const idx = dayCode === 0 ? 6 : dayCode - 1;
-            if (idx >= 0 && idx < DAY_LABELS.length) out.add(DAY_LABELS[idx]);
+            if (idx >= 0 && idx < DAY_LABELS.length) out.set(DAY_LABELS[idx], qty);
         }
         return out;
     })();
@@ -191,21 +191,23 @@ export default function OrderDetailPage() {
                     </div>
                 </div>
 
-                {/* Weekly Days Display */}
+                {/* Weekly Days Display — each active day shows its per-day qty */}
                 {subType === 2 && (
                     <div className="mb-6">
-                        <p className="text-xs text-slate-500 mb-2">Weekly Delivery Days</p>
-                        <div className="flex gap-2">
+                        <p className="text-xs text-slate-500 mb-2">Weekly Delivery Days &amp; Quantity</p>
+                        <div className="flex gap-2 flex-wrap">
                             {DAY_LABELS.map((day) => {
-                                const isActive = weeklyActiveLabels.has(day);
+                                const qty = weeklyDayQty.get(day);
+                                const isActive = qty !== undefined;
                                 return (
-                                    <span key={day} className={`w-9 h-9 flex items-center justify-center rounded-lg text-xs font-bold ${isActive ? 'bg-purple-500/30 text-purple-300 border border-purple-500/50' : 'bg-slate-800/30 text-slate-600'}`}>
-                                        {day}
+                                    <span key={day} className={`flex flex-col items-center justify-center rounded-lg px-2.5 py-1.5 ${isActive ? 'bg-purple-500/30 text-purple-200 border border-purple-500/50' : 'bg-slate-800/30 text-slate-600'}`}>
+                                        <span className="text-xs font-bold">{day}</span>
+                                        <span className="text-[11px] font-medium">{isActive ? `×${qty}` : '—'}</span>
                                     </span>
                                 );
                             })}
                         </div>
-                        {weeklyActiveLabels.size === 0 && (
+                        {weeklyDayQty.size === 0 && (
                             <p className="text-xs text-slate-500 mt-2 italic">No delivery days set on this order.</p>
                         )}
                     </div>
