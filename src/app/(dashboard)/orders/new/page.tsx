@@ -92,9 +92,16 @@ export default function CreateOrderPage() {
         }
     }, [selectedProduct?.id]);
 
-    const orderAmount = selectedProduct
-        ? Math.round((selectedProduct.price + selectedProduct.price * (selectedProduct.tax || 0) / 100) * qty * 100) / 100
+    // Per-unit price incl. tax.
+    const unitAmount = selectedProduct
+        ? Math.round((selectedProduct.price + selectedProduct.price * (selectedProduct.tax || 0) / 100) * 100) / 100
         : 0;
+    // Weekly subscriptions (subscription_type=2) store order_amount as the
+    // PER-UNIT price — the per-day quantity lives inside
+    // selected_days_for_weekly and the delivery generator multiplies
+    // (required = order_amount × per_day_qty). For every other order type,
+    // order_amount is the full per-delivery total (unit × qty).
+    const orderAmount = subscriptionType === 2 ? unitAmount : unitAmount * qty;
 
     const filteredUsers = useMemo(
         () => userSearch.length >= 2
@@ -138,14 +145,30 @@ export default function CreateOrderPage() {
                 transactionId = (txnResult as any)?.id || (txnResult as any)?.data?.id || null;
             }
 
+            // Weekly subscriptions follow a specific storage contract shared
+            // with the customer app + Laravel (225 of 227 existing weekly
+            // orders use it; the delivery generator + delivery-mark depend
+            // on it):
+            //   - selected_days_for_weekly: canonical [{dayCode, qty}] — the
+            //     operator-entered quantity becomes the per-day qty.
+            //   - orders.qty: always 1 (the real quantity is per-day in the
+            //     JSON; delivery-mark computes unitPrice = order_amount/qty,
+            //     which only works when qty = 1 and order_amount = per-unit).
+            // Writing a flat-int array [0,1,3,4,5] (the prior bug) made the
+            // generator default the per-day qty to 1 — orders 27286 + 27482
+            // were created this way and under-delivered.
+            const isWeekly = subscriptionType === 2;
             const orderData: Record<string, unknown> = {
                 ...data,
+                qty: isWeekly ? 1 : data.qty,
                 order_amount: orderAmount,
                 price: selectedProduct?.price,
                 mrp: selectedProduct?.mrp || selectedProduct?.price,
                 tax: selectedProduct?.tax || 0,
                 payment_mode: 1,
-                selected_days_for_weekly: subscriptionType === 2 ? JSON.stringify(selectedDays) : undefined,
+                selected_days_for_weekly: isWeekly
+                    ? JSON.stringify(selectedDays.map((d) => ({ dayCode: d, qty: data.qty })))
+                    : undefined,
                 trasation_id: transactionId,
             };
 
