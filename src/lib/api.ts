@@ -1,6 +1,13 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import { getApiUrl } from '@/config/tenant';
 import { ApiError, apiErrorFromResponse, parseApiError } from './api-error';
+import {
+    encryptPayload,
+    decryptPayload,
+    isEncryptionEnabled,
+    ENCRYPTED_REQUEST_HEADER,
+    ENCRYPTED_RESPONSE_HEADER,
+} from './encryption';
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
@@ -30,6 +37,58 @@ apiClient.interceptors.request.use(
     },
     (error) => Promise.reject(error)
 );
+
+// Request interceptor — AES-256-GCM encrypts the body when the env flags
+// are set. Auth header stays in plaintext (only the body is encrypted).
+// Backend's encryptionMiddleware (swargnodejsbackend@74e1fcb) handles
+// both encrypted and plain requests, so this is safe to enable
+// independently from the backend rollout. Flag-OFF defaults mean
+// builds without the env vars set are byte-identical to today.
+apiClient.interceptors.request.use(async (config) => {
+    if (!isEncryptionEnabled()) return config;
+    if (config.data === undefined || config.data === null) return config;
+
+    try {
+        const encrypted = await encryptPayload(config.data);
+        config.data = encrypted;
+        config.headers['Content-Type'] = 'text/plain';
+        config.headers[ENCRYPTED_REQUEST_HEADER] = 'true';
+        // Tell axios not to JSON.stringify our already-encrypted string.
+        config.transformRequest = [(data) => data];
+    } catch (err) {
+        if (process.env.NODE_ENV === 'development') {
+            console.warn('[api encrypt] failed; sending plain JSON:', err);
+        }
+        // Don't fail the request — server middleware tolerates plain JSON.
+    }
+    return config;
+});
+
+// Response interceptor — decrypt encrypted responses BEFORE the
+// error-handling interceptor below runs, so error-parsing sees the
+// real shape, not Base64 gibberish.
+apiClient.interceptors.response.use(async (response) => {
+    if (!isEncryptionEnabled()) return response;
+    const isEncrypted =
+        response.headers[ENCRYPTED_RESPONSE_HEADER.toLowerCase()] === 'true' ||
+        response.headers[ENCRYPTED_RESPONSE_HEADER] === 'true';
+    if (!isEncrypted) return response;
+    if (typeof response.data !== 'string') return response;
+
+    try {
+        response.data = await decryptPayload(response.data);
+    } catch (err) {
+        if (process.env.NODE_ENV === 'development') {
+            console.warn('[api decrypt] failed; trying plain JSON:', err);
+        }
+        try {
+            response.data = JSON.parse(response.data);
+        } catch {
+            /* leave as-is */
+        }
+    }
+    return response;
+});
 
 /**
  * Response interceptor for error handling.

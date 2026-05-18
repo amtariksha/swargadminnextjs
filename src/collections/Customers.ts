@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { authenticated } from '../access/authenticated'
 
 export const Customers: CollectionConfig = {
   slug: 'customers',
@@ -8,8 +9,16 @@ export const Customers: CollectionConfig = {
     defaultColumns: ['name', 'phone', 'email', 'zone', 'createdAt'],
     group: 'Commerce',
   },
+  // Customer records contain PII (phone, email, addresses). The previous
+  // `read: () => true` left them readable by anonymous callers via the
+  // Payload REST API — that's a leak. Tightened to authenticated-only.
+  // Role-based scoping (admin vs operator) is a separate feature; the
+  // codebase doesn't have role hierarchy yet.
   access: {
-    read: () => true, // TODO: restrict
+    create: authenticated,
+    read: authenticated,
+    update: authenticated,
+    delete: authenticated,
   },
   fields: [
     { name: 'phone', type: 'text', unique: true, required: true, index: true },

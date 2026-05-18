@@ -85,7 +85,9 @@ export default function DashboardPage() {
         { label: 'Delivery List', href: '/delivery-list', icon: TruckIcon },
         { label: 'Users', href: '/users', icon: Users },
         { label: 'Orders', href: '/orders', icon: ShoppingCart },
-        { label: 'Packing List', href: '/packing-list', icon: Package },
+        // 'Packing List' removed in admin cleanup — was a separate route that
+        // redirected to /delivery-list. The Packing List tab inside
+        // /delivery-list already serves that view.
         { label: 'Calendar', href: '/calendar', icon: CalendarCheck },
     ];
 

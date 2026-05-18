@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { authenticated } from '../access/authenticated'
 
 export const Orders: CollectionConfig = {
   slug: 'orders',
@@ -8,8 +9,16 @@ export const Orders: CollectionConfig = {
     defaultColumns: ['orderNumber', 'status', 'total', 'paymentMethod', 'createdAt'],
     group: 'Commerce',
   },
+  // Order records contain PII + payment metadata. Previously
+  // `read: () => true` left them readable by anonymous callers via the
+  // Payload REST API. Tightened to authenticated-only. Per-user scoping
+  // ("admin sees all; customer sees own") is a future enhancement once
+  // role hierarchy exists in the Users collection.
   access: {
-    read: () => true, // TODO: restrict to admin + order owner
+    create: authenticated,
+    read: authenticated,
+    update: authenticated,
+    delete: authenticated,
   },
   fields: [
     {
