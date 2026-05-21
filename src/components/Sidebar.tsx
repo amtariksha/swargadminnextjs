@@ -43,6 +43,8 @@ import {
     Warehouse,
     Boxes,
     BookText,
+    Factory,
+    Trash2,
 } from 'lucide-react';
 
 interface NavItem {
@@ -169,6 +171,20 @@ const navItems: NavItem[] = [
             { name: 'Vendor Payments', href: '/inventory/payments', icon: <Banknote className="w-4 h-4" /> },
             { name: 'Vendor Ledger', href: '/inventory/ledger', icon: <BookText className="w-4 h-4" /> },
             { name: 'Purchase Report', href: '/inventory/report', icon: <BarChart3 className="w-4 h-4" /> },
+        ],
+    },
+    // --- Production --- (no divider — same block as Inventory)
+    // 22
+    {
+        name: 'Production',
+        icon: <Factory className="w-5 h-5" />,
+        permissionKey: 'production',
+        children: [
+            { name: 'Intermediates', href: '/production/intermediates', icon: <Boxes className="w-4 h-4" /> },
+            { name: 'Recipes', href: '/production/recipes', icon: <FileText className="w-4 h-4" /> },
+            { name: 'Production Records', href: '/production/runs', icon: <ClipboardList className="w-4 h-4" /> },
+            { name: 'Write-offs', href: '/production/writeoffs', icon: <Trash2 className="w-4 h-4" /> },
+            { name: 'Reports', href: '/production/reports', icon: <BarChart3 className="w-4 h-4" /> },
         ],
     },
 ];

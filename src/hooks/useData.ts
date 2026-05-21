@@ -95,6 +95,9 @@ export interface Product {
     preferences?: number;
     qty_text?: string;
     stock_qty?: number;
+    // Feature 16 — manufactured-product linkage (null for bought-and-resold SKUs).
+    source_intermediate_id?: number | null;
+    pack_volume?: number | null;
     sub_cat_id?: number;
     price: number;
     mrp?: number;
