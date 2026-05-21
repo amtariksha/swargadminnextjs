@@ -63,6 +63,9 @@ const AVAILABLE_PERMISSIONS = [
     // Drop Points (Feature 03) — truck-route drop-point management + driver
     // assignment.
     { key: 'drop-points', label: 'Drop Points', icon: '📍' },
+    // Broadcast (Feature 09) — the admin broadcast composer. The notification
+    // image library stays under the existing `notifications` key.
+    { key: 'broadcast', label: 'Broadcast Notifications', icon: '📢' },
 ];
 
 export default function RolesPage() {
