@@ -12,6 +12,7 @@ import {
 import DataTable, { Column } from '@/components/DataTable';
 import TabPanel from '@/components/TabPanel';
 import Modal from '@/components/Modal';
+import RefundModal from '@/components/RefundModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { inputClassName, selectClassName } from '@/components/FormField';
 import {
@@ -124,17 +125,6 @@ export default function UserDetailPage() {
         } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to add transaction'); }
     };
 
-    const handleRefund = async () => {
-        if (!showRefundModal) return;
-        try {
-            await addTxnMutation.mutateAsync({
-                user_id: showRefundModal.user_id, payment_id: showRefundModal.payment_id || '',
-                amount: showRefundModal.amount, type: 1, description: 'Refund',
-            });
-            toast.success('Refund processed');
-            setShowRefundModal(null);
-        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to process refund'); }
-    };
 
     const handleSaveAddress = async () => {
         try {
@@ -473,19 +463,12 @@ export default function UserDetailPage() {
             </Modal>
 
             {/* Refund Modal */}
-            <Modal isOpen={!!showRefundModal} onClose={() => setShowRefundModal(null)} title="Process Refund">
-                {showRefundModal && (
-                    <div className="space-y-4">
-                        <p className="text-sm text-slate-400">Refund for transaction #{showRefundModal.id}</p>
-                        <div><label className="block text-sm text-slate-300 mb-1">Amount</label><input type="number" value={showRefundModal.amount} disabled className={inputClassName} /></div>
-                        <div><label className="block text-sm text-slate-300 mb-1">Type</label><input value="Credit (Refund)" disabled className={inputClassName} /></div>
-                        <div className="flex gap-3">
-                            <button onClick={() => setShowRefundModal(null)} className="flex-1 px-4 py-2.5 text-sm text-slate-300 bg-slate-800/50 rounded-xl">Cancel</button>
-                            <button onClick={handleRefund} disabled={addTxnMutation.isPending} className="flex-1 px-4 py-2.5 text-sm text-white bg-green-600 rounded-xl disabled:opacity-50">{addTxnMutation.isPending ? 'Processing...' : 'Confirm Refund'}</button>
-                        </div>
-                    </div>
-                )}
-            </Modal>
+            {showRefundModal && (
+                <RefundModal
+                    transaction={showRefundModal}
+                    onClose={() => setShowRefundModal(null)}
+                />
+            )}
 
             {/* Address Modal */}
             <Modal isOpen={showAddressModal} onClose={() => { setShowAddressModal(false); setEditAddress(null); }} title={editAddress ? 'Edit Address' : 'Add Address'}>

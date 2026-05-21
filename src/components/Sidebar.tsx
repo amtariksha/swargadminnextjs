@@ -39,6 +39,7 @@ import {
     Inbox,
     Megaphone,
     Target,
+    RotateCcw,
 } from 'lucide-react';
 
 interface NavItem {
@@ -76,8 +77,10 @@ const navItems: NavItem[] = [
     // 9-10
     { name: 'Orders', href: '/orders', icon: <ShoppingCart className="w-5 h-5" /> },
     { name: 'Transactions', href: '/transactions', icon: <CreditCard className="w-5 h-5" /> },
-    // --- Settings --- (divider after 10)
     // 11
+    { name: 'Refunds', href: '/refunds', icon: <RotateCcw className="w-5 h-5" />, permissionKey: 'refunds' },
+    // --- Settings --- (divider after 11)
+    // 12
     {
         name: 'Settings',
         icon: <Settings className="w-5 h-5" />,
@@ -87,6 +90,7 @@ const navItems: NavItem[] = [
             { name: 'Invoice', href: '/settings/invoice', icon: <Receipt className="w-4 h-4" /> },
             { name: 'Payment Gateway', href: '/settings/payment', icon: <Banknote className="w-4 h-4" /> },
             { name: 'Social Media', href: '/settings/social-media', icon: <Share2 className="w-4 h-4" /> },
+            { name: 'Refund Reasons', href: '/settings/refund-reasons', icon: <RotateCcw className="w-4 h-4" />, permissionKey: 'refunds' },
             { name: 'Banners', href: '/banners', icon: <Image className="w-4 h-4" /> },
             { name: 'Testimonials', href: '/testimonials', icon: <MessageSquare className="w-4 h-4" /> },
             { name: 'Pages', href: '/pages', icon: <FileText className="w-4 h-4" /> },
@@ -166,7 +170,7 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'subcategories', 'delivery-list', 'delivery-report', 'transactions',
     'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
     'admin-users', 'roles', 'production-delivery', 'cms', 'whatsapp',
-    'product-sync',
+    'product-sync', 'refunds',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
@@ -389,7 +393,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                     </Link>
                                 )}
                                 {/* Section dividers */}
-                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 10 || index === 11 || index === 14 || index === 15 || index === 16) && (
+                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 11 || index === 12 || index === 15 || index === 16 || index === 17) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>
