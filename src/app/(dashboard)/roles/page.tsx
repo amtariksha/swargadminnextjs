@@ -44,6 +44,10 @@ const AVAILABLE_PERMISSIONS = [
     { key: 'payload_admin', label: 'Payload CMS Admin', icon: '🛠️' },
     // Product Sync UI — links MySQL ops products with Payload web products.
     { key: 'product-sync', label: 'Product Sync', icon: '🔗' },
+    // Inventory (Feature 11) — vendors, raw materials, purchases, ledger.
+    { key: 'inventory', label: 'Inventory', icon: '🏬' },
+    // Production (Feature 16) — intermediates, recipes, production records.
+    { key: 'production', label: 'Production', icon: '🏭' },
 ];
 
 export default function RolesPage() {
