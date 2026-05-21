@@ -128,6 +128,9 @@ export interface Product {
     // Feature 16 — manufactured-product linkage (null for bought-and-resold SKUs).
     source_intermediate_id?: number | null;
     pack_volume?: number | null;
+    // Feature 07 — returnable packaging linkage.
+    is_returnable_packaging?: number;
+    packaging_type_id?: number | null;
     sub_cat_id?: number;
     price: number;
     mrp?: number;
@@ -1630,5 +1633,160 @@ export function useAddDriverDeduction() {
 export function useEmailPayslip() {
     return useMutation({
         mutationFn: async (id: number) => POST(`/payroll/payslip/${id}/email`, {}),
+    });
+}
+
+// ==========================================
+// Feature 07 — Returnable packaging
+// ==========================================
+
+export interface PackagingType {
+    id: number;
+    name: string;
+    refund_amount: number;
+    is_active: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export type RefundMode = 'auto' | 'manual';
+
+export type ReturnStatus =
+    | 'requested'
+    | 'picked_up_last_mile'
+    | 'picked_up_truck'
+    | 'pending_approval'
+    | 'refunded'
+    | 'cancelled';
+
+export interface PackagingReturn {
+    id: number;
+    user_id: number;
+    packaging_type_id: number;
+    packaging_type_name: string;
+    qty: number;
+    status: ReturnStatus;
+    origin: string;
+    product_id: number | null;
+    requested_at: string | null;
+    pickup_date: string | null;
+    last_mile_pickup_at: string | null;
+    pickup_photo_url: string | null;
+    drop_point_id: number | null;
+    truck_pickup_at: string | null;
+    refund_amount: number | null;
+    refunded_at: string | null;
+    customer_name: string | null;
+    customer_phone: string | null;
+}
+
+export interface ReturnsResponse {
+    rows: PackagingReturn[];
+    refund_mode: RefundMode;
+}
+
+export function usePackagingTypes(activeOnly = false) {
+    return useQuery({
+        queryKey: ['packaging-types', activeOnly],
+        queryFn: async () => {
+            const response = await GET<PackagingType[]>(
+                `/get_packaging_types${activeOnly ? '?active=1' : ''}`
+            );
+            return response.data || [];
+        },
+    });
+}
+
+export function useCreatePackagingType() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST('/add_packaging_type', data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['packaging-types'] });
+        },
+    });
+}
+
+export function useUpdatePackagingType() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST('/update_packaging_type', data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['packaging-types'] });
+        },
+    });
+}
+
+export function useDeletePackagingType() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST('/delete_packaging_type', data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['packaging-types'] });
+        },
+    });
+}
+
+export function useReturns(status?: string) {
+    return useQuery({
+        queryKey: ['packaging-returns', status ?? ''],
+        queryFn: async () => {
+            const response = await GET<PackagingReturn[]>(
+                `/packaging/returns${status ? `?status=${status}` : ''}`
+            );
+            // The endpoint returns { data: [...], refund_mode } — `data` is the
+            // row array, refund_mode rides alongside on the envelope.
+            const envelope = response as { data: PackagingReturn[]; refund_mode?: RefundMode };
+            return {
+                rows: envelope.data || [],
+                refund_mode: envelope.refund_mode ?? 'manual',
+            } as ReturnsResponse;
+        },
+    });
+}
+
+export function useApproveReturn() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST<{ refund_amount: number; new_wallet_balance: number }>(
+                '/packaging/returns/approve',
+                data
+            );
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['packaging-returns'] });
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+            queryClient.invalidateQueries({ queryKey: ['transactions'] });
+        },
+    });
+}
+
+export function useRefundMode() {
+    return useQuery({
+        queryKey: ['packaging-refund-mode'],
+        queryFn: async () => {
+            const response = await GET<{ mode: RefundMode }>('/packaging/refund_mode');
+            return response.data?.mode ?? 'manual';
+        },
+    });
+}
+
+export function useSetRefundMode() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (mode: RefundMode) => {
+            return POST('/packaging/refund_mode', { mode });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['packaging-refund-mode'] });
+            queryClient.invalidateQueries({ queryKey: ['packaging-returns'] });
+        },
     });
 }

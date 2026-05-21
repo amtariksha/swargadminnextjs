@@ -5,7 +5,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useProduct, useSubcategories, useUpdateProduct, useUploadProductImage, useDeleteProductImage } from '@/hooks/useData';
+import { useProduct, useSubcategories, useUpdateProduct, useUploadProductImage, useDeleteProductImage, usePackagingTypes } from '@/hooks/useData';
 import { useIntermediates } from '@/hooks/useProduction';
 import FormField, { inputClassName, selectClassName, textareaClassName } from '@/components/FormField';
 import ImageUpload from '@/components/ImageUpload';
@@ -34,6 +34,9 @@ const productSchema = z.object({
     is_manufactured: z.boolean().optional(),
     source_intermediate_id: z.string().optional(),
     pack_volume: z.string().optional(),
+    // Feature 07 — returnable packaging linkage.
+    is_returnable_packaging: z.boolean().optional(),
+    packaging_type_id: z.string().optional(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -44,6 +47,7 @@ export default function EditProductPage() {
     const { data: product, isLoading } = useProduct(id);
     const { data: subcategories = [] } = useSubcategories();
     const { data: intermediates = [] } = useIntermediates();
+    const { data: packagingTypes = [] } = usePackagingTypes(true);
     const updateProduct = useUpdateProduct();
     const uploadImage = useUploadProductImage();
     const deleteImage = useDeleteProductImage();
@@ -55,6 +59,7 @@ export default function EditProductPage() {
         resolver: zodResolver(productSchema),
     });
     const isManufactured = !!watch('is_manufactured');
+    const isReturnablePackaging = !!watch('is_returnable_packaging');
 
     useEffect(() => {
         if (product) {
@@ -75,6 +80,8 @@ export default function EditProductPage() {
                 is_manufactured: product.source_intermediate_id != null,
                 source_intermediate_id: product.source_intermediate_id != null ? String(product.source_intermediate_id) : '',
                 pack_volume: product.pack_volume != null ? String(product.pack_volume) : '',
+                is_returnable_packaging: !!product.is_returnable_packaging,
+                packaging_type_id: product.packaging_type_id != null ? String(product.packaging_type_id) : '',
             });
         }
     }, [product, reset]);
@@ -85,12 +92,19 @@ export default function EditProductPage() {
             toast.error('Select a source intermediate and pack volume for a manufactured product');
             return;
         }
+        const returnablePackaging = !!data.is_returnable_packaging;
+        if (returnablePackaging && !data.packaging_type_id) {
+            toast.error('Select a packaging container type for a returnable-packaging product');
+            return;
+        }
         try {
             const payload = {
                 id: Number(id),
                 ...data,
                 source_intermediate_id: manufactured && data.source_intermediate_id ? Number(data.source_intermediate_id) : null,
                 pack_volume: manufactured && data.pack_volume ? parseFloat(data.pack_volume) : null,
+                is_returnable_packaging: returnablePackaging ? 1 : 0,
+                packaging_type_id: returnablePackaging && data.packaging_type_id ? Number(data.packaging_type_id) : null,
             };
             await updateProduct.mutateAsync(payload as unknown as Record<string, unknown>);
             toast.success('Product updated successfully');
@@ -247,6 +261,24 @@ export default function EditProductPage() {
                                     <input {...register('pack_volume')} type="number" step="0.001" min="0" className={inputClassName} placeholder="e.g., 200, 500" />
                                 </FormField>
                             </div>
+                        )}
+                    </div>
+
+                    {/* Feature 07 — returnable packaging linkage */}
+                    <div className="border-t border-slate-800/50 pt-4 space-y-4">
+                        <label className="flex items-center gap-2 text-sm text-slate-300">
+                            <input type="checkbox" {...register('is_returnable_packaging')} />
+                            Returnable packaging — ships in a glass bottle / container the customer can return
+                        </label>
+                        {isReturnablePackaging && (
+                            <FormField label="Packaging Container Type" required>
+                                <select {...register('packaging_type_id')} className={selectClassName}>
+                                    <option value="">Select packaging type</option>
+                                    {packagingTypes.map((pt) => (
+                                        <option key={pt.id} value={pt.id}>{pt.name}</option>
+                                    ))}
+                                </select>
+                            </FormField>
                         )}
                     </div>
 

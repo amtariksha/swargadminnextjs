@@ -23,6 +23,9 @@ const AVAILABLE_PERMISSIONS = [
     { key: 'refunds', label: 'Refunds', icon: '💸' },
     // Payroll — driver salary master + monthly payslip generation.
     { key: 'payroll', label: 'Payroll', icon: '🧾' },
+    // Returnable Packaging (Feature 07) — packaging-type CRUD + the
+    // Returns & Refunds approval surface.
+    { key: 'packaging', label: 'Returnable Packaging', icon: '📦' },
     { key: 'banners', label: 'Banners', icon: '🖼️' },
     { key: 'testimonials', label: 'Testimonials', icon: '⭐' },
     { key: 'pincodes', label: 'Pincodes', icon: '📍' },

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useSubcategories, useCreateProduct, useUploadProductImage } from '@/hooks/useData';
+import { useSubcategories, useCreateProduct, useUploadProductImage, usePackagingTypes } from '@/hooks/useData';
 import { useIntermediates } from '@/hooks/useProduction';
 import FormField, { inputClassName, selectClassName, textareaClassName } from '@/components/FormField';
 import ImageUpload from '@/components/ImageUpload';
@@ -26,6 +26,9 @@ const productSchema = z.object({
     offer_text: z.string().optional(),
     description: z.string().optional(),
     disclaimer: z.string().optional(),
+    // Feature 07 — returnable packaging linkage.
+    is_returnable_packaging: z.boolean().optional(),
+    packaging_type_id: z.string().optional(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -44,14 +47,22 @@ export default function AddProductPage() {
     const [sourceIntermediateId, setSourceIntermediateId] = useState('');
     const [packVolume, setPackVolume] = useState('');
 
-    const { register, handleSubmit, formState: { errors } } = useForm<ProductFormData>({
+    // Feature 07 — returnable packaging linkage.
+    const { data: packagingTypes = [] } = usePackagingTypes(true);
+
+    const { register, handleSubmit, watch, formState: { errors } } = useForm<ProductFormData>({
         resolver: zodResolver(productSchema),
-        defaultValues: { tax: 0, stock_qty: 100, preferences: 0, subscription: 1, is_active: 1, price: 0, mrp: 0 },
+        defaultValues: { tax: 0, stock_qty: 100, preferences: 0, subscription: 1, is_active: 1, price: 0, mrp: 0, is_returnable_packaging: false, packaging_type_id: '' },
     });
+    const isReturnablePackaging = !!watch('is_returnable_packaging');
 
     const onSubmit = async (data: ProductFormData) => {
         if (isManufactured && (!sourceIntermediateId || !packVolume)) {
             toast.error('Select a source intermediate and pack volume for a manufactured product');
+            return;
+        }
+        if (data.is_returnable_packaging && !data.packaging_type_id) {
+            toast.error('Select a packaging container type for a returnable-packaging product');
             return;
         }
         try {
@@ -59,6 +70,8 @@ export default function AddProductPage() {
                 ...data,
                 source_intermediate_id: isManufactured && sourceIntermediateId ? Number(sourceIntermediateId) : null,
                 pack_volume: isManufactured && packVolume ? parseFloat(packVolume) : null,
+                is_returnable_packaging: data.is_returnable_packaging ? 1 : 0,
+                packaging_type_id: data.is_returnable_packaging && data.packaging_type_id ? Number(data.packaging_type_id) : null,
             };
             const result = await createProduct.mutateAsync(payload as unknown as Record<string, unknown>);
             // Backend returns id at top level: { response: 200, id: 123 }
@@ -163,6 +176,24 @@ export default function AddProductPage() {
                                     placeholder="e.g., 200, 500" />
                             </FormField>
                         </div>
+                    )}
+                </div>
+
+                {/* Feature 07 — returnable packaging linkage */}
+                <div className="border-t border-slate-800/50 pt-4 space-y-4">
+                    <label className="flex items-center gap-2 text-sm text-slate-300">
+                        <input type="checkbox" {...register('is_returnable_packaging')} />
+                        Returnable packaging — ships in a glass bottle / container the customer can return
+                    </label>
+                    {isReturnablePackaging && (
+                        <FormField label="Packaging Container Type" required>
+                            <select {...register('packaging_type_id')} className={selectClassName}>
+                                <option value="">Select packaging type</option>
+                                {packagingTypes.map((pt) => (
+                                    <option key={pt.id} value={pt.id}>{pt.name}</option>
+                                ))}
+                            </select>
+                        </FormField>
                     )}
                 </div>
 
