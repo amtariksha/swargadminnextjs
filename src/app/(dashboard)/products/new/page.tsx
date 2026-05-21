@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useSubcategories, useCreateProduct, useUploadProductImage } from '@/hooks/useData';
+import { useIntermediates } from '@/hooks/useProduction';
 import FormField, { inputClassName, selectClassName, textareaClassName } from '@/components/FormField';
 import ImageUpload from '@/components/ImageUpload';
 import { ArrowLeft, Save } from 'lucide-react';
@@ -36,14 +37,30 @@ export default function AddProductPage() {
     const uploadImage = useUploadProductImage();
     const [imageFile, setImageFile] = useState<File | null>(null);
 
+    // Feature 16 — manufactured (packed) product linkage. Managed outside
+    // react-hook-form so an empty number input never trips Zod's NaN check.
+    const { data: intermediates = [] } = useIntermediates();
+    const [isManufactured, setIsManufactured] = useState(false);
+    const [sourceIntermediateId, setSourceIntermediateId] = useState('');
+    const [packVolume, setPackVolume] = useState('');
+
     const { register, handleSubmit, formState: { errors } } = useForm<ProductFormData>({
         resolver: zodResolver(productSchema),
         defaultValues: { tax: 0, stock_qty: 100, preferences: 0, subscription: 1, is_active: 1, price: 0, mrp: 0 },
     });
 
     const onSubmit = async (data: ProductFormData) => {
+        if (isManufactured && (!sourceIntermediateId || !packVolume)) {
+            toast.error('Select a source intermediate and pack volume for a manufactured product');
+            return;
+        }
         try {
-            const result = await createProduct.mutateAsync(data as unknown as Record<string, unknown>);
+            const payload = {
+                ...data,
+                source_intermediate_id: isManufactured && sourceIntermediateId ? Number(sourceIntermediateId) : null,
+                pack_volume: isManufactured && packVolume ? parseFloat(packVolume) : null,
+            };
+            const result = await createProduct.mutateAsync(payload as unknown as Record<string, unknown>);
             // Backend returns id at top level: { response: 200, id: 123 }
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const r = result as any;
@@ -93,8 +110,9 @@ export default function AddProductPage() {
                     <FormField label="Tax (%)" error={errors.tax}>
                         <input {...register('tax', { valueAsNumber: true })} type="number" className={inputClassName} placeholder="Tax percentage" />
                     </FormField>
-                    <FormField label="Stock Quantity" error={errors.stock_qty}>
-                        <input {...register('stock_qty', { valueAsNumber: true })} type="number" className={inputClassName} placeholder="Available stock" />
+                    <FormField label={isManufactured ? 'Stock Quantity (derived — read-only)' : 'Stock Quantity'} error={errors.stock_qty}>
+                        <input {...register('stock_qty', { valueAsNumber: true })} type="number" readOnly={isManufactured}
+                            className={inputClassName} placeholder="Available stock" />
                     </FormField>
                     <FormField label="Subcategory" error={errors.sub_cat_id} required>
                         <select {...register('sub_cat_id', { valueAsNumber: true })} className={selectClassName}>
@@ -119,6 +137,33 @@ export default function AddProductPage() {
                             <option value={0}>Inactive</option>
                         </select>
                     </FormField>
+                </div>
+
+                {/* Feature 16 — manufactured (packed) product linkage */}
+                <div className="border-t border-slate-800/50 pt-4 space-y-4">
+                    <label className="flex items-center gap-2 text-sm text-slate-300">
+                        <input type="checkbox" checked={isManufactured}
+                            onChange={(e) => setIsManufactured(e.target.checked)} />
+                        Manufactured product — stock is derived live from a bulk intermediate
+                    </label>
+                    {isManufactured && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField label="Source Intermediate" required>
+                                <select value={sourceIntermediateId} onChange={(e) => setSourceIntermediateId(e.target.value)}
+                                    className={selectClassName}>
+                                    <option value="">Select intermediate</option>
+                                    {intermediates.map((ip) => (
+                                        <option key={ip.id} value={ip.id}>{ip.name} ({ip.base_unit})</option>
+                                    ))}
+                                </select>
+                            </FormField>
+                            <FormField label="Pack Volume (intermediate qty per unit)" required>
+                                <input type="number" step="0.001" min="0" value={packVolume}
+                                    onChange={(e) => setPackVolume(e.target.value)} className={inputClassName}
+                                    placeholder="e.g., 200, 500" />
+                            </FormField>
+                        </div>
+                    )}
                 </div>
 
                 <FormField label="Offer Text" error={errors.offer_text}>

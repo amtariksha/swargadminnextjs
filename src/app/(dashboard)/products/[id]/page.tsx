@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useProduct, useSubcategories, useUpdateProduct, useUploadProductImage, useDeleteProductImage } from '@/hooks/useData';
+import { useIntermediates } from '@/hooks/useProduction';
 import FormField, { inputClassName, selectClassName, textareaClassName } from '@/components/FormField';
 import ImageUpload from '@/components/ImageUpload';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -28,6 +29,11 @@ const productSchema = z.object({
     offer_text: z.string().optional(),
     description: z.string().optional(),
     disclaimer: z.string().optional(),
+    // Feature 16 — manufactured-product linkage. Kept as form fields (not
+    // separate state) so reset() can initialise them without a setState effect.
+    is_manufactured: z.boolean().optional(),
+    source_intermediate_id: z.string().optional(),
+    pack_volume: z.string().optional(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -37,6 +43,7 @@ export default function EditProductPage() {
     const router = useRouter();
     const { data: product, isLoading } = useProduct(id);
     const { data: subcategories = [] } = useSubcategories();
+    const { data: intermediates = [] } = useIntermediates();
     const updateProduct = useUpdateProduct();
     const uploadImage = useUploadProductImage();
     const deleteImage = useDeleteProductImage();
@@ -44,9 +51,10 @@ export default function EditProductPage() {
     const [deleteProductConfirm, setDeleteProductConfirm] = useState(false);
     const sliderFileRef = useRef<HTMLInputElement>(null);
 
-    const { register, handleSubmit, reset, formState: { errors } } = useForm<ProductFormData>({
+    const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<ProductFormData>({
         resolver: zodResolver(productSchema),
     });
+    const isManufactured = !!watch('is_manufactured');
 
     useEffect(() => {
         if (product) {
@@ -64,13 +72,27 @@ export default function EditProductPage() {
                 offer_text: product.offer_text || '',
                 description: product.description || '',
                 disclaimer: product.disclaimer || '',
+                is_manufactured: product.source_intermediate_id != null,
+                source_intermediate_id: product.source_intermediate_id != null ? String(product.source_intermediate_id) : '',
+                pack_volume: product.pack_volume != null ? String(product.pack_volume) : '',
             });
         }
     }, [product, reset]);
 
     const onSubmit = async (data: ProductFormData) => {
+        const manufactured = !!data.is_manufactured;
+        if (manufactured && (!data.source_intermediate_id || !data.pack_volume)) {
+            toast.error('Select a source intermediate and pack volume for a manufactured product');
+            return;
+        }
         try {
-            await updateProduct.mutateAsync({ id: Number(id), ...data } as unknown as Record<string, unknown>);
+            const payload = {
+                id: Number(id),
+                ...data,
+                source_intermediate_id: manufactured && data.source_intermediate_id ? Number(data.source_intermediate_id) : null,
+                pack_volume: manufactured && data.pack_volume ? parseFloat(data.pack_volume) : null,
+            };
+            await updateProduct.mutateAsync(payload as unknown as Record<string, unknown>);
             toast.success('Product updated successfully');
             router.push('/products');
         } catch (error) {
@@ -173,8 +195,8 @@ export default function EditProductPage() {
                         <FormField label="Tax (%)" error={errors.tax}>
                             <input {...register('tax', { valueAsNumber: true })} type="number" min={0} max={99} className={inputClassName} />
                         </FormField>
-                        <FormField label="Stock Quantity" error={errors.stock_qty}>
-                            <input {...register('stock_qty', { valueAsNumber: true })} type="number" min={0} max={10000} className={inputClassName} />
+                        <FormField label={isManufactured ? 'Stock Quantity (derived — read-only)' : 'Stock Quantity'} error={errors.stock_qty}>
+                            <input {...register('stock_qty', { valueAsNumber: true })} type="number" min={0} max={10000} readOnly={isManufactured} className={inputClassName} />
                         </FormField>
                         <FormField label="Preferences (display order)" error={errors.preferences}>
                             <input {...register('preferences', { valueAsNumber: true })} type="number" min={0} className={inputClassName} />
@@ -204,6 +226,29 @@ export default function EditProductPage() {
                             <input value={product.cat_title} disabled className={`${inputClassName} !text-slate-500 !bg-slate-800/30`} />
                         </FormField>
                     )}
+
+                    {/* Feature 16 — manufactured (packed) product linkage */}
+                    <div className="border-t border-slate-800/50 pt-4 space-y-4">
+                        <label className="flex items-center gap-2 text-sm text-slate-300">
+                            <input type="checkbox" {...register('is_manufactured')} />
+                            Manufactured product — stock is derived live from a bulk intermediate
+                        </label>
+                        {isManufactured && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField label="Source Intermediate" required>
+                                    <select {...register('source_intermediate_id')} className={selectClassName}>
+                                        <option value="">Select intermediate</option>
+                                        {intermediates.map((ip) => (
+                                            <option key={ip.id} value={ip.id}>{ip.name} ({ip.base_unit})</option>
+                                        ))}
+                                    </select>
+                                </FormField>
+                                <FormField label="Pack Volume (intermediate qty per unit)" required>
+                                    <input {...register('pack_volume')} type="number" step="0.001" min="0" className={inputClassName} placeholder="e.g., 200, 500" />
+                                </FormField>
+                            </div>
+                        )}
+                    </div>
 
                     <h3 className="text-lg font-semibold text-white pt-4 border-t border-slate-800/50">Other Information</h3>
                     <FormField label="Offer Text" error={errors.offer_text}>
