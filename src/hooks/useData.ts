@@ -354,6 +354,12 @@ export interface UserTransaction {
     updated_wallet_balance?: number;
     created_at: string;
     updated_at?: string;
+    // Feature 14 — refund linkage / driver billing
+    refund_for_transaction_id?: number | null;
+    delivery_date?: string | null;
+    refund_reason?: string | null;
+    billed_to_driver?: number;
+    billed_driver_id?: number | null;
 }
 
 export interface UserHoliday {
@@ -1359,5 +1365,103 @@ export function useUpdateCallScript() {
             queryClient.invalidateQueries({ queryKey: ['call-scripts'] });
             queryClient.invalidateQueries({ queryKey: ['call-script'] });
         },
+    });
+}
+
+// ==========================================
+// Feature 14 — Refund management
+// ==========================================
+
+export interface RefundReason {
+    label: string;
+    active: boolean;
+}
+
+export interface RefundDriver {
+    id: number;
+    name: string;
+}
+
+export interface RefundOrderContext {
+    transaction_id: number;
+    is_debit: boolean;
+    amount: number;
+    order_id: number | null;
+    delivery_date: string | null;
+    already_refunded: boolean;
+    assigned_driver: RefundDriver | null;
+    driver_candidates: RefundDriver[];
+}
+
+export interface RefundReportReasonRow { reason: string; count: number; amount: number; }
+export interface RefundReportDriverRow { driver_id: number | null; driver_name: string; count: number; amount: number; }
+export interface RefundReportDateRow { date: string | null; count: number; amount: number; }
+
+export interface RefundReport {
+    range: { from: string; to: string };
+    summary: { total_count: number; total_amount: number; billed_amount: number; absorbed_amount: number };
+    by_reason: RefundReportReasonRow[];
+    by_driver: RefundReportDriverRow[];
+    by_date: RefundReportDateRow[];
+}
+
+export function useRefundReasons(activeOnly = false) {
+    return useQuery({
+        queryKey: ['refund-reasons', activeOnly],
+        queryFn: async () => {
+            const response = await GET<RefundReason[]>(`/refund/reasons${activeOnly ? '?active=1' : ''}`);
+            return response.data || [];
+        },
+    });
+}
+
+export function useUpdateRefundReasons() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (reasons: RefundReason[]) => {
+            return PUT<RefundReason[]>('/refund/reasons', { reasons });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['refund-reasons'] });
+        },
+    });
+}
+
+export function useRefundOrderContext(transactionId: number | null | undefined) {
+    return useQuery({
+        queryKey: ['refund-order-context', transactionId],
+        queryFn: async () => {
+            const response = await GET<RefundOrderContext>(`/refund/order-context/${transactionId}`);
+            return response.data;
+        },
+        enabled: !!transactionId,
+    });
+}
+
+export function useProcessRefund() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST('/refund', data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['transactions-range'] });
+            queryClient.invalidateQueries({ queryKey: ['user-transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['user'] });
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+            queryClient.invalidateQueries({ queryKey: ['refund-report'] });
+        },
+    });
+}
+
+export function useRefundReport(from: string, to: string) {
+    return useQuery({
+        queryKey: ['refund-report', from, to],
+        queryFn: async () => {
+            const response = await GET<RefundReport>(`/refund/report?from=${from}&to=${to}`);
+            return response.data;
+        },
+        enabled: !!from && !!to,
     });
 }

@@ -18,6 +18,9 @@ const AVAILABLE_PERMISSIONS = [
     { key: 'delivery-list', label: 'Delivery List', icon: '📋' },
     { key: 'delivery-report', label: 'Delivery Report', icon: '📈' },
     { key: 'transactions', label: 'Transactions', icon: '💰' },
+    // Refunds — gates the Refunds Report screen + the refund-reason settings
+    // editor. The refund popup itself stays under the `transactions` key.
+    { key: 'refunds', label: 'Refunds', icon: '💸' },
     { key: 'banners', label: 'Banners', icon: '🖼️' },
     { key: 'testimonials', label: 'Testimonials', icon: '⭐' },
     { key: 'pincodes', label: 'Pincodes', icon: '📍' },
