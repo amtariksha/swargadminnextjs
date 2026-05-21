@@ -57,6 +57,9 @@ const AVAILABLE_PERMISSIONS = [
     { key: 'inventory', label: 'Inventory', icon: '🏬' },
     // Production (Feature 16) — intermediates, recipes, production records.
     { key: 'production', label: 'Production', icon: '🏭' },
+    // App Updates (Feature 02) — version + force-update management for the
+    // customer and delivery apps.
+    { key: 'app-updates', label: 'App Updates', icon: '📱' },
 ];
 
 export default function RolesPage() {
