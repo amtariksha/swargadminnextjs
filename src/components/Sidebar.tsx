@@ -79,8 +79,10 @@ const navItems: NavItem[] = [
     { name: 'Transactions', href: '/transactions', icon: <CreditCard className="w-5 h-5" /> },
     // 11
     { name: 'Refunds', href: '/refunds', icon: <RotateCcw className="w-5 h-5" />, permissionKey: 'refunds' },
-    // --- Settings --- (divider after 11)
     // 12
+    { name: 'Payroll', href: '/payroll', icon: <Banknote className="w-5 h-5" />, permissionKey: 'payroll' },
+    // --- Settings --- (divider after 12)
+    // 13
     {
         name: 'Settings',
         icon: <Settings className="w-5 h-5" />,
@@ -170,7 +172,7 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'subcategories', 'delivery-list', 'delivery-report', 'transactions',
     'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
     'admin-users', 'roles', 'production-delivery', 'cms', 'whatsapp',
-    'product-sync', 'refunds',
+    'product-sync', 'refunds', 'payroll',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
@@ -393,7 +395,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                     </Link>
                                 )}
                                 {/* Section dividers */}
-                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 11 || index === 12 || index === 15 || index === 16 || index === 17) && (
+                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 12 || index === 13 || index === 16 || index === 17 || index === 18) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>

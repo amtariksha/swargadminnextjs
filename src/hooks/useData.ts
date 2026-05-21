@@ -1252,3 +1252,140 @@ export function useRefundReport(from: string, to: string) {
         enabled: !!from && !!to,
     });
 }
+
+// ==========================================
+// Feature 15 — Driver payroll
+// ==========================================
+
+export interface PayslipRow {
+    driver_id: number;
+    driver_name: string;
+    email: string | null;
+    has_master: boolean;
+    master_active: boolean;
+    designation: string | null;
+    payslip_id: number | null;
+    status: string | null; // 'generated' | 'draft' | null
+    total_earning: number | null;
+    total_deduction: number | null;
+    net_pay: number | null;
+    billed_deductions: number | null;
+    pdf_url: string | null;
+    prorated: boolean;
+    generated_at: string | null;
+    basic_paid: number | null;
+    hra_paid: number | null;
+    medical_allowance: number | null;
+    special_allowance: number | null;
+    travel_allowance: number | null;
+    bonus: number | null;
+    reimbursement: number | null;
+    pf: number | null;
+    esi: number | null;
+    pt: number | null;
+    tax: number | null;
+    misc: number | null;
+}
+
+export interface PayslipsResponse {
+    period: { month: number; year: number; label: string };
+    rows: PayslipRow[];
+}
+
+export interface SalaryMaster {
+    id?: number;
+    driver_id: number;
+    designation?: string | null;
+    joining_date?: string | null;
+    bank_name?: string | null;
+    account_holder_name?: string | null;
+    account_no?: string | null;
+    ifsc?: string | null;
+    pan?: string | null;
+    uan?: string | null;
+    basic?: number;
+    hra?: number;
+    medical_allowance?: number;
+    special_allowance?: number;
+    travel_allowance?: number;
+    reimbursement_base?: number;
+    bonus_base?: number;
+    pf_deduction?: number;
+    esi_deduction?: number;
+    pt_deduction?: number;
+    tax_deduction?: number;
+    misc_deduction?: number;
+    is_active?: number;
+    ref_no?: string | null;
+}
+
+export interface GeneratePayslipsResult {
+    generated: number;
+    skipped: string[];
+    warnings: string[];
+}
+
+export function usePayslips(month: number, year: number) {
+    return useQuery({
+        queryKey: ['payslips', month, year],
+        queryFn: async () => {
+            const response = await GET<PayslipsResponse>(`/payroll/payslips?month=${month}&year=${year}`);
+            return response.data;
+        },
+        enabled: !!month && !!year,
+    });
+}
+
+export function useSalaryMaster(driverId: number | null) {
+    return useQuery({
+        queryKey: ['salary-master', driverId],
+        queryFn: async () => {
+            const response = await GET<SalaryMaster | null>(`/payroll/master/${driverId}`);
+            return response.data;
+        },
+        enabled: !!driverId,
+    });
+}
+
+export function useSaveSalaryMaster() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => POST('/payroll/master', data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['salary-master'] });
+            queryClient.invalidateQueries({ queryKey: ['payslips'] });
+        },
+    });
+}
+
+export function useGeneratePayslips() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) =>
+            POST<GeneratePayslipsResult>('/payroll/generate', data),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payslips'] }),
+    });
+}
+
+export function useUpdatePayslip() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ id, ...data }: { id: number } & Record<string, unknown>) =>
+            PUT(`/payroll/payslip/${id}`, data),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payslips'] }),
+    });
+}
+
+export function useAddDriverDeduction() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => POST('/payroll/deduction', data),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payslips'] }),
+    });
+}
+
+export function useEmailPayslip() {
+    return useMutation({
+        mutationFn: async (id: number) => POST(`/payroll/payslip/${id}/email`, {}),
+    });
+}

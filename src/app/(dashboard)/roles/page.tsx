@@ -21,6 +21,8 @@ const AVAILABLE_PERMISSIONS = [
     // Refunds — gates the Refunds Report screen + the refund-reason settings
     // editor. The refund popup itself stays under the `transactions` key.
     { key: 'refunds', label: 'Refunds', icon: '💸' },
+    // Payroll — driver salary master + monthly payslip generation.
+    { key: 'payroll', label: 'Payroll', icon: '🧾' },
     { key: 'banners', label: 'Banners', icon: '🖼️' },
     { key: 'testimonials', label: 'Testimonials', icon: '⭐' },
     { key: 'pincodes', label: 'Pincodes', icon: '📍' },
