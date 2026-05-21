@@ -40,6 +40,9 @@ import {
     Megaphone,
     Target,
     Phone,
+    Warehouse,
+    Boxes,
+    BookText,
 } from 'lucide-react';
 
 interface NavItem {
@@ -153,6 +156,21 @@ const navItems: NavItem[] = [
     // entry lets a role be granted CMS access without exposing the toggle to
     // everyone — gated by the `cms` permission below.
     { name: 'CMS', href: '/admin', icon: <Globe className="w-5 h-5" />, permissionKey: 'cms' },
+    // --- Inventory --- (divider after 20 / CMS)
+    // 21
+    {
+        name: 'Inventory',
+        icon: <Warehouse className="w-5 h-5" />,
+        permissionKey: 'inventory',
+        children: [
+            { name: 'Vendors', href: '/inventory/vendors', icon: <Truck className="w-4 h-4" /> },
+            { name: 'Raw Materials', href: '/inventory/raw-materials', icon: <Boxes className="w-4 h-4" /> },
+            { name: 'Purchases', href: '/inventory/purchases', icon: <Receipt className="w-4 h-4" /> },
+            { name: 'Vendor Payments', href: '/inventory/payments', icon: <Banknote className="w-4 h-4" /> },
+            { name: 'Vendor Ledger', href: '/inventory/ledger', icon: <BookText className="w-4 h-4" /> },
+            { name: 'Purchase Report', href: '/inventory/report', icon: <BarChart3 className="w-4 h-4" /> },
+        ],
+    },
 ];
 
 interface SidebarProps {
@@ -179,7 +197,7 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'subcategories', 'delivery-list', 'delivery-report', 'transactions',
     'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
     'admin-users', 'roles', 'production-delivery', 'cms', 'whatsapp',
-    'product-sync', 'crm',
+    'product-sync', 'crm', 'inventory', 'production',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
