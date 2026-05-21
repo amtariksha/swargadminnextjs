@@ -47,6 +47,7 @@ import {
     Trash2,
     RotateCcw,
     Smartphone,
+    PackageCheck,
 } from 'lucide-react';
 
 interface NavItem {
@@ -88,6 +89,9 @@ const navItems: NavItem[] = [
     { name: 'Refunds', href: '/refunds', icon: <RotateCcw className="w-5 h-5" />, permissionKey: 'refunds' },
     // 12
     { name: 'Payroll', href: '/payroll', icon: <Banknote className="w-5 h-5" />, permissionKey: 'payroll' },
+    // 13-14 — Feature 07 returnable packaging
+    { name: 'Packaging Types', href: '/packaging-types', icon: <PackageCheck className="w-5 h-5" />, permissionKey: 'packaging' },
+    { name: 'Returns & Refunds', href: '/returns-refunds', icon: <RotateCcw className="w-5 h-5" />, permissionKey: 'packaging' },
     // --- Settings --- (divider after 12)
     // 13
     {
@@ -225,7 +229,7 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
     'admin-users', 'roles', 'production-delivery', 'cms', 'whatsapp',
     'product-sync', 'crm', 'inventory', 'production', 'refunds', 'payroll',
-    'app-updates', 'drop-points', 'broadcast',
+    'app-updates', 'drop-points', 'broadcast', 'packaging',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
@@ -448,7 +452,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                     </Link>
                                 )}
                                 {/* Section dividers */}
-                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 12 || index === 13 || index === 18 || index === 19 || index === 20 || index === 21 || index === 25 || index === 26) && (
+                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 12 || index === 14 || index === 15 || index === 20 || index === 21 || index === 22 || index === 23 || index === 27 || index === 28) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>
