@@ -1148,3 +1148,213 @@ export function useUploadImage() {
         },
     });
 }
+
+// ==========================================
+// CRM — Customer Feedback (Feature 13)
+// ==========================================
+
+export type ActivityWindows = Record<string, 'active' | 'inactive'>;
+
+export interface CustomerFeedback {
+    id: number;
+    user_id: number;
+    caller_user_id: number | null;
+    call_type: 'feedback' | 'reactivation';
+    calling_date: string | null;
+    status: string | null;
+    followup_date: string | null;
+    occupation: string | null;
+    preferred_call_time: string | null;
+    problems: string | null;
+    product_feedback: string | null;
+    delivery_feedback: string | null;
+    preferred_delivery_time: string | null;
+    ring_bell_pref: string | null;
+    drop_place_pref: string | null;
+    application_feedback: string | null;
+    customer_care_notes: string | null;
+    created_at: string;
+    updated_at: string;
+    customer_name?: string | null;
+    customer_phone?: string | null;
+    caller_name?: string | null;
+}
+
+export interface CustomerContext {
+    user_id: number;
+    name: string;
+    phone: string;
+    wallet_amount: number;
+    route: string | null;
+    driver_user_id: number | null;
+    activity_windows: ActivityWindows;
+    last_delivery_date: string | null;
+    days_since_last_delivery: number | null;
+    last_call: {
+        id: number;
+        calling_date: string | null;
+        status: string | null;
+        call_type: string;
+        caller_name: string | null;
+    } | null;
+}
+
+export interface WorklistItem {
+    user_id: number;
+    customer_name: string;
+    phone: string;
+    wallet_amount: number;
+    reason: 'followup_due' | 'due_for_call';
+    last_call_date: string | null;
+    followup_date: string | null;
+    route: string | null;
+    activity_windows: ActivityWindows | null;
+    days_since_last_delivery: number | null;
+}
+
+export interface Worklist {
+    cadence_days: number;
+    count: number;
+    items: WorklistItem[];
+}
+
+export interface CallScript {
+    id: number;
+    script_type: 'feedback' | 'reactivation';
+    title: string;
+    body: string;
+    is_active: number;
+    updated_by_user_id: number | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface FeedbackListFilters {
+    user_id?: number | string;
+    caller_user_id?: number | string;
+    status?: string;
+    call_type?: string;
+    from_date?: string;
+    to_date?: string;
+}
+
+export function useCustomerFeedback(userId: number | string | undefined, enabled = true) {
+    return useQuery({
+        queryKey: ['customer-feedback', userId],
+        queryFn: async () => {
+            const response = await GET<CustomerFeedback[]>(`/crm/feedback/user/${userId}`);
+            return response.data || [];
+        },
+        enabled: !!userId && enabled,
+    });
+}
+
+export function useFeedbackList(filters: FeedbackListFilters = {}) {
+    return useQuery({
+        queryKey: ['feedback-list', filters],
+        queryFn: async () => {
+            const params: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(filters)) {
+                if (value !== undefined && value !== '' && value !== null) params[key] = value;
+            }
+            const response = await GET<CustomerFeedback[]>('/crm/feedback', params);
+            return response.data || [];
+        },
+    });
+}
+
+export function useFeedbackEntry(id: number | string | undefined, enabled = true) {
+    return useQuery({
+        queryKey: ['feedback-entry', id],
+        queryFn: async () => {
+            const response = await GET<CustomerFeedback>(`/crm/feedback/${id}`);
+            return response.data;
+        },
+        enabled: !!id && enabled,
+    });
+}
+
+export function useFeedbackWorklist() {
+    return useQuery({
+        queryKey: ['feedback-worklist'],
+        queryFn: async () => {
+            const response = await GET<Worklist>('/crm/worklist');
+            return response.data;
+        },
+    });
+}
+
+export function useCustomerContext(userId: number | string | undefined, enabled = true) {
+    return useQuery({
+        queryKey: ['customer-context', userId],
+        queryFn: async () => {
+            const response = await GET<CustomerContext>(`/crm/customer-context/${userId}`);
+            return response.data;
+        },
+        enabled: !!userId && enabled,
+    });
+}
+
+export function useCallScripts() {
+    return useQuery({
+        queryKey: ['call-scripts'],
+        queryFn: async () => {
+            const response = await GET<CallScript[]>('/crm/scripts');
+            return response.data || [];
+        },
+    });
+}
+
+export function useCallScript(type: 'feedback' | 'reactivation', enabled = true) {
+    return useQuery({
+        queryKey: ['call-script', type],
+        queryFn: async () => {
+            const response = await GET<CallScript>(`/crm/scripts/${type}`);
+            return response.data;
+        },
+        enabled: !!type && enabled,
+    });
+}
+
+export function useCreateFeedback() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST<CustomerFeedback>('/crm/feedback', data);
+        },
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['customer-feedback', variables.user_id] });
+            queryClient.invalidateQueries({ queryKey: ['feedback-list'] });
+            queryClient.invalidateQueries({ queryKey: ['feedback-worklist'] });
+            queryClient.invalidateQueries({ queryKey: ['customer-context', variables.user_id] });
+        },
+    });
+}
+
+export function useUpdateFeedback() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ id, ...data }: Record<string, unknown> & { id: number | string }) => {
+            return PUT<CustomerFeedback>(`/crm/feedback/${id}`, data);
+        },
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['customer-feedback'] });
+            queryClient.invalidateQueries({ queryKey: ['feedback-list'] });
+            queryClient.invalidateQueries({ queryKey: ['feedback-worklist'] });
+            queryClient.invalidateQueries({ queryKey: ['feedback-entry', variables.id] });
+        },
+    });
+}
+
+export function useUpdateCallScript() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ id, ...data }: Record<string, unknown> & { id: number | string }) => {
+            return PUT<CallScript>(`/crm/scripts/${id}`, data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['call-scripts'] });
+            queryClient.invalidateQueries({ queryKey: ['call-script'] });
+        },
+    });
+}

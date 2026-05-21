@@ -34,6 +34,10 @@ const AVAILABLE_PERMISSIONS = [
     // Settings). Full-access roles (empty permissions array) automatically
     // see this entry too. Default: ON for super-admin, OFF for other roles.
     { key: 'whatsapp', label: 'WhatsApp', icon: '💬' },
+    // CRM — customer feedback log, call worklist, and guided call scripts
+    // under /crm/**. Granting this exposes the CRM section in the Sidebar
+    // and the Feedback tab on the customer-detail page.
+    { key: 'crm', label: 'CRM', icon: '📞' },
     // Driver-facing page: granting only this permission lets the user
     // log in and reach `/production-delivery` (Routewise / Packing /
     // Dairy Pickup tabs) — and nothing else.
