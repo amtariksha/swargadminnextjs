@@ -26,6 +26,7 @@ const productSchema = z.object({
     subscription: z.number(),
     is_active: z.number(),
     sub_cat_id: z.number().min(1, 'Subcategory is required'),
+    delivery_window: z.number(),
     offer_text: z.string().optional(),
     description: z.string().optional(),
     disclaimer: z.string().optional(),
@@ -69,6 +70,7 @@ export default function EditProductPage() {
                 subscription: product.subscription ?? 1,
                 is_active: product.is_active ?? 1,
                 sub_cat_id: product.sub_cat_id || product.subcategory_id || 0,
+                delivery_window: product.delivery_window ?? 1,
                 offer_text: product.offer_text || '',
                 description: product.description || '',
                 disclaimer: product.disclaimer || '',
@@ -217,6 +219,13 @@ export default function EditProductPage() {
                             <select {...register('is_active', { valueAsNumber: true })} className={selectClassName}>
                                 <option value={1}>Active</option>
                                 <option value={0}>Inactive</option>
+                            </select>
+                        </FormField>
+                        <FormField label="Delivery Window" error={errors.delivery_window}>
+                            <select {...register('delivery_window', { valueAsNumber: true })} className={selectClassName}>
+                                <option value={1}>Morning only</option>
+                                <option value={2}>Day-time only</option>
+                                <option value={3}>Both</option>
                             </select>
                         </FormField>
                     </div>

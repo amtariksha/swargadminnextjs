@@ -23,6 +23,7 @@ const productSchema = z.object({
     subscription: z.number(),
     is_active: z.number(),
     sub_cat_id: z.number().min(1, 'Subcategory is required'),
+    delivery_window: z.number(),
     offer_text: z.string().optional(),
     description: z.string().optional(),
     disclaimer: z.string().optional(),
@@ -46,7 +47,7 @@ export default function AddProductPage() {
 
     const { register, handleSubmit, formState: { errors } } = useForm<ProductFormData>({
         resolver: zodResolver(productSchema),
-        defaultValues: { tax: 0, stock_qty: 100, preferences: 0, subscription: 1, is_active: 1, price: 0, mrp: 0 },
+        defaultValues: { tax: 0, stock_qty: 100, preferences: 0, subscription: 1, is_active: 1, price: 0, mrp: 0, delivery_window: 1 },
     });
 
     const onSubmit = async (data: ProductFormData) => {
@@ -135,6 +136,13 @@ export default function AddProductPage() {
                         <select {...register('is_active', { valueAsNumber: true })} className={selectClassName}>
                             <option value={1}>Active</option>
                             <option value={0}>Inactive</option>
+                        </select>
+                    </FormField>
+                    <FormField label="Delivery Window" error={errors.delivery_window}>
+                        <select {...register('delivery_window', { valueAsNumber: true })} className={selectClassName}>
+                            <option value={1}>Morning only</option>
+                            <option value={2}>Day-time only</option>
+                            <option value={3}>Both</option>
                         </select>
                     </FormField>
                 </div>

@@ -63,6 +63,10 @@ const AVAILABLE_PERMISSIONS = [
     // Drop Points (Feature 03) — truck-route drop-point management + driver
     // assignment.
     { key: 'drop-points', label: 'Drop Points', icon: '📍' },
+    // Day Orders (Feature 10) — day-time ordering panel, payment links, and
+    // sales reporting / incentive. Granting this exposes the Day Orders
+    // entry in the Sidebar (sales executives are admin-panel users).
+    { key: 'day-orders', label: 'Day Orders', icon: '☀️' },
 ];
 
 export default function RolesPage() {
