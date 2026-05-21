@@ -39,6 +39,7 @@ import {
     Inbox,
     Megaphone,
     Target,
+    Phone,
 } from 'lucide-react';
 
 interface NavItem {
@@ -114,8 +115,20 @@ const navItems: NavItem[] = [
             { name: 'Settings', href: '/whatsapp/settings', icon: <Settings className="w-4 h-4" /> },
         ],
     },
-    // --- Archive --- (divider after 15)
+    // --- CRM --- (divider after 15)
     // 16
+    {
+        name: 'CRM',
+        icon: <Phone className="w-5 h-5" />,
+        permissionKey: 'crm',
+        children: [
+            { name: 'Worklist', href: '/crm/worklist', icon: <ClipboardList className="w-4 h-4" /> },
+            { name: 'All Feedback', href: '/crm/feedback', icon: <MessageSquare className="w-4 h-4" /> },
+            { name: 'Call Scripts', href: '/crm/scripts', icon: <FileText className="w-4 h-4" /> },
+        ],
+    },
+    // --- Archive --- (divider after 16)
+    // 17
     {
         name: 'Archive',
         icon: <CalendarDays className="w-5 h-5" />,
@@ -166,7 +179,7 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'subcategories', 'delivery-list', 'delivery-report', 'transactions',
     'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
     'admin-users', 'roles', 'production-delivery', 'cms', 'whatsapp',
-    'product-sync',
+    'product-sync', 'crm',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
@@ -389,7 +402,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                     </Link>
                                 )}
                                 {/* Section dividers */}
-                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 10 || index === 11 || index === 14 || index === 15 || index === 16) && (
+                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 10 || index === 11 || index === 14 || index === 15 || index === 16 || index === 17) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>

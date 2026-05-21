@@ -7,13 +7,16 @@ import {
     useUser, useUserOrders, useUserTransactions, useUserHolidays, useUserAddresses,
     useUserDeliveryHistory, useUserCalendar, useAddHoliday, useDeleteHoliday, useAddTransaction,
     useAddAddress, useUpdateAddress, useDeleteAddress,
-    type UserTransaction, type UserHoliday, type Address,
+    useCustomerFeedback, useCustomerContext,
+    type UserTransaction, type UserHoliday, type Address, type CustomerFeedback,
 } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import TabPanel from '@/components/TabPanel';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { inputClassName, selectClassName } from '@/components/FormField';
+import ActivityWindowStrip from '@/components/crm/ActivityWindowStrip';
+import { STATUS_BADGE_CLASS, statusLabel, callTypeLabel } from '@/lib/crm';
 import {
     ArrowLeft, Edit, Plus, Phone, Mail, MapPin, Wallet, ShoppingCart,
     Calendar, Truck, CreditCard, Trash2, RotateCcw,
@@ -58,6 +61,7 @@ export default function UserDetailPage() {
     const needTransactions = activeTab === 0 || activeTab === 2;
     const needDeliveries = activeTab === 0 || activeTab === 5;
     const needCalendar = activeTab === 6;
+    const needFeedback = activeTab === 7;
 
     const { data: user, isLoading } = useUser(id);
     const { data: orders = [] } = useUserOrders(id, needOrders);
@@ -66,6 +70,8 @@ export default function UserDetailPage() {
     const { data: addresses = [] } = useUserAddresses(id); // small dataset, always load
     const { data: deliveryHistory = [] } = useUserDeliveryHistory(id, needDeliveries);
     const { data: calendarData = [] } = useUserCalendar(id, calendarDate, needCalendar);
+    const { data: customerFeedback = [] } = useCustomerFeedback(id, needFeedback);
+    const { data: customerContext } = useCustomerContext(id, needFeedback);
 
     // Mutations
     const addHolidayMutation = useAddHoliday();
@@ -285,6 +291,25 @@ export default function UserDetailPage() {
         },
     ];
 
+    const feedbackColumns: Column<CustomerFeedback>[] = [
+        { key: 'calling_date', header: 'Call Date', width: '120px', render: (f) => f.calling_date ? formatApiDate(String(f.calling_date), 'dd MMM yyyy') : '-' },
+        { key: 'call_type', header: 'Type', width: '120px', render: (f) => callTypeLabel(f.call_type) },
+        {
+            key: 'status', header: 'Status', width: '130px',
+            render: (f) => f.status
+                ? <span className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_BADGE_CLASS[f.status] || 'bg-slate-700/40 text-slate-400'}`}>{statusLabel(f.status)}</span>
+                : <span className="text-slate-600">-</span>,
+        },
+        { key: 'caller_name', header: 'Caller', width: '140px', render: (f) => f.caller_name || '-' },
+        {
+            key: 'problems', header: 'Notes', sortable: false,
+            render: (f) => {
+                const note = f.problems || f.product_feedback || f.delivery_feedback || f.customer_care_notes || '';
+                return <span className="text-sm text-slate-400 line-clamp-2">{note || '-'}</span>;
+            },
+        },
+    ];
+
     if (isLoading) return <div className="space-y-6"><div className="h-8 w-32 bg-slate-800/50 rounded animate-pulse" /><div className="h-40 bg-slate-800/50 rounded-xl animate-pulse" /></div>;
     if (!user) return <div className="text-center py-20"><p className="text-slate-400">User not found</p><button onClick={() => router.push('/users')} className="mt-4 text-purple-400">Back to Users</button></div>;
 
@@ -397,6 +422,38 @@ export default function UserDetailPage() {
                         { key: 'subscription_type', header: 'Sub Type', width: '110px', render: (c: Record<string, unknown>) => String(SUB_TYPE_LABELS[c.subscription_type as number] || 'N/A') },
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     ] as Column<any>[]} pageSize={50} searchPlaceholder="Search deliveries..." emptyMessage="No deliveries recorded for this date" />
+                </div>
+            ),
+        },
+        {
+            label: 'Feedback', count: customerFeedback.length,
+            content: (
+                <div className="space-y-4">
+                    {customerContext && (
+                        <div className="glass rounded-xl p-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+                            <ActivityWindowStrip
+                                windows={customerContext.activity_windows}
+                                daysSinceLastDelivery={customerContext.days_since_last_delivery}
+                            />
+                            <span className="text-sm text-slate-400">
+                                Route: <span className="text-slate-200">{customerContext.route || '-'}</span>
+                            </span>
+                        </div>
+                    )}
+                    <div className="flex justify-end">
+                        <button onClick={() => router.push(`/crm/call/${id}`)} className="flex items-center gap-2 px-3 py-2 bg-purple-600/20 text-purple-400 rounded-xl text-sm hover:bg-purple-600/30">
+                            <Plus className="w-4 h-4" /> Log feedback
+                        </button>
+                    </div>
+                    <DataTable
+                        data={customerFeedback}
+                        columns={feedbackColumns}
+                        pageSize={10}
+                        searchPlaceholder="Search feedback..."
+                        emptyMessage="No feedback logged for this customer yet."
+                        onRowClick={(f) => router.push(`/crm/call/${id}?feedbackId=${f.id}&type=${f.call_type}`)}
+                    />
+                    {/* Phase 2: the customer's WhatsApp conversation history will render below here. */}
                 </div>
             ),
         },
