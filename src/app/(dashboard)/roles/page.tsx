@@ -57,6 +57,9 @@ const AVAILABLE_PERMISSIONS = [
     { key: 'inventory', label: 'Inventory', icon: '🏬' },
     // Production (Feature 16) — intermediates, recipes, production records.
     { key: 'production', label: 'Production', icon: '🏭' },
+    // Drop Points (Feature 03) — truck-route drop-point management + driver
+    // assignment.
+    { key: 'drop-points', label: 'Drop Points', icon: '📍' },
 ];
 
 export default function RolesPage() {

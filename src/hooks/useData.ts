@@ -33,6 +33,7 @@ export interface Driver {
     image?: string | null;
     is_location?: number;
     wallet_amount?: number;
+    drop_point_id?: number | null;
     created_at: string;
     updated_at?: string;
 }
@@ -43,6 +44,35 @@ export function useDrivers() {
         queryFn: async () => {
             // Role 4 = Delivery Partners
             const response = await GET<Driver[]>('/get_user/role/4');
+            return response.data || [];
+        },
+    });
+}
+
+// Drop Points (Feature 03 — truck-driver mode)
+export interface DropPointPhoto {
+    id: number;
+    image_path: string;
+}
+
+export interface DropPoint {
+    id: number;
+    title: string;
+    lat: number | null;
+    lng: number | null;
+    route_order: number;
+    notes: string | null;
+    photos: DropPointPhoto[];
+    driver_count: number;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export function useDropPoints() {
+    return useQuery({
+        queryKey: ['drop-points'],
+        queryFn: async () => {
+            const response = await GET<DropPoint[]>('/drop_points');
             return response.data || [];
         },
     });

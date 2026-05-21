@@ -108,6 +108,7 @@ const navItems: NavItem[] = [
     // 12-14
     { name: 'Pincodes', href: '/pincodes', icon: <MapPin className="w-5 h-5" /> },
     { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-5 h-5" /> },
+    { name: 'Drop Points', href: '/drop-points', icon: <MapPin className="w-5 h-5" />, permissionKey: 'drop-points' },
     { name: 'Notifications', href: '/notifications', icon: <Bell className="w-5 h-5" /> },
     // --- Communications (WhatsApp) --- (divider after 14)
     // 15
@@ -220,6 +221,7 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
     'admin-users', 'roles', 'production-delivery', 'cms', 'whatsapp',
     'product-sync', 'crm', 'inventory', 'production', 'refunds', 'payroll',
+    'drop-points',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
