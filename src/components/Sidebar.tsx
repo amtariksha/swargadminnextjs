@@ -48,6 +48,7 @@ import {
     RotateCcw,
     Smartphone,
     PackageCheck,
+    Sun,
 } from 'lucide-react';
 
 interface NavItem {
@@ -82,8 +83,9 @@ const navItems: NavItem[] = [
     { name: 'Subcategories', href: '/subcategories', icon: <Layers className="w-5 h-5" /> },
     { name: 'Products', href: '/products', icon: <Package className="w-5 h-5" /> },
     // --- Orders & Finance --- (divider after 8)
-    // 9-10
+    // 9-11
     { name: 'Orders', href: '/orders', icon: <ShoppingCart className="w-5 h-5" /> },
+    { name: 'Day Orders', href: '/day-orders', icon: <Sun className="w-5 h-5" />, permissionKey: 'day-orders' },
     { name: 'Transactions', href: '/transactions', icon: <CreditCard className="w-5 h-5" /> },
     // 11
     { name: 'Refunds', href: '/refunds', icon: <RotateCcw className="w-5 h-5" />, permissionKey: 'refunds' },
@@ -229,7 +231,7 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
     'admin-users', 'roles', 'production-delivery', 'cms', 'whatsapp',
     'product-sync', 'crm', 'inventory', 'production', 'refunds', 'payroll',
-    'app-updates', 'drop-points', 'broadcast', 'packaging',
+    'app-updates', 'drop-points', 'broadcast', 'packaging', 'day-orders',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
@@ -452,7 +454,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                     </Link>
                                 )}
                                 {/* Section dividers */}
-                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 12 || index === 14 || index === 15 || index === 20 || index === 21 || index === 22 || index === 23 || index === 27 || index === 28) && (
+                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 13 || index === 15 || index === 16 || index === 23 || index === 24 || index === 25 || index === 26 || index === 30 || index === 31) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>

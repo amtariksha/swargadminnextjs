@@ -69,6 +69,10 @@ const AVAILABLE_PERMISSIONS = [
     // Broadcast (Feature 09) — the admin broadcast composer. The notification
     // image library stays under the existing `notifications` key.
     { key: 'broadcast', label: 'Broadcast Notifications', icon: '📢' },
+    // Day Orders (Feature 10) — day-time ordering panel, payment links, and
+    // sales reporting / incentive. Granting this exposes the Day Orders
+    // entry in the Sidebar (sales executives are admin-panel users).
+    { key: 'day-orders', label: 'Day Orders', icon: '☀️' },
 ];
 
 export default function RolesPage() {

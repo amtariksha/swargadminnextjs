@@ -131,6 +131,8 @@ export interface Product {
     // Feature 07 — returnable packaging linkage.
     is_returnable_packaging?: number;
     packaging_type_id?: number | null;
+    // Feature 10 — 1=morning_only, 2=day_only, 3=both.
+    delivery_window?: number;
     sub_cat_id?: number;
     price: number;
     mrp?: number;
@@ -1787,6 +1789,152 @@ export function useSetRefundMode() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['packaging-refund-mode'] });
             queryClient.invalidateQueries({ queryKey: ['packaging-returns'] });
+        },
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Feature 10 — Day-time delivery network
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface DaytimeOrderItem {
+    id?: number;
+    product_id: number;
+    product_title?: string;
+    qty: number;
+    unit_price: number;
+    is_bulk_rate: boolean;
+    line_total: number;
+}
+
+export interface DaytimeOrder {
+    id: number;
+    order_no: number;
+    user_id: number;
+    customer_name: string;
+    customer_phone: string;
+    created_by_user_id: number;
+    created_by_name?: string;
+    delivery_address?: string | null;
+    delivery_lat?: number | null;
+    delivery_lng?: number | null;
+    delivery_date: string;
+    entry_type?: string | null;
+    subtotal: number;
+    discount_flat: number;
+    discount_reason?: string | null;
+    shipping_charges: number;
+    total_amount: number;
+    additional_instructions?: string | null;
+    order_status: 'pending' | 'confirmed' | 'cancelled' | 'delivered';
+    payment_status: 'unpaid' | 'link_sent' | 'paid' | 'cash' | 'wallet_deducted';
+    payment_mode?: string | null;
+    payment_link_id?: string | null;
+    payment_short_url?: string | null;
+    razorpay_payment_id?: string | null;
+    paid_at?: string | null;
+    created_at?: string;
+    updated_at?: string;
+    items: DaytimeOrderItem[];
+    delivery?: {
+        id: number;
+        status: string;
+        claimed_by_user_id?: number | null;
+        claimed_at?: string | null;
+        delivered_at?: string | null;
+        delivered_qty?: number | null;
+    } | null;
+}
+
+export interface DaytimeProduct {
+    id: number;
+    title: string;
+    qty_text?: string;
+    price: number;
+    mrp: number;
+    delivery_window: number;
+}
+
+export interface SalesIncentiveRow {
+    id: number;
+    sales_exec_user_id: number;
+    exec_name?: string;
+    incentive_date: string;
+    orders_count: number;
+    new_customers_count: number;
+    sales_value: number;
+    incentive_amount: number;
+    formula_snapshot?: unknown;
+}
+
+export interface DaytimeSalesReport {
+    from: string;
+    to: string;
+    summary: {
+        total_orders: number;
+        paid_orders: number;
+        paid_revenue: number;
+        unpaid_orders: number;
+    };
+    payment_breakdown: { payment_status: string; count: number; total: number }[];
+    per_exec: {
+        exec_id: number;
+        exec_name?: string;
+        orders_count: number;
+        paid_sales: number;
+        total_sales: number;
+    }[];
+}
+
+export function useDaytimeOrders(filters: Record<string, string> = {}) {
+    return useQuery({
+        queryKey: ['daytime-orders', filters],
+        queryFn: async () => {
+            const response = await GET<DaytimeOrder[]>('/daytime/orders', filters);
+            return response.data || [];
+        },
+    });
+}
+
+export function useDaytimeOrder(id: number | string | undefined) {
+    return useQuery({
+        queryKey: ['daytime-order', id],
+        queryFn: async () => {
+            const response = await GET<DaytimeOrder>(`/daytime/orders/${id}`);
+            return response.data;
+        },
+        enabled: id !== undefined && id !== '',
+    });
+}
+
+export function useDaytimeProducts() {
+    return useQuery({
+        queryKey: ['daytime-products'],
+        queryFn: async () => {
+            const response = await GET<DaytimeProduct[]>('/daytime/products');
+            return response.data || [];
+        },
+    });
+}
+
+export function useDaytimeSalesReport(filters: Record<string, string> = {}) {
+    return useQuery({
+        queryKey: ['daytime-sales-report', filters],
+        queryFn: async () => {
+            const response = await GET<DaytimeSalesReport>('/daytime/sales_report', filters);
+            return response.data;
+        },
+    });
+}
+
+export function useDaytimeIncentives(filters: Record<string, string> = {}) {
+    return useQuery({
+        queryKey: ['daytime-incentives', filters],
+        queryFn: async () => {
+            const response = await GET<{ from: string; to: string; total_incentive: number; incentives: SalesIncentiveRow[] }>(
+                '/daytime/incentives', filters,
+            );
+            return response.data;
         },
     });
 }

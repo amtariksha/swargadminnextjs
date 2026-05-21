@@ -20,7 +20,7 @@ import {
     getSubscriptionLabel,
     groupByDriver,
 } from '@/lib/deliveryHelpers';
-import { Calendar, RefreshCw, Plus, Truck, Edit, Check, Trash2, Download, AlertTriangle, Package, Navigation, Store, ClipboardCheck } from 'lucide-react';
+import { Calendar, RefreshCw, Plus, Truck, Edit, Check, Trash2, Download, AlertTriangle, Package, Navigation, Store, ClipboardCheck, Sun } from 'lucide-react';
 import { toast } from 'sonner';
 
 // formatTime is page-local — only used by the Customer Orders tab in this file.
@@ -261,6 +261,18 @@ export default function DeliveryListPage() {
         finally { setIsSubmitting(false); }
     };
 
+    // Feature 10 — push an undelivered morning delivery into the day-time
+    // shared pool. Read-only on the morning tables; the morning `delivery`
+    // row stays status=2.
+    const handleSendToDayNetwork = async (item: DeliveryItem) => {
+        try {
+            await POST('/daytime/from_morning', { order_id: item.order_id });
+            toast.success(`Order #${item.order_id} sent to the day-time network`);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Could not send to day network');
+        }
+    };
+
     const handleUpdateQty = async () => {
         if (!editQtyModal) return;
         setIsSubmitting(true);
@@ -409,6 +421,16 @@ export default function DeliveryListPage() {
         { key: 'delivery_boy_name', header: 'Driver', width: colW('delivery_boy_name', '150px', '250px'), render: (item) => <span>{item.delivery_boy_name || 'Unassigned'}</span> },
         { key: 'status', header: 'Status', width: colW('status', '120px', '160px'),
             render: (item) => { const s = getStatusLabel(item.status); return <span className={`font-semibold ${s.color}`}>{s.label}</span>; } },
+        { key: 'day_net', header: 'Day Net', width: '110px',
+            // Feature 10 — only not-delivered (status 2) rows can be recovered
+            // via the day-time network.
+            render: (item) => item.status === 2
+                ? <button onClick={(e) => { e.stopPropagation(); handleSendToDayNetwork(item); }}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 text-xs font-medium"
+                    title="Send this undelivered order to the day-time network">
+                    <Sun className="w-3 h-3" /> Day Net
+                  </button>
+                : <span className="text-slate-600 text-xs">—</span> },
         { key: 'delivered_date', header: 'Del Date', width: colW('delivered_date', '110px', '160px') },
         { key: 'mark_delivered_time_stamp', header: 'Del Time', width: colW('mark_delivered_time_stamp', '100px', '150px'), render: (item) => <span className="text-sm">{formatTime(item.mark_delivered_time_stamp)}</span> },
         { key: 'address', header: 'Address', width: colW('address', '220px', '400px'),
@@ -675,7 +697,7 @@ function GenerateProgressModal({
     selectedDate: string;
     onClose: () => void;
 }) {
-    const [now, setNow] = useState<number>(Date.now());
+    const [now, setNow] = useState<number>(() => Date.now());
 
     useEffect(() => {
         if (!state.active) return;
