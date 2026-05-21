@@ -46,6 +46,7 @@ import {
     Factory,
     Trash2,
     RotateCcw,
+    Smartphone,
 } from 'lucide-react';
 
 interface NavItem {
@@ -109,6 +110,7 @@ const navItems: NavItem[] = [
     { name: 'Pincodes', href: '/pincodes', icon: <MapPin className="w-5 h-5" /> },
     { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-5 h-5" /> },
     { name: 'Notifications', href: '/notifications', icon: <Bell className="w-5 h-5" /> },
+    { name: 'App Updates', href: '/app-updates', icon: <Smartphone className="w-5 h-5" />, permissionKey: 'app-updates' },
     // --- Communications (WhatsApp) --- (divider after 14)
     // 15
     {
@@ -220,6 +222,7 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
     'admin-users', 'roles', 'production-delivery', 'cms', 'whatsapp',
     'product-sync', 'crm', 'inventory', 'production', 'refunds', 'payroll',
+    'app-updates',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
