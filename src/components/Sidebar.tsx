@@ -109,6 +109,7 @@ const navItems: NavItem[] = [
     // 12-14
     { name: 'Pincodes', href: '/pincodes', icon: <MapPin className="w-5 h-5" /> },
     { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-5 h-5" /> },
+    { name: 'Drop Points', href: '/drop-points', icon: <MapPin className="w-5 h-5" />, permissionKey: 'drop-points' },
     { name: 'Notifications', href: '/notifications', icon: <Bell className="w-5 h-5" /> },
     { name: 'App Updates', href: '/app-updates', icon: <Smartphone className="w-5 h-5" />, permissionKey: 'app-updates' },
     // --- Communications (WhatsApp) --- (divider after 14)
@@ -222,7 +223,7 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
     'admin-users', 'roles', 'production-delivery', 'cms', 'whatsapp',
     'product-sync', 'crm', 'inventory', 'production', 'refunds', 'payroll',
-    'app-updates',
+    'app-updates', 'drop-points',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
@@ -445,7 +446,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                     </Link>
                                 )}
                                 {/* Section dividers */}
-                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 12 || index === 13 || index === 16 || index === 17 || index === 18 || index === 19 || index === 23 || index === 24) && (
+                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 12 || index === 13 || index === 18 || index === 19 || index === 20 || index === 21 || index === 25 || index === 26) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>

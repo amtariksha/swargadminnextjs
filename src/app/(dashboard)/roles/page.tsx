@@ -60,6 +60,9 @@ const AVAILABLE_PERMISSIONS = [
     // App Updates (Feature 02) — version + force-update management for the
     // customer and delivery apps.
     { key: 'app-updates', label: 'App Updates', icon: '📱' },
+    // Drop Points (Feature 03) — truck-route drop-point management + driver
+    // assignment.
+    { key: 'drop-points', label: 'Drop Points', icon: '📍' },
 ];
 
 export default function RolesPage() {
