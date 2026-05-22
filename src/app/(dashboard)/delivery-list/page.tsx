@@ -20,7 +20,7 @@ import {
     getSubscriptionLabel,
     groupByDriver,
 } from '@/lib/deliveryHelpers';
-import { Calendar, RefreshCw, Plus, Truck, Edit, Check, Trash2, Download, AlertTriangle, Package, Navigation, Store, ClipboardCheck, Sun } from 'lucide-react';
+import { Calendar, RefreshCw, Plus, Truck, Edit, Check, Trash2, Download, AlertTriangle, Package, Navigation, Store, ClipboardCheck, Sun, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 
 // formatTime is page-local — only used by the Customer Orders tab in this file.
@@ -102,7 +102,18 @@ function PasscodeDialog({ title, selectedDate, onConfirm, onCancel, strictToday 
 // driver-facing /production-delivery page can render the same view.)
 
 // ====== Main Page ======
-type TabId = 'orders' | 'routewise' | 'packing' | 'dairy';
+type TabId = 'orders' | 'routewise' | 'truck' | 'packing' | 'dairy';
+
+// Feature 03 — a truck drop-point delivery record for the Truck Drop-offs tab.
+interface TruckDropDelivery {
+    id: number;
+    drop_point_id: number;
+    drop_point_title: string;
+    route_order: number;
+    status: number;
+    delivered_at: string | null;
+    truck_driver_name: string | null;
+}
 
 // Shape of the genrate_order_list dry-run response (Feature 05-E).
 interface DryRunPartial { orderId: number; userId: number; customerName: string; deliveredQty: number; orderedQty: number; }
@@ -154,6 +165,15 @@ export default function DeliveryListPage() {
         queryKey: ['delivery-list', selectedDate],
         queryFn: async () => {
             const response = await GET<DeliveryItem[]>(`/get_genrated_order_list/${selectedDate}`);
+            return response.data || [];
+        },
+    });
+
+    // Feature 03 — truck drop-point deliveries for the selected date.
+    const { data: truckDeliveries = [], isLoading: truckLoading } = useQuery({
+        queryKey: ['truck-drop-deliveries', selectedDate],
+        queryFn: async () => {
+            const response = await GET<TruckDropDelivery[]>(`/truck/drop_point_deliveries/${selectedDate}`);
             return response.data || [];
         },
     });
@@ -454,9 +474,38 @@ export default function DeliveryListPage() {
         delivered: deliveryItems.filter(d => d.status === 3).length,
     };
 
+    const truckColumns: Column<TruckDropDelivery>[] = [
+        { key: 'drop_point_title', header: 'Drop Point', width: '260px' },
+        {
+            key: 'truck_driver_name',
+            header: 'Truck Driver',
+            width: '200px',
+            render: (item) => <span className="text-slate-300">{item.truck_driver_name || '-'}</span>,
+        },
+        {
+            key: 'delivered_at',
+            header: 'Delivered At',
+            width: '200px',
+            render: (item) => <span className="text-slate-400 text-sm">{item.delivered_at || '-'}</span>,
+        },
+        {
+            key: 'status',
+            header: 'Status',
+            width: '120px',
+            render: (item) => (
+                <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${
+                    item.status === 3 ? 'bg-green-500/20 text-green-400' : 'bg-slate-700/50 text-slate-400'
+                }`}>
+                    {item.status === 3 ? 'Delivered' : 'Pending'}
+                </span>
+            ),
+        },
+    ];
+
     const tabs: { id: TabId; label: string; icon: React.ReactNode; count: number }[] = [
         { id: 'orders', label: 'Customer Orders', icon: <Truck className="w-4 h-4" />, count: deliveryItems.length },
         { id: 'routewise', label: 'Routewise Products', icon: <Navigation className="w-4 h-4" />, count: routewiseGroups.reduce((s, g) => s + g.totalQty, 0) },
+        { id: 'truck', label: 'Truck Drop-offs', icon: <MapPin className="w-4 h-4" />, count: truckDeliveries.length },
         { id: 'packing', label: 'Packing List', icon: <Package className="w-4 h-4" />, count: packingProducts.reduce((s, p) => s + p.qty, 0) },
         { id: 'dairy', label: 'Dairy Pickup', icon: <Store className="w-4 h-4" />, count: dairyGroups.reduce((s, g) => s + g.totalQty, 0) },
     ];
@@ -607,6 +656,17 @@ export default function DeliveryListPage() {
             {activeTab === 'routewise' && (
                 <DriverGroupTable groups={routewiseGroups} emptyMsg="No delivery data. Generate the delivery list first."
                     onExport={() => exportDriverGroupCSV(routewiseGroups, `Routewise_Products_${selectedDate}.csv`, 'Delivery Boy')} />
+            )}
+
+            {activeTab === 'truck' && (
+                <DataTable
+                    data={truckDeliveries}
+                    columns={truckColumns}
+                    loading={truckLoading}
+                    pageSize={50}
+                    searchPlaceholder="Search drop points..."
+                    emptyMessage="No truck drop-point deliveries for this date"
+                />
             )}
 
             {activeTab === 'packing' && (
