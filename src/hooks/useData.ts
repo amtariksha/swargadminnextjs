@@ -34,17 +34,41 @@ export interface Driver {
     is_location?: number;
     wallet_amount?: number;
     drop_point_id?: number | null;
+    role_id?: number;
+    role_label?: string;
     created_at: string;
     updated_at?: string;
 }
+
+// The three delivery roles a driver can hold. role 4 = last-mile delivery,
+// role 5 = truck driver (Feature 03), role 6 = day driver (Feature 10).
+export const DRIVER_ROLES: { id: number; label: string }[] = [
+    { id: 4, label: 'Last-mile' },
+    { id: 5, label: 'Truck' },
+    { id: 6, label: 'Day' },
+];
 
 export function useDrivers() {
     return useQuery({
         queryKey: ['drivers'],
         queryFn: async () => {
-            // Role 4 = Delivery Partners
-            const response = await GET<Driver[]>('/get_user/role/4');
-            return response.data || [];
+            // Fetch every delivery role and tag each row with its role so the
+            // list shows last-mile, truck and day drivers together.
+            const results = await Promise.allSettled(
+                DRIVER_ROLES.map(async ({ id, label }) => {
+                    const response = await GET<Driver[]>(`/get_user/role/${id}`);
+                    return (response.data || []).map((d) => ({
+                        ...d,
+                        role_id: id,
+                        role_label: label,
+                    }));
+                }),
+            );
+            const drivers: Driver[] = [];
+            for (const r of results) {
+                if (r.status === 'fulfilled') drivers.push(...r.value);
+            }
+            return drivers;
         },
     });
 }
