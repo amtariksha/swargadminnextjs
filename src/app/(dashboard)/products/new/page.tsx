@@ -30,6 +30,9 @@ const productSchema = z.object({
     // Feature 07 — returnable packaging linkage.
     is_returnable_packaging: z.boolean().optional(),
     packaging_type_id: z.string().optional(),
+    // Feature 17 — back order: sell at zero stock with a tentative date.
+    allow_back_order: z.boolean().optional(),
+    back_order_next_available: z.string().optional(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -53,9 +56,10 @@ export default function AddProductPage() {
 
     const { register, handleSubmit, watch, formState: { errors } } = useForm<ProductFormData>({
         resolver: zodResolver(productSchema),
-        defaultValues: { tax: 0, stock_qty: 100, preferences: 0, subscription: 1, is_active: 1, price: 0, mrp: 0, is_returnable_packaging: false, packaging_type_id: '', delivery_window: 1 },
+        defaultValues: { tax: 0, stock_qty: 100, preferences: 0, subscription: 1, is_active: 1, price: 0, mrp: 0, is_returnable_packaging: false, packaging_type_id: '', delivery_window: 1, allow_back_order: false, back_order_next_available: '' },
     });
     const isReturnablePackaging = !!watch('is_returnable_packaging');
+    const allowBackOrder = !!watch('allow_back_order');
 
     const onSubmit = async (data: ProductFormData) => {
         if (isManufactured && (!sourceIntermediateId || !packVolume)) {
@@ -66,6 +70,17 @@ export default function AddProductPage() {
             toast.error('Select a packaging container type for a returnable-packaging product');
             return;
         }
+        const backOrder = !!data.allow_back_order;
+        if (backOrder) {
+            if (!data.back_order_next_available) {
+                toast.error('Enter a tentative next-available date for a back-order product');
+                return;
+            }
+            if (data.back_order_next_available <= new Date(Date.now() + 19800000).toISOString().slice(0, 10)) {
+                toast.error('The tentative next-available date must be in the future');
+                return;
+            }
+        }
         try {
             const payload = {
                 ...data,
@@ -73,6 +88,8 @@ export default function AddProductPage() {
                 pack_volume: isManufactured && packVolume ? parseFloat(packVolume) : null,
                 is_returnable_packaging: data.is_returnable_packaging ? 1 : 0,
                 packaging_type_id: data.is_returnable_packaging && data.packaging_type_id ? Number(data.packaging_type_id) : null,
+                allow_back_order: backOrder ? 1 : 0,
+                back_order_next_available: backOrder ? data.back_order_next_available : null,
             };
             const result = await createProduct.mutateAsync(payload as unknown as Record<string, unknown>);
             // Backend returns id at top level: { response: 200, id: 123 }
@@ -201,6 +218,19 @@ export default function AddProductPage() {
                                     <option key={pt.id} value={pt.id}>{pt.name}</option>
                                 ))}
                             </select>
+                        </FormField>
+                    )}
+                </div>
+
+                {/* Feature 17 — back order */}
+                <div className="border-t border-slate-800/50 pt-4 space-y-4">
+                    <label className="flex items-center gap-2 text-sm text-slate-300">
+                        <input type="checkbox" {...register('allow_back_order')} />
+                        Allow back order — stays orderable at zero stock with a tentative delivery date
+                    </label>
+                    {allowBackOrder && (
+                        <FormField label="Tentative Next-Available Date" error={errors.back_order_next_available} required>
+                            <input {...register('back_order_next_available')} type="date" className={inputClassName} />
                         </FormField>
                     )}
                 </div>

@@ -155,6 +155,9 @@ export interface Product {
     // Feature 07 — returnable packaging linkage.
     is_returnable_packaging?: number;
     packaging_type_id?: number | null;
+    // Feature 17 — back order: orderable at zero stock with a tentative date.
+    allow_back_order?: number;
+    back_order_next_available?: string | null;
     // Feature 10 — 1=morning_only, 2=day_only, 3=both.
     delivery_window?: number;
     sub_cat_id?: number;

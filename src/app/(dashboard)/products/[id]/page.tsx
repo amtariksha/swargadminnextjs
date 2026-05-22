@@ -38,6 +38,9 @@ const productSchema = z.object({
     // Feature 07 — returnable packaging linkage.
     is_returnable_packaging: z.boolean().optional(),
     packaging_type_id: z.string().optional(),
+    // Feature 17 — back order: sell at zero stock with a tentative date.
+    allow_back_order: z.boolean().optional(),
+    back_order_next_available: z.string().optional(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -61,6 +64,7 @@ export default function EditProductPage() {
     });
     const isManufactured = !!watch('is_manufactured');
     const isReturnablePackaging = !!watch('is_returnable_packaging');
+    const allowBackOrder = !!watch('allow_back_order');
 
     useEffect(() => {
         if (product) {
@@ -84,6 +88,8 @@ export default function EditProductPage() {
                 pack_volume: product.pack_volume != null ? String(product.pack_volume) : '',
                 is_returnable_packaging: !!product.is_returnable_packaging,
                 packaging_type_id: product.packaging_type_id != null ? String(product.packaging_type_id) : '',
+                allow_back_order: !!product.allow_back_order,
+                back_order_next_available: product.back_order_next_available || '',
             });
         }
     }, [product, reset]);
@@ -99,6 +105,17 @@ export default function EditProductPage() {
             toast.error('Select a packaging container type for a returnable-packaging product');
             return;
         }
+        const backOrder = !!data.allow_back_order;
+        if (backOrder) {
+            if (!data.back_order_next_available) {
+                toast.error('Enter a tentative next-available date for a back-order product');
+                return;
+            }
+            if (data.back_order_next_available <= new Date(Date.now() + 19800000).toISOString().slice(0, 10)) {
+                toast.error('The tentative next-available date must be in the future');
+                return;
+            }
+        }
         try {
             const payload = {
                 id: Number(id),
@@ -107,6 +124,8 @@ export default function EditProductPage() {
                 pack_volume: manufactured && data.pack_volume ? parseFloat(data.pack_volume) : null,
                 is_returnable_packaging: returnablePackaging ? 1 : 0,
                 packaging_type_id: returnablePackaging && data.packaging_type_id ? Number(data.packaging_type_id) : null,
+                allow_back_order: backOrder ? 1 : 0,
+                back_order_next_available: backOrder ? data.back_order_next_available : null,
             };
             await updateProduct.mutateAsync(payload as unknown as Record<string, unknown>);
             toast.success('Product updated successfully');
@@ -287,6 +306,19 @@ export default function EditProductPage() {
                                         <option key={pt.id} value={pt.id}>{pt.name}</option>
                                     ))}
                                 </select>
+                            </FormField>
+                        )}
+                    </div>
+
+                    {/* Feature 17 — back order */}
+                    <div className="border-t border-slate-800/50 pt-4 space-y-4">
+                        <label className="flex items-center gap-2 text-sm text-slate-300">
+                            <input type="checkbox" {...register('allow_back_order')} />
+                            Allow back order — stays orderable at zero stock with a tentative delivery date
+                        </label>
+                        {allowBackOrder && (
+                            <FormField label="Tentative Next-Available Date" error={errors.back_order_next_available} required>
+                                <input {...register('back_order_next_available')} type="date" className={inputClassName} />
                             </FormField>
                         )}
                     </div>
