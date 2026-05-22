@@ -754,8 +754,23 @@ export function useUpdateProduct() {
         },
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
-            const id = variables instanceof FormData ? variables.get('id') : variables.id;
-            if (id) queryClient.invalidateQueries({ queryKey: ['product', id] });
+            // The product page reads `id` as a string from useParams<{id:string}>,
+            // so useProduct(id) caches under ['product', '157']. The mutation
+            // payload coerces with Number(id) — invalidating ['product', 157]
+            // (number) silently misses the string key, so reopening the
+            // product served stale data and the form rendered the old values
+            // (e.g. returnable packaging reverting to unchecked).
+            // Invalidate by predicate so both number and string ids match.
+            const rawId = variables instanceof FormData ? variables.get('id') : variables.id;
+            if (rawId != null) {
+                const idStr = String(rawId);
+                queryClient.invalidateQueries({
+                    predicate: (q) =>
+                        q.queryKey[0] === 'product' &&
+                        q.queryKey[1] != null &&
+                        String(q.queryKey[1]) === idStr,
+                });
+            }
         },
     });
 }
