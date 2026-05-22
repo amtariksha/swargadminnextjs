@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
-import { Settings as SettingsIcon, Edit, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Settings as SettingsIcon, Edit, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { formatApiDate } from '@/lib/dateUtils';
@@ -57,20 +57,41 @@ export default function SettingsPage() {
         }
     };
 
+    const handleDelete = async (item: Setting) => {
+        if (!window.confirm(`Delete setting "${item.title}"? This cannot be undone.`)) return;
+        try {
+            await POST('/delete_settings', { setting_id: item.setting_id });
+            queryClient.invalidateQueries({ queryKey: ['settings'] });
+            toast.success('Setting deleted');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to delete setting');
+        }
+    };
+
     const isBoolean = (value: string) => value === '0' || value === '1';
 
     const columns: Column<Setting>[] = [
         {
             key: 'actions',
-            header: 'Update',
-            width: '80px',
+            header: 'Actions',
+            width: '110px',
             render: (item) => (
-                <button
-                    onClick={() => handleEdit(item)}
-                    className="p-2 hover:bg-slate-800/50 rounded-lg"
-                >
-                    <Edit className="w-4 h-4 text-purple-400" />
-                </button>
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={() => handleEdit(item)}
+                        className="p-2 hover:bg-slate-800/50 rounded-lg"
+                        title="Edit"
+                    >
+                        <Edit className="w-4 h-4 text-purple-400" />
+                    </button>
+                    <button
+                        onClick={() => handleDelete(item)}
+                        className="p-2 hover:bg-slate-800/50 rounded-lg"
+                        title="Delete"
+                    >
+                        <Trash2 className="w-4 h-4 text-red-400" />
+                    </button>
+                </div>
             ),
         },
         { key: 'setting_id', header: 'ID', width: '60px' },
