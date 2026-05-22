@@ -6,10 +6,42 @@ import { format, addDays } from 'date-fns';
 import { GET } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 import DataTable, { Column } from '@/components/DataTable';
-import { Plus, Eye, Download, Image as ImageIcon, Search as SearchIcon, X as XIcon } from 'lucide-react';
+import { Plus, Eye, Download, Image as ImageIcon, Search as SearchIcon, X as XIcon, Copy } from 'lucide-react';
+import { toast } from 'sonner';
 import { IMAGE_BASE_URL } from '@/config/tenant';
 
 import { formatApiDate } from '@/lib/dateUtils';
+
+// Small inline component — renders a value next to a one-click copy button.
+// Used for the order ID and customer phone in the orders list so the
+// operator can paste them into WhatsApp / CRM without retyping.
+function CopyableCell({ value, label }: { value: string | number | null | undefined; label?: string }) {
+    const str = value == null || value === '' ? '' : String(value);
+    if (!str) return <span className="text-slate-500">-</span>;
+    const handleCopy = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (typeof navigator !== 'undefined' && navigator.clipboard) {
+            navigator.clipboard.writeText(str).then(
+                () => toast.success(`${label ? label + ' ' : ''}copied`),
+                () => toast.error('Copy failed'),
+            );
+        }
+    };
+    return (
+        <span className="inline-flex items-center gap-1.5">
+            <span>{str}</span>
+            <button
+                type="button"
+                onClick={handleCopy}
+                className="p-1 rounded hover:bg-slate-800/50 text-slate-400 hover:text-slate-200"
+                title={`Copy ${label || ''} ${str}`.trim()}
+                aria-label={`Copy ${label || str}`}
+            >
+                <Copy className="w-3 h-3" />
+            </button>
+        </span>
+    );
+}
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type OrderRow = Record<string, any>;
 
@@ -195,7 +227,7 @@ export default function OrdersPage() {
             key: 'view', header: 'View', width: '60px',
             render: (o) => <button onClick={(e) => { e.stopPropagation(); router.push(`/orders/${o.id}`); }} className="p-1.5 hover:bg-slate-800/50 rounded-lg"><Eye className="w-4 h-4 text-purple-400" /></button>,
         },
-        { key: 'id', header: 'ID', width: '60px' },
+        { key: 'id', header: 'ID', width: '95px', render: (o) => <CopyableCell value={o.id} label="Order ID" /> },
         { key: 'trasation_id', header: 'Txn ID', width: '80px', render: (o) => <span className="text-xs text-slate-400">{o.trasation_id || '-'}</span> },
         { key: 'title', header: 'Product', width: '180px' },
         {
@@ -209,7 +241,7 @@ export default function OrdersPage() {
         { key: 'order_status', header: 'Order Status', width: '100px', render: (o) => <span className="text-sm">{getOrderStatus(o)}</span> },
         { key: 'subscription_type', header: 'Sub Type', width: '130px', render: (o) => <span className="text-xs">{getSubTypeLabel(o.subscription_type)}</span> },
         { key: 'name', header: 'Name', width: '150px' },
-        { key: 's_phone', header: 'Phone', width: '110px' },
+        { key: 's_phone', header: 'Phone', width: '150px', render: (o) => <CopyableCell value={o.s_phone} label="Phone" /> },
         {
             key: 'wallet_amount', header: 'Wallet', width: '90px',
             render: (o) => {
