@@ -5,7 +5,8 @@ import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useProduct, useSubcategories, useUpdateProduct, useUploadProductImage, useDeleteProductImage } from '@/hooks/useData';
+import { useProduct, useSubcategories, useUpdateProduct, useUploadProductImage, useDeleteProductImage, usePackagingTypes } from '@/hooks/useData';
+import { useIntermediates } from '@/hooks/useProduction';
 import FormField, { inputClassName, selectClassName, textareaClassName } from '@/components/FormField';
 import ImageUpload from '@/components/ImageUpload';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -25,9 +26,21 @@ const productSchema = z.object({
     subscription: z.number(),
     is_active: z.number(),
     sub_cat_id: z.number().min(1, 'Subcategory is required'),
+    delivery_window: z.number(),
     offer_text: z.string().optional(),
     description: z.string().optional(),
     disclaimer: z.string().optional(),
+    // Feature 16 — manufactured-product linkage. Kept as form fields (not
+    // separate state) so reset() can initialise them without a setState effect.
+    is_manufactured: z.boolean().optional(),
+    source_intermediate_id: z.string().optional(),
+    pack_volume: z.string().optional(),
+    // Feature 07 — returnable packaging linkage.
+    is_returnable_packaging: z.boolean().optional(),
+    packaging_type_id: z.string().optional(),
+    // Feature 17 — back order: sell at zero stock with a tentative date.
+    allow_back_order: z.boolean().optional(),
+    back_order_next_available: z.string().optional(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -37,6 +50,8 @@ export default function EditProductPage() {
     const router = useRouter();
     const { data: product, isLoading } = useProduct(id);
     const { data: subcategories = [] } = useSubcategories();
+    const { data: intermediates = [] } = useIntermediates();
+    const { data: packagingTypes = [] } = usePackagingTypes(true);
     const updateProduct = useUpdateProduct();
     const uploadImage = useUploadProductImage();
     const deleteImage = useDeleteProductImage();
@@ -44,9 +59,12 @@ export default function EditProductPage() {
     const [deleteProductConfirm, setDeleteProductConfirm] = useState(false);
     const sliderFileRef = useRef<HTMLInputElement>(null);
 
-    const { register, handleSubmit, reset, formState: { errors } } = useForm<ProductFormData>({
+    const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<ProductFormData>({
         resolver: zodResolver(productSchema),
     });
+    const isManufactured = !!watch('is_manufactured');
+    const isReturnablePackaging = !!watch('is_returnable_packaging');
+    const allowBackOrder = !!watch('allow_back_order');
 
     useEffect(() => {
         if (product) {
@@ -61,16 +79,55 @@ export default function EditProductPage() {
                 subscription: product.subscription ?? 1,
                 is_active: product.is_active ?? 1,
                 sub_cat_id: product.sub_cat_id || product.subcategory_id || 0,
+                delivery_window: product.delivery_window ?? 1,
                 offer_text: product.offer_text || '',
                 description: product.description || '',
                 disclaimer: product.disclaimer || '',
+                is_manufactured: product.source_intermediate_id != null,
+                source_intermediate_id: product.source_intermediate_id != null ? String(product.source_intermediate_id) : '',
+                pack_volume: product.pack_volume != null ? String(product.pack_volume) : '',
+                is_returnable_packaging: !!product.is_returnable_packaging,
+                packaging_type_id: product.packaging_type_id != null ? String(product.packaging_type_id) : '',
+                allow_back_order: !!product.allow_back_order,
+                back_order_next_available: product.back_order_next_available || '',
             });
         }
     }, [product, reset]);
 
     const onSubmit = async (data: ProductFormData) => {
+        const manufactured = !!data.is_manufactured;
+        if (manufactured && (!data.source_intermediate_id || !data.pack_volume)) {
+            toast.error('Select a source intermediate and pack volume for a manufactured product');
+            return;
+        }
+        const returnablePackaging = !!data.is_returnable_packaging;
+        if (returnablePackaging && !data.packaging_type_id) {
+            toast.error('Select a packaging container type for a returnable-packaging product');
+            return;
+        }
+        const backOrder = !!data.allow_back_order;
+        if (backOrder) {
+            if (!data.back_order_next_available) {
+                toast.error('Enter a tentative next-available date for a back-order product');
+                return;
+            }
+            if (data.back_order_next_available <= new Date(Date.now() + 19800000).toISOString().slice(0, 10)) {
+                toast.error('The tentative next-available date must be in the future');
+                return;
+            }
+        }
         try {
-            await updateProduct.mutateAsync({ id: Number(id), ...data } as unknown as Record<string, unknown>);
+            const payload = {
+                id: Number(id),
+                ...data,
+                source_intermediate_id: manufactured && data.source_intermediate_id ? Number(data.source_intermediate_id) : null,
+                pack_volume: manufactured && data.pack_volume ? parseFloat(data.pack_volume) : null,
+                is_returnable_packaging: returnablePackaging ? 1 : 0,
+                packaging_type_id: returnablePackaging && data.packaging_type_id ? Number(data.packaging_type_id) : null,
+                allow_back_order: backOrder ? 1 : 0,
+                back_order_next_available: backOrder ? data.back_order_next_available : null,
+            };
+            await updateProduct.mutateAsync(payload as unknown as Record<string, unknown>);
             toast.success('Product updated successfully');
             router.push('/products');
         } catch (error) {
@@ -173,8 +230,8 @@ export default function EditProductPage() {
                         <FormField label="Tax (%)" error={errors.tax}>
                             <input {...register('tax', { valueAsNumber: true })} type="number" min={0} max={99} className={inputClassName} />
                         </FormField>
-                        <FormField label="Stock Quantity" error={errors.stock_qty}>
-                            <input {...register('stock_qty', { valueAsNumber: true })} type="number" min={0} max={10000} className={inputClassName} />
+                        <FormField label={isManufactured ? 'Stock Quantity (derived — read-only)' : 'Stock Quantity'} error={errors.stock_qty}>
+                            <input {...register('stock_qty', { valueAsNumber: true })} type="number" min={0} max={10000} readOnly={isManufactured} className={inputClassName} />
                         </FormField>
                         <FormField label="Preferences (display order)" error={errors.preferences}>
                             <input {...register('preferences', { valueAsNumber: true })} type="number" min={0} className={inputClassName} />
@@ -197,6 +254,13 @@ export default function EditProductPage() {
                                 <option value={0}>Inactive</option>
                             </select>
                         </FormField>
+                        <FormField label="Delivery Window" error={errors.delivery_window}>
+                            <select {...register('delivery_window', { valueAsNumber: true })} className={selectClassName}>
+                                <option value={1}>Morning only</option>
+                                <option value={2}>Day-time only</option>
+                                <option value={3}>Both</option>
+                            </select>
+                        </FormField>
                     </div>
 
                     {product.cat_title && (
@@ -204,6 +268,60 @@ export default function EditProductPage() {
                             <input value={product.cat_title} disabled className={`${inputClassName} !text-slate-500 !bg-slate-800/30`} />
                         </FormField>
                     )}
+
+                    {/* Feature 16 — manufactured (packed) product linkage */}
+                    <div className="border-t border-slate-800/50 pt-4 space-y-4">
+                        <label className="flex items-center gap-2 text-sm text-slate-300">
+                            <input type="checkbox" {...register('is_manufactured')} />
+                            Manufactured product — stock is derived live from a bulk intermediate
+                        </label>
+                        {isManufactured && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <FormField label="Source Intermediate" required>
+                                    <select {...register('source_intermediate_id')} className={selectClassName}>
+                                        <option value="">Select intermediate</option>
+                                        {intermediates.map((ip) => (
+                                            <option key={ip.id} value={ip.id}>{ip.name} ({ip.base_unit})</option>
+                                        ))}
+                                    </select>
+                                </FormField>
+                                <FormField label="Pack Volume (intermediate qty per unit)" required>
+                                    <input {...register('pack_volume')} type="number" step="0.001" min="0" className={inputClassName} placeholder="e.g., 200, 500" />
+                                </FormField>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Feature 07 — returnable packaging linkage */}
+                    <div className="border-t border-slate-800/50 pt-4 space-y-4">
+                        <label className="flex items-center gap-2 text-sm text-slate-300">
+                            <input type="checkbox" {...register('is_returnable_packaging')} />
+                            Returnable packaging — ships in a glass bottle / container the customer can return
+                        </label>
+                        {isReturnablePackaging && (
+                            <FormField label="Packaging Container Type" required>
+                                <select {...register('packaging_type_id')} className={selectClassName}>
+                                    <option value="">Select packaging type</option>
+                                    {packagingTypes.map((pt) => (
+                                        <option key={pt.id} value={pt.id}>{pt.name}</option>
+                                    ))}
+                                </select>
+                            </FormField>
+                        )}
+                    </div>
+
+                    {/* Feature 17 — back order */}
+                    <div className="border-t border-slate-800/50 pt-4 space-y-4">
+                        <label className="flex items-center gap-2 text-sm text-slate-300">
+                            <input type="checkbox" {...register('allow_back_order')} />
+                            Allow back order — stays orderable at zero stock with a tentative delivery date
+                        </label>
+                        {allowBackOrder && (
+                            <FormField label="Tentative Next-Available Date" error={errors.back_order_next_available} required>
+                                <input {...register('back_order_next_available')} type="date" className={inputClassName} />
+                            </FormField>
+                        )}
+                    </div>
 
                     <h3 className="text-lg font-semibold text-white pt-4 border-t border-slate-800/50">Other Information</h3>
                     <FormField label="Offer Text" error={errors.offer_text}>

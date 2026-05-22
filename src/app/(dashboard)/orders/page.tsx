@@ -41,6 +41,8 @@ const INITIAL_FILTERS = {
     subs_orders: false,
     normal_orders: false,
     not_onetime: false,
+    is_back_order: false,
+    undelivered_back_order: false,
 };
 
 type FilterKey = keyof typeof INITIAL_FILTERS;
@@ -55,6 +57,8 @@ const FILTER_LABELS: Record<FilterKey, string> = {
     subs_orders: 'Subs Orders',
     normal_orders: 'Normal Orders',
     not_onetime: 'Not OneTime',
+    is_back_order: 'Back-order orders',
+    undelivered_back_order: 'Undelivered back-orders',
 };
 
 export default function OrdersPage() {
@@ -155,6 +159,13 @@ export default function OrdersPage() {
         }
         if (filters.not_onetime) {
             result = result.filter(o => getSubTypeLabel(o.subscription_type) !== 'One Time Order');
+        }
+        // Feature 17 — back order filters.
+        if (filters.is_back_order) {
+            result = result.filter(o => o.is_back_order === 1);
+        }
+        if (filters.undelivered_back_order) {
+            result = result.filter(o => o.is_back_order === 1 && !o.delivery_status);
         }
 
         return result;

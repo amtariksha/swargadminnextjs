@@ -18,6 +18,14 @@ const AVAILABLE_PERMISSIONS = [
     { key: 'delivery-list', label: 'Delivery List', icon: '📋' },
     { key: 'delivery-report', label: 'Delivery Report', icon: '📈' },
     { key: 'transactions', label: 'Transactions', icon: '💰' },
+    // Refunds — gates the Refunds Report screen + the refund-reason settings
+    // editor. The refund popup itself stays under the `transactions` key.
+    { key: 'refunds', label: 'Refunds', icon: '💸' },
+    // Payroll — driver salary master + monthly payslip generation.
+    { key: 'payroll', label: 'Payroll', icon: '🧾' },
+    // Returnable Packaging (Feature 07) — packaging-type CRUD + the
+    // Returns & Refunds approval surface.
+    { key: 'packaging', label: 'Returnable Packaging', icon: '📦' },
     { key: 'banners', label: 'Banners', icon: '🖼️' },
     { key: 'testimonials', label: 'Testimonials', icon: '⭐' },
     { key: 'pincodes', label: 'Pincodes', icon: '📍' },
@@ -34,6 +42,10 @@ const AVAILABLE_PERMISSIONS = [
     // Settings). Full-access roles (empty permissions array) automatically
     // see this entry too. Default: ON for super-admin, OFF for other roles.
     { key: 'whatsapp', label: 'WhatsApp', icon: '💬' },
+    // CRM — customer feedback log, call worklist, and guided call scripts
+    // under /crm/**. Granting this exposes the CRM section in the Sidebar
+    // and the Feedback tab on the customer-detail page.
+    { key: 'crm', label: 'CRM', icon: '📞' },
     // Driver-facing page: granting only this permission lets the user
     // log in and reach `/production-delivery` (Routewise / Packing /
     // Dairy Pickup tabs) — and nothing else.
@@ -44,6 +56,23 @@ const AVAILABLE_PERMISSIONS = [
     { key: 'payload_admin', label: 'Payload CMS Admin', icon: '🛠️' },
     // Product Sync UI — links MySQL ops products with Payload web products.
     { key: 'product-sync', label: 'Product Sync', icon: '🔗' },
+    // Inventory (Feature 11) — vendors, raw materials, purchases, ledger.
+    { key: 'inventory', label: 'Inventory', icon: '🏬' },
+    // Production (Feature 16) — intermediates, recipes, production records.
+    { key: 'production', label: 'Production', icon: '🏭' },
+    // App Updates (Feature 02) — version + force-update management for the
+    // customer and delivery apps.
+    { key: 'app-updates', label: 'App Updates', icon: '📱' },
+    // Drop Points (Feature 03) — truck-route drop-point management + driver
+    // assignment.
+    { key: 'drop-points', label: 'Drop Points', icon: '📍' },
+    // Broadcast (Feature 09) — the admin broadcast composer. The notification
+    // image library stays under the existing `notifications` key.
+    { key: 'broadcast', label: 'Broadcast Notifications', icon: '📢' },
+    // Day Orders (Feature 10) — day-time ordering panel, payment links, and
+    // sales reporting / incentive. Granting this exposes the Day Orders
+    // entry in the Sidebar (sales executives are admin-panel users).
+    { key: 'day-orders', label: 'Day Orders', icon: '☀️' },
 ];
 
 export default function RolesPage() {

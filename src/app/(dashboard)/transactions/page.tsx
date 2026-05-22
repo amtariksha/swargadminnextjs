@@ -6,6 +6,7 @@ import { apiDateMs, formatApiDate } from '@/lib/dateUtils';
 import { useTransactionsByDateRange, useUsers, useAddTransaction, type UserTransaction, type User } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import RefundModal from '@/components/RefundModal';
 import { inputClassName, selectClassName } from '@/components/FormField';
 import { CreditCard, Plus, RotateCcw, Download } from 'lucide-react';
 import { toast } from 'sonner';
@@ -50,22 +51,6 @@ export default function TransactionsPage() {
         } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to add transaction'); }
     };
 
-    const handleRefund = async () => {
-        if (!showRefundModal) return;
-        try {
-            await addTxnMutation.mutateAsync({
-                user_id: showRefundModal.user_id,
-                payment_id: showRefundModal.payment_id || '',
-                amount: showRefundModal.amount,
-                type: 1, // Credit
-                description: 'Refund',
-            });
-            toast.success('Refund processed');
-            setShowRefundModal(null);
-            refetch();
-        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to process refund'); }
-    };
-
     const handleExport = () => {
         const headers = ['ID', 'Order ID', 'Payment ID', 'Amount', 'Name', 'Phone', 'Description', 'Wallet Prev', 'Wallet Upd', 'Type', 'Date'];
         const rows = sortedTxns.map(t => [
@@ -104,7 +89,29 @@ export default function TransactionsPage() {
         },
         { key: 'name', header: 'Name', width: '150px', render: (t) => <span>{t.name || '-'}</span> },
         { key: 'phone', header: 'Phone', width: '120px', render: (t) => <span className="text-slate-400">{t.phone || '-'}</span> },
-        { key: 'description', header: 'Description', width: '180px', render: (t) => <span className="text-sm text-slate-400">{t.description || '-'}</span> },
+        {
+            key: 'description', header: 'Description', width: '240px',
+            render: (t) => {
+                const isRefund = t.type === 1 && !!t.refund_for_transaction_id;
+                if (!isRefund) return <span className="text-sm text-slate-400">{t.description || '-'}</span>;
+                return (
+                    <div className="text-sm">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-slate-300">{t.refund_reason || 'Refund'}</span>
+                            {t.billed_to_driver === 1 && (
+                                <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-[10px] font-medium">
+                                    Billed to driver
+                                </span>
+                            )}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                            {t.order_id ? `Refund for Order #${t.order_id}` : 'Refund'}
+                            {t.delivery_date ? ` · delivered ${t.delivery_date}` : ''}
+                        </div>
+                    </div>
+                );
+            },
+        },
         {
             key: 'pre_tx_wallet_balance', header: 'Wallet Prev', width: '100px',
             render: (t) => <span className="text-slate-400 text-sm">₹{t.pre_tx_wallet_balance ?? '-'}</span>,
@@ -253,28 +260,13 @@ export default function TransactionsPage() {
             </Modal>
 
             {/* Refund Modal */}
-            <Modal isOpen={!!showRefundModal} onClose={() => setShowRefundModal(null)} title="Process Refund">
-                {showRefundModal && (
-                    <div className="space-y-4">
-                        <p className="text-sm text-slate-400">Refund for transaction #{showRefundModal.id} — {showRefundModal.name}</p>
-                        <div>
-                            <label className="block text-sm text-slate-300 mb-1">Amount</label>
-                            <input type="number" value={showRefundModal.amount} disabled className={inputClassName} />
-                        </div>
-                        <div>
-                            <label className="block text-sm text-slate-300 mb-1">Type</label>
-                            <input value="Credit (Refund)" disabled className={inputClassName} />
-                        </div>
-                        <div className="flex gap-3">
-                            <button onClick={() => setShowRefundModal(null)} className="flex-1 px-4 py-2.5 text-sm text-slate-300 bg-slate-800/50 rounded-xl">Cancel</button>
-                            <button onClick={handleRefund} disabled={addTxnMutation.isPending}
-                                className="flex-1 px-4 py-2.5 text-sm text-white bg-green-600 hover:bg-green-700 rounded-xl disabled:opacity-50">
-                                {addTxnMutation.isPending ? 'Processing...' : 'Confirm Refund'}
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </Modal>
+            {showRefundModal && (
+                <RefundModal
+                    transaction={showRefundModal}
+                    onClose={() => setShowRefundModal(null)}
+                    onSuccess={refetch}
+                />
+            )}
         </div>
     );
 }

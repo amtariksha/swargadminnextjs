@@ -33,16 +33,70 @@ export interface Driver {
     image?: string | null;
     is_location?: number;
     wallet_amount?: number;
+    drop_point_id?: number | null;
+    role_id?: number;
+    role_label?: string;
     created_at: string;
     updated_at?: string;
 }
+
+// The three delivery roles a driver can hold. role 4 = last-mile delivery,
+// role 5 = truck driver (Feature 03), role 6 = day driver (Feature 10).
+export const DRIVER_ROLES: { id: number; label: string }[] = [
+    { id: 4, label: 'Last-mile' },
+    { id: 5, label: 'Truck' },
+    { id: 6, label: 'Day' },
+];
 
 export function useDrivers() {
     return useQuery({
         queryKey: ['drivers'],
         queryFn: async () => {
-            // Role 4 = Delivery Partners
-            const response = await GET<Driver[]>('/get_user/role/4');
+            // Fetch every delivery role and tag each row with its role so the
+            // list shows last-mile, truck and day drivers together.
+            const results = await Promise.allSettled(
+                DRIVER_ROLES.map(async ({ id, label }) => {
+                    const response = await GET<Driver[]>(`/get_user/role/${id}`);
+                    return (response.data || []).map((d) => ({
+                        ...d,
+                        role_id: id,
+                        role_label: label,
+                    }));
+                }),
+            );
+            const drivers: Driver[] = [];
+            for (const r of results) {
+                if (r.status === 'fulfilled') drivers.push(...r.value);
+            }
+            return drivers;
+        },
+    });
+}
+
+// Drop Points (Feature 03 — truck-driver mode)
+export interface DropPointPhoto {
+    id: number;
+    image_path: string;
+}
+
+export interface DropPoint {
+    id: number;
+    title: string;
+    lat: number | null;
+    lng: number | null;
+    route_order: number;
+    notes: string | null;
+    photos: DropPointPhoto[];
+    driver_count: number;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export function useDropPoints() {
+    return useQuery({
+        queryKey: ['drop-points'],
+        queryFn: async () => {
+            const response = await GET<DropPoint[]>('/drop_points');
             return response.data || [];
         },
     });
@@ -95,6 +149,17 @@ export interface Product {
     preferences?: number;
     qty_text?: string;
     stock_qty?: number;
+    // Feature 16 — manufactured-product linkage (null for bought-and-resold SKUs).
+    source_intermediate_id?: number | null;
+    pack_volume?: number | null;
+    // Feature 07 — returnable packaging linkage.
+    is_returnable_packaging?: number;
+    packaging_type_id?: number | null;
+    // Feature 17 — back order: orderable at zero stock with a tentative date.
+    allow_back_order?: number;
+    back_order_next_available?: string | null;
+    // Feature 10 — 1=morning_only, 2=day_only, 3=both.
+    delivery_window?: number;
     sub_cat_id?: number;
     price: number;
     mrp?: number;
@@ -351,6 +416,12 @@ export interface UserTransaction {
     updated_wallet_balance?: number;
     created_at: string;
     updated_at?: string;
+    // Feature 14 — refund linkage / driver billing
+    refund_for_transaction_id?: number | null;
+    delivery_date?: string | null;
+    refund_reason?: string | null;
+    billed_to_driver?: number;
+    billed_driver_id?: number | null;
 }
 
 export interface UserHoliday {
@@ -1145,6 +1216,752 @@ export function useUploadImage() {
     return useMutation({
         mutationFn: async (data: FormData) => {
             return POST<{ image: string }>('/upload_image_only', data);
+        },
+    });
+}
+
+// ==========================================
+// CRM — Customer Feedback (Feature 13)
+// ==========================================
+
+export type ActivityWindows = Record<string, 'active' | 'inactive'>;
+
+export interface CustomerFeedback {
+    id: number;
+    user_id: number;
+    caller_user_id: number | null;
+    call_type: 'feedback' | 'reactivation';
+    calling_date: string | null;
+    status: string | null;
+    followup_date: string | null;
+    occupation: string | null;
+    preferred_call_time: string | null;
+    problems: string | null;
+    product_feedback: string | null;
+    delivery_feedback: string | null;
+    preferred_delivery_time: string | null;
+    ring_bell_pref: string | null;
+    drop_place_pref: string | null;
+    application_feedback: string | null;
+    customer_care_notes: string | null;
+    created_at: string;
+    updated_at: string;
+    customer_name?: string | null;
+    customer_phone?: string | null;
+    caller_name?: string | null;
+}
+
+export interface CustomerContext {
+    user_id: number;
+    name: string;
+    phone: string;
+    wallet_amount: number;
+    route: string | null;
+    driver_user_id: number | null;
+    activity_windows: ActivityWindows;
+    last_delivery_date: string | null;
+    days_since_last_delivery: number | null;
+    last_call: {
+        id: number;
+        calling_date: string | null;
+        status: string | null;
+        call_type: string;
+        caller_name: string | null;
+    } | null;
+}
+
+export interface WorklistItem {
+    user_id: number;
+    customer_name: string;
+    phone: string;
+    wallet_amount: number;
+    reason: 'followup_due' | 'due_for_call';
+    last_call_date: string | null;
+    followup_date: string | null;
+    route: string | null;
+    activity_windows: ActivityWindows | null;
+    days_since_last_delivery: number | null;
+}
+
+export interface Worklist {
+    cadence_days: number;
+    count: number;
+    items: WorklistItem[];
+}
+
+export interface CallScript {
+    id: number;
+    script_type: 'feedback' | 'reactivation';
+    title: string;
+    body: string;
+    is_active: number;
+    updated_by_user_id: number | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface FeedbackListFilters {
+    user_id?: number | string;
+    caller_user_id?: number | string;
+    status?: string;
+    call_type?: string;
+    from_date?: string;
+    to_date?: string;
+}
+
+export function useCustomerFeedback(userId: number | string | undefined, enabled = true) {
+    return useQuery({
+        queryKey: ['customer-feedback', userId],
+        queryFn: async () => {
+            const response = await GET<CustomerFeedback[]>(`/crm/feedback/user/${userId}`);
+            return response.data || [];
+        },
+        enabled: !!userId && enabled,
+    });
+}
+
+export function useFeedbackList(filters: FeedbackListFilters = {}) {
+    return useQuery({
+        queryKey: ['feedback-list', filters],
+        queryFn: async () => {
+            const params: Record<string, unknown> = {};
+            for (const [key, value] of Object.entries(filters)) {
+                if (value !== undefined && value !== '' && value !== null) params[key] = value;
+            }
+            const response = await GET<CustomerFeedback[]>('/crm/feedback', params);
+            return response.data || [];
+        },
+    });
+}
+
+export function useFeedbackEntry(id: number | string | undefined, enabled = true) {
+    return useQuery({
+        queryKey: ['feedback-entry', id],
+        queryFn: async () => {
+            const response = await GET<CustomerFeedback>(`/crm/feedback/${id}`);
+            return response.data;
+        },
+        enabled: !!id && enabled,
+    });
+}
+
+export function useFeedbackWorklist() {
+    return useQuery({
+        queryKey: ['feedback-worklist'],
+        queryFn: async () => {
+            const response = await GET<Worklist>('/crm/worklist');
+            return response.data;
+        },
+    });
+}
+
+export function useCustomerContext(userId: number | string | undefined, enabled = true) {
+    return useQuery({
+        queryKey: ['customer-context', userId],
+        queryFn: async () => {
+            const response = await GET<CustomerContext>(`/crm/customer-context/${userId}`);
+            return response.data;
+        },
+        enabled: !!userId && enabled,
+    });
+}
+
+export function useCallScripts() {
+    return useQuery({
+        queryKey: ['call-scripts'],
+        queryFn: async () => {
+            const response = await GET<CallScript[]>('/crm/scripts');
+            return response.data || [];
+        },
+    });
+}
+
+export function useCallScript(type: 'feedback' | 'reactivation', enabled = true) {
+    return useQuery({
+        queryKey: ['call-script', type],
+        queryFn: async () => {
+            const response = await GET<CallScript>(`/crm/scripts/${type}`);
+            return response.data;
+        },
+        enabled: !!type && enabled,
+    });
+}
+
+export function useCreateFeedback() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST<CustomerFeedback>('/crm/feedback', data);
+        },
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['customer-feedback', variables.user_id] });
+            queryClient.invalidateQueries({ queryKey: ['feedback-list'] });
+            queryClient.invalidateQueries({ queryKey: ['feedback-worklist'] });
+            queryClient.invalidateQueries({ queryKey: ['customer-context', variables.user_id] });
+        },
+    });
+}
+
+export function useUpdateFeedback() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ id, ...data }: Record<string, unknown> & { id: number | string }) => {
+            return PUT<CustomerFeedback>(`/crm/feedback/${id}`, data);
+        },
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['customer-feedback'] });
+            queryClient.invalidateQueries({ queryKey: ['feedback-list'] });
+            queryClient.invalidateQueries({ queryKey: ['feedback-worklist'] });
+            queryClient.invalidateQueries({ queryKey: ['feedback-entry', variables.id] });
+        },
+    });
+}
+
+export function useUpdateCallScript() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ id, ...data }: Record<string, unknown> & { id: number | string }) => {
+            return PUT<CallScript>(`/crm/scripts/${id}`, data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['call-scripts'] });
+            queryClient.invalidateQueries({ queryKey: ['call-script'] });
+        },
+    });
+}
+
+// ==========================================
+// Feature 14 — Refund management
+// ==========================================
+
+export interface RefundReason {
+    label: string;
+    active: boolean;
+}
+
+export interface RefundDriver {
+    id: number;
+    name: string;
+}
+
+export interface RefundOrderContext {
+    transaction_id: number;
+    is_debit: boolean;
+    amount: number;
+    order_id: number | null;
+    delivery_date: string | null;
+    already_refunded: boolean;
+    assigned_driver: RefundDriver | null;
+    driver_candidates: RefundDriver[];
+}
+
+export interface RefundReportReasonRow { reason: string; count: number; amount: number; }
+export interface RefundReportDriverRow { driver_id: number | null; driver_name: string; count: number; amount: number; }
+export interface RefundReportDateRow { date: string | null; count: number; amount: number; }
+
+export interface RefundReport {
+    range: { from: string; to: string };
+    summary: { total_count: number; total_amount: number; billed_amount: number; absorbed_amount: number };
+    by_reason: RefundReportReasonRow[];
+    by_driver: RefundReportDriverRow[];
+    by_date: RefundReportDateRow[];
+}
+
+export function useRefundReasons(activeOnly = false) {
+    return useQuery({
+        queryKey: ['refund-reasons', activeOnly],
+        queryFn: async () => {
+            const response = await GET<RefundReason[]>(`/refund/reasons${activeOnly ? '?active=1' : ''}`);
+            return response.data || [];
+        },
+    });
+}
+
+export function useUpdateRefundReasons() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (reasons: RefundReason[]) => {
+            return PUT<RefundReason[]>('/refund/reasons', { reasons });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['refund-reasons'] });
+        },
+    });
+}
+
+export function useRefundOrderContext(transactionId: number | null | undefined) {
+    return useQuery({
+        queryKey: ['refund-order-context', transactionId],
+        queryFn: async () => {
+            const response = await GET<RefundOrderContext>(`/refund/order-context/${transactionId}`);
+            return response.data;
+        },
+        enabled: !!transactionId,
+    });
+}
+
+export function useProcessRefund() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST('/refund', data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['transactions-range'] });
+            queryClient.invalidateQueries({ queryKey: ['user-transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['user'] });
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+            queryClient.invalidateQueries({ queryKey: ['refund-report'] });
+        },
+    });
+}
+
+export function useRefundReport(from: string, to: string) {
+    return useQuery({
+        queryKey: ['refund-report', from, to],
+        queryFn: async () => {
+            const response = await GET<RefundReport>(`/refund/report?from=${from}&to=${to}`);
+            return response.data;
+        },
+        enabled: !!from && !!to,
+    });
+}
+
+// ==========================================
+// Feature 15 — Driver payroll
+// ==========================================
+
+export interface PayslipRow {
+    driver_id: number;
+    driver_name: string;
+    email: string | null;
+    has_master: boolean;
+    master_active: boolean;
+    designation: string | null;
+    payslip_id: number | null;
+    status: string | null; // 'generated' | 'draft' | null
+    total_earning: number | null;
+    total_deduction: number | null;
+    net_pay: number | null;
+    billed_deductions: number | null;
+    pdf_url: string | null;
+    prorated: boolean;
+    generated_at: string | null;
+    basic_paid: number | null;
+    hra_paid: number | null;
+    medical_allowance: number | null;
+    special_allowance: number | null;
+    travel_allowance: number | null;
+    bonus: number | null;
+    reimbursement: number | null;
+    pf: number | null;
+    esi: number | null;
+    pt: number | null;
+    tax: number | null;
+    misc: number | null;
+}
+
+export interface PayslipsResponse {
+    period: { month: number; year: number; label: string };
+    rows: PayslipRow[];
+}
+
+export interface SalaryMaster {
+    id?: number;
+    driver_id: number;
+    designation?: string | null;
+    joining_date?: string | null;
+    bank_name?: string | null;
+    account_holder_name?: string | null;
+    account_no?: string | null;
+    ifsc?: string | null;
+    pan?: string | null;
+    uan?: string | null;
+    basic?: number;
+    hra?: number;
+    medical_allowance?: number;
+    special_allowance?: number;
+    travel_allowance?: number;
+    reimbursement_base?: number;
+    bonus_base?: number;
+    pf_deduction?: number;
+    esi_deduction?: number;
+    pt_deduction?: number;
+    tax_deduction?: number;
+    misc_deduction?: number;
+    is_active?: number;
+    ref_no?: string | null;
+}
+
+export interface GeneratePayslipsResult {
+    generated: number;
+    skipped: string[];
+    warnings: string[];
+}
+
+export function usePayslips(month: number, year: number) {
+    return useQuery({
+        queryKey: ['payslips', month, year],
+        queryFn: async () => {
+            const response = await GET<PayslipsResponse>(`/payroll/payslips?month=${month}&year=${year}`);
+            return response.data;
+        },
+        enabled: !!month && !!year,
+    });
+}
+
+export function useSalaryMaster(driverId: number | null) {
+    return useQuery({
+        queryKey: ['salary-master', driverId],
+        queryFn: async () => {
+            const response = await GET<SalaryMaster | null>(`/payroll/master/${driverId}`);
+            return response.data;
+        },
+        enabled: !!driverId,
+    });
+}
+
+export function useSaveSalaryMaster() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => POST('/payroll/master', data),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['salary-master'] });
+            queryClient.invalidateQueries({ queryKey: ['payslips'] });
+        },
+    });
+}
+
+export function useGeneratePayslips() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) =>
+            POST<GeneratePayslipsResult>('/payroll/generate', data),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payslips'] }),
+    });
+}
+
+export function useUpdatePayslip() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ id, ...data }: { id: number } & Record<string, unknown>) =>
+            PUT(`/payroll/payslip/${id}`, data),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payslips'] }),
+    });
+}
+
+export function useAddDriverDeduction() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => POST('/payroll/deduction', data),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payslips'] }),
+    });
+}
+
+export function useEmailPayslip() {
+    return useMutation({
+        mutationFn: async (id: number) => POST(`/payroll/payslip/${id}/email`, {}),
+    });
+}
+
+// ==========================================
+// Feature 07 — Returnable packaging
+// ==========================================
+
+export interface PackagingType {
+    id: number;
+    name: string;
+    refund_amount: number;
+    is_active: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export type RefundMode = 'auto' | 'manual';
+
+export type ReturnStatus =
+    | 'requested'
+    | 'picked_up_last_mile'
+    | 'picked_up_truck'
+    | 'pending_approval'
+    | 'refunded'
+    | 'cancelled';
+
+export interface PackagingReturn {
+    id: number;
+    user_id: number;
+    packaging_type_id: number;
+    packaging_type_name: string;
+    qty: number;
+    status: ReturnStatus;
+    origin: string;
+    product_id: number | null;
+    requested_at: string | null;
+    pickup_date: string | null;
+    last_mile_pickup_at: string | null;
+    pickup_photo_url: string | null;
+    drop_point_id: number | null;
+    truck_pickup_at: string | null;
+    refund_amount: number | null;
+    refunded_at: string | null;
+    customer_name: string | null;
+    customer_phone: string | null;
+}
+
+export interface ReturnsResponse {
+    rows: PackagingReturn[];
+    refund_mode: RefundMode;
+}
+
+export function usePackagingTypes(activeOnly = false) {
+    return useQuery({
+        queryKey: ['packaging-types', activeOnly],
+        queryFn: async () => {
+            const response = await GET<PackagingType[]>(
+                `/get_packaging_types${activeOnly ? '?active=1' : ''}`
+            );
+            return response.data || [];
+        },
+    });
+}
+
+export function useCreatePackagingType() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST('/add_packaging_type', data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['packaging-types'] });
+        },
+    });
+}
+
+export function useUpdatePackagingType() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST('/update_packaging_type', data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['packaging-types'] });
+        },
+    });
+}
+
+export function useDeletePackagingType() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST('/delete_packaging_type', data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['packaging-types'] });
+        },
+    });
+}
+
+export function useReturns(status?: string) {
+    return useQuery({
+        queryKey: ['packaging-returns', status ?? ''],
+        queryFn: async () => {
+            const response = await GET<PackagingReturn[]>(
+                `/packaging/returns${status ? `?status=${status}` : ''}`
+            );
+            // The endpoint returns { data: [...], refund_mode } — `data` is the
+            // row array, refund_mode rides alongside on the envelope.
+            const envelope = response as { data: PackagingReturn[]; refund_mode?: RefundMode };
+            return {
+                rows: envelope.data || [],
+                refund_mode: envelope.refund_mode ?? 'manual',
+            } as ReturnsResponse;
+        },
+    });
+}
+
+export function useApproveReturn() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: Record<string, unknown>) => {
+            return POST<{ refund_amount: number; new_wallet_balance: number }>(
+                '/packaging/returns/approve',
+                data
+            );
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['packaging-returns'] });
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+            queryClient.invalidateQueries({ queryKey: ['transactions'] });
+        },
+    });
+}
+
+export function useRefundMode() {
+    return useQuery({
+        queryKey: ['packaging-refund-mode'],
+        queryFn: async () => {
+            const response = await GET<{ mode: RefundMode }>('/packaging/refund_mode');
+            return response.data?.mode ?? 'manual';
+        },
+    });
+}
+
+export function useSetRefundMode() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (mode: RefundMode) => {
+            return POST('/packaging/refund_mode', { mode });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['packaging-refund-mode'] });
+            queryClient.invalidateQueries({ queryKey: ['packaging-returns'] });
+        },
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Feature 10 — Day-time delivery network
+// ─────────────────────────────────────────────────────────────────────────
+
+export interface DaytimeOrderItem {
+    id?: number;
+    product_id: number;
+    product_title?: string;
+    qty: number;
+    unit_price: number;
+    is_bulk_rate: boolean;
+    line_total: number;
+}
+
+export interface DaytimeOrder {
+    id: number;
+    order_no: number;
+    user_id: number;
+    customer_name: string;
+    customer_phone: string;
+    created_by_user_id: number;
+    created_by_name?: string;
+    delivery_address?: string | null;
+    delivery_lat?: number | null;
+    delivery_lng?: number | null;
+    delivery_date: string;
+    entry_type?: string | null;
+    subtotal: number;
+    discount_flat: number;
+    discount_reason?: string | null;
+    shipping_charges: number;
+    total_amount: number;
+    additional_instructions?: string | null;
+    order_status: 'pending' | 'confirmed' | 'cancelled' | 'delivered';
+    payment_status: 'unpaid' | 'link_sent' | 'paid' | 'cash' | 'wallet_deducted';
+    payment_mode?: string | null;
+    payment_link_id?: string | null;
+    payment_short_url?: string | null;
+    razorpay_payment_id?: string | null;
+    paid_at?: string | null;
+    created_at?: string;
+    updated_at?: string;
+    items: DaytimeOrderItem[];
+    delivery?: {
+        id: number;
+        status: string;
+        claimed_by_user_id?: number | null;
+        claimed_at?: string | null;
+        delivered_at?: string | null;
+        delivered_qty?: number | null;
+    } | null;
+}
+
+export interface DaytimeProduct {
+    id: number;
+    title: string;
+    qty_text?: string;
+    price: number;
+    mrp: number;
+    delivery_window: number;
+}
+
+export interface SalesIncentiveRow {
+    id: number;
+    sales_exec_user_id: number;
+    exec_name?: string;
+    incentive_date: string;
+    orders_count: number;
+    new_customers_count: number;
+    sales_value: number;
+    incentive_amount: number;
+    formula_snapshot?: unknown;
+}
+
+export interface DaytimeSalesReport {
+    from: string;
+    to: string;
+    summary: {
+        total_orders: number;
+        paid_orders: number;
+        paid_revenue: number;
+        unpaid_orders: number;
+    };
+    payment_breakdown: { payment_status: string; count: number; total: number }[];
+    per_exec: {
+        exec_id: number;
+        exec_name?: string;
+        orders_count: number;
+        paid_sales: number;
+        total_sales: number;
+    }[];
+}
+
+export function useDaytimeOrders(filters: Record<string, string> = {}) {
+    return useQuery({
+        queryKey: ['daytime-orders', filters],
+        queryFn: async () => {
+            const response = await GET<DaytimeOrder[]>('/daytime/orders', filters);
+            return response.data || [];
+        },
+    });
+}
+
+export function useDaytimeOrder(id: number | string | undefined) {
+    return useQuery({
+        queryKey: ['daytime-order', id],
+        queryFn: async () => {
+            const response = await GET<DaytimeOrder>(`/daytime/orders/${id}`);
+            return response.data;
+        },
+        enabled: id !== undefined && id !== '',
+    });
+}
+
+export function useDaytimeProducts() {
+    return useQuery({
+        queryKey: ['daytime-products'],
+        queryFn: async () => {
+            const response = await GET<DaytimeProduct[]>('/daytime/products');
+            return response.data || [];
+        },
+    });
+}
+
+export function useDaytimeSalesReport(filters: Record<string, string> = {}) {
+    return useQuery({
+        queryKey: ['daytime-sales-report', filters],
+        queryFn: async () => {
+            const response = await GET<DaytimeSalesReport>('/daytime/sales_report', filters);
+            return response.data;
+        },
+    });
+}
+
+export function useDaytimeIncentives(filters: Record<string, string> = {}) {
+    return useQuery({
+        queryKey: ['daytime-incentives', filters],
+        queryFn: async () => {
+            const response = await GET<{ from: string; to: string; total_incentive: number; incentives: SalesIncentiveRow[] }>(
+                '/daytime/incentives', filters,
+            );
+            return response.data;
         },
     });
 }

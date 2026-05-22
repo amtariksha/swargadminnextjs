@@ -39,6 +39,16 @@ import {
     Inbox,
     Megaphone,
     Target,
+    Phone,
+    Warehouse,
+    Boxes,
+    BookText,
+    Factory,
+    Trash2,
+    RotateCcw,
+    Smartphone,
+    PackageCheck,
+    Sun,
 } from 'lucide-react';
 
 interface NavItem {
@@ -73,11 +83,19 @@ const navItems: NavItem[] = [
     { name: 'Subcategories', href: '/subcategories', icon: <Layers className="w-5 h-5" /> },
     { name: 'Products', href: '/products', icon: <Package className="w-5 h-5" /> },
     // --- Orders & Finance --- (divider after 8)
-    // 9-10
+    // 9-11
     { name: 'Orders', href: '/orders', icon: <ShoppingCart className="w-5 h-5" /> },
+    { name: 'Day Orders', href: '/day-orders', icon: <Sun className="w-5 h-5" />, permissionKey: 'day-orders' },
     { name: 'Transactions', href: '/transactions', icon: <CreditCard className="w-5 h-5" /> },
-    // --- Settings --- (divider after 10)
     // 11
+    { name: 'Refunds', href: '/refunds', icon: <RotateCcw className="w-5 h-5" />, permissionKey: 'refunds' },
+    // 12
+    { name: 'Payroll', href: '/payroll', icon: <Banknote className="w-5 h-5" />, permissionKey: 'payroll' },
+    // 13-14 — Feature 07 returnable packaging
+    { name: 'Packaging Types', href: '/packaging-types', icon: <PackageCheck className="w-5 h-5" />, permissionKey: 'packaging' },
+    { name: 'Returns & Refunds', href: '/returns-refunds', icon: <RotateCcw className="w-5 h-5" />, permissionKey: 'packaging' },
+    // --- Settings --- (divider after 12)
+    // 13
     {
         name: 'Settings',
         icon: <Settings className="w-5 h-5" />,
@@ -87,6 +105,7 @@ const navItems: NavItem[] = [
             { name: 'Invoice', href: '/settings/invoice', icon: <Receipt className="w-4 h-4" /> },
             { name: 'Payment Gateway', href: '/settings/payment', icon: <Banknote className="w-4 h-4" /> },
             { name: 'Social Media', href: '/settings/social-media', icon: <Share2 className="w-4 h-4" /> },
+            { name: 'Refund Reasons', href: '/settings/refund-reasons', icon: <RotateCcw className="w-4 h-4" />, permissionKey: 'refunds' },
             { name: 'Banners', href: '/banners', icon: <Image className="w-4 h-4" /> },
             { name: 'Testimonials', href: '/testimonials', icon: <MessageSquare className="w-4 h-4" /> },
             { name: 'Pages', href: '/pages', icon: <FileText className="w-4 h-4" /> },
@@ -96,7 +115,11 @@ const navItems: NavItem[] = [
     // 12-14
     { name: 'Pincodes', href: '/pincodes', icon: <MapPin className="w-5 h-5" /> },
     { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-5 h-5" /> },
+    { name: 'Drop Points', href: '/drop-points', icon: <MapPin className="w-5 h-5" />, permissionKey: 'drop-points' },
     { name: 'Notifications', href: '/notifications', icon: <Bell className="w-5 h-5" /> },
+    { name: 'Notification Images', href: '/notifications/images', icon: <Image className="w-5 h-5" />, permissionKey: 'notifications' },
+    { name: 'Broadcast', href: '/broadcast', icon: <Megaphone className="w-5 h-5" />, permissionKey: 'broadcast' },
+    { name: 'App Updates', href: '/app-updates', icon: <Smartphone className="w-5 h-5" />, permissionKey: 'app-updates' },
     // --- Communications (WhatsApp) --- (divider after 14)
     // 15
     {
@@ -114,8 +137,20 @@ const navItems: NavItem[] = [
             { name: 'Settings', href: '/whatsapp/settings', icon: <Settings className="w-4 h-4" /> },
         ],
     },
-    // --- Archive --- (divider after 15)
+    // --- CRM --- (divider after 15)
     // 16
+    {
+        name: 'CRM',
+        icon: <Phone className="w-5 h-5" />,
+        permissionKey: 'crm',
+        children: [
+            { name: 'Worklist', href: '/crm/worklist', icon: <ClipboardList className="w-4 h-4" /> },
+            { name: 'All Feedback', href: '/crm/feedback', icon: <MessageSquare className="w-4 h-4" /> },
+            { name: 'Call Scripts', href: '/crm/scripts', icon: <FileText className="w-4 h-4" /> },
+        ],
+    },
+    // --- Archive --- (divider after 16)
+    // 17
     {
         name: 'Archive',
         icon: <CalendarDays className="w-5 h-5" />,
@@ -140,6 +175,35 @@ const navItems: NavItem[] = [
     // entry lets a role be granted CMS access without exposing the toggle to
     // everyone — gated by the `cms` permission below.
     { name: 'CMS', href: '/admin', icon: <Globe className="w-5 h-5" />, permissionKey: 'cms' },
+    // --- Inventory --- (divider after 20 / CMS)
+    // 21
+    {
+        name: 'Inventory',
+        icon: <Warehouse className="w-5 h-5" />,
+        permissionKey: 'inventory',
+        children: [
+            { name: 'Vendors', href: '/inventory/vendors', icon: <Truck className="w-4 h-4" /> },
+            { name: 'Raw Materials', href: '/inventory/raw-materials', icon: <Boxes className="w-4 h-4" /> },
+            { name: 'Purchases', href: '/inventory/purchases', icon: <Receipt className="w-4 h-4" /> },
+            { name: 'Vendor Payments', href: '/inventory/payments', icon: <Banknote className="w-4 h-4" /> },
+            { name: 'Vendor Ledger', href: '/inventory/ledger', icon: <BookText className="w-4 h-4" /> },
+            { name: 'Purchase Report', href: '/inventory/report', icon: <BarChart3 className="w-4 h-4" /> },
+        ],
+    },
+    // --- Production --- (no divider — same block as Inventory)
+    // 22
+    {
+        name: 'Production',
+        icon: <Factory className="w-5 h-5" />,
+        permissionKey: 'production',
+        children: [
+            { name: 'Intermediates', href: '/production/intermediates', icon: <Boxes className="w-4 h-4" /> },
+            { name: 'Recipes', href: '/production/recipes', icon: <FileText className="w-4 h-4" /> },
+            { name: 'Production Records', href: '/production/runs', icon: <ClipboardList className="w-4 h-4" /> },
+            { name: 'Write-offs', href: '/production/writeoffs', icon: <Trash2 className="w-4 h-4" /> },
+            { name: 'Reports', href: '/production/reports', icon: <BarChart3 className="w-4 h-4" /> },
+        ],
+    },
 ];
 
 interface SidebarProps {
@@ -166,7 +230,8 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'subcategories', 'delivery-list', 'delivery-report', 'transactions',
     'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
     'admin-users', 'roles', 'production-delivery', 'cms', 'whatsapp',
-    'product-sync',
+    'product-sync', 'crm', 'inventory', 'production', 'refunds', 'payroll',
+    'app-updates', 'drop-points', 'broadcast', 'packaging', 'day-orders',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
@@ -389,7 +454,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                     </Link>
                                 )}
                                 {/* Section dividers */}
-                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 10 || index === 11 || index === 14 || index === 15 || index === 16) && (
+                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 13 || index === 15 || index === 16 || index === 23 || index === 24 || index === 25 || index === 26 || index === 30 || index === 31) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>

@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { format } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
 import { useDrivers } from '@/hooks/useData';
@@ -20,7 +20,7 @@ import {
     getSubscriptionLabel,
     groupByDriver,
 } from '@/lib/deliveryHelpers';
-import { Calendar, RefreshCw, Plus, Truck, Edit, Check, Trash2, Download, AlertTriangle, Package, Navigation, Store } from 'lucide-react';
+import { Calendar, RefreshCw, Plus, Truck, Edit, Check, Trash2, Download, AlertTriangle, Package, Navigation, Store, ClipboardCheck, Sun } from 'lucide-react';
 import { toast } from 'sonner';
 
 // formatTime is page-local — only used by the Customer Orders tab in this file.
@@ -104,6 +104,25 @@ function PasscodeDialog({ title, selectedDate, onConfirm, onCancel, strictToday 
 // ====== Main Page ======
 type TabId = 'orders' | 'routewise' | 'packing' | 'dairy';
 
+// Shape of the genrate_order_list dry-run response (Feature 05-E).
+interface DryRunPartial { orderId: number; userId: number; customerName: string; deliveredQty: number; orderedQty: number; }
+interface DryRunSkip { orderId: number; userId: number; customerName: string; orderedQty: number; }
+interface DryRunUnassigned { order_id: number; user_id: number; customer_name: string; }
+interface DryRunResult {
+    date: string;
+    considered: number;
+    would_insert: number;
+    partials: DryRunPartial[];
+    skips: DryRunSkip[];
+    unassigned: DryRunUnassigned[];
+}
+interface CheckState {
+    loading: boolean;
+    date: string;
+    result?: DryRunResult;
+    error?: string;
+}
+
 export default function DeliveryListPage() {
     const router = useRouter();
     const today = format(new Date(), 'yyyy-MM-dd');
@@ -125,6 +144,8 @@ export default function DeliveryListPage() {
     const [filters, setFilters] = useState({ delivered: false, not_delivered: false, delivered_diff_qty: false });
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [expandedCol, setExpandedCol] = useState<string | null>('edit_qty');
+    // "Check deliveries" pre-flight (Feature 05-E): a dry-run for tomorrow.
+    const [checkState, setCheckState] = useState<CheckState | null>(null);
 
     const { data: drivers = [] } = useDrivers();
 
@@ -203,6 +224,22 @@ export default function DeliveryListPage() {
         }
     };
 
+    // Pre-flight: dry-run the generation for TOMORROW (the date the
+    // auto-generate cron will produce) and show the problem list — orders
+    // that would be skipped/partial for low balance, or have no driver.
+    // Writes nothing.
+    const handleCheckDeliveries = async () => {
+        const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');
+        setCheckState({ loading: true, date: tomorrow });
+        try {
+            const response = await POST<DryRunResult>('/genrate_order_list', { date: tomorrow, dryRun: true });
+            setCheckState({ loading: false, date: tomorrow, result: response?.data });
+        } catch (error) {
+            const msg = error instanceof Error ? error.message : 'Failed to check deliveries';
+            setCheckState({ loading: false, date: tomorrow, error: msg });
+        }
+    };
+
     const handleDeleteList = async () => {
         setIsSubmitting(true);
         try {
@@ -222,6 +259,18 @@ export default function DeliveryListPage() {
             refetch();
         } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to mark as delivered'); }
         finally { setIsSubmitting(false); }
+    };
+
+    // Feature 10 — push an undelivered morning delivery into the day-time
+    // shared pool. Read-only on the morning tables; the morning `delivery`
+    // row stays status=2.
+    const handleSendToDayNetwork = async (item: DeliveryItem) => {
+        try {
+            await POST('/daytime/from_morning', { order_id: item.order_id });
+            toast.success(`Order #${item.order_id} sent to the day-time network`);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Could not send to day network');
+        }
     };
 
     const handleUpdateQty = async () => {
@@ -372,6 +421,16 @@ export default function DeliveryListPage() {
         { key: 'delivery_boy_name', header: 'Driver', width: colW('delivery_boy_name', '150px', '250px'), render: (item) => <span>{item.delivery_boy_name || 'Unassigned'}</span> },
         { key: 'status', header: 'Status', width: colW('status', '120px', '160px'),
             render: (item) => { const s = getStatusLabel(item.status); return <span className={`font-semibold ${s.color}`}>{s.label}</span>; } },
+        { key: 'day_net', header: 'Day Net', width: '110px',
+            // Feature 10 — only not-delivered (status 2) rows can be recovered
+            // via the day-time network.
+            render: (item) => item.status === 2
+                ? <button onClick={(e) => { e.stopPropagation(); handleSendToDayNetwork(item); }}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 text-xs font-medium"
+                    title="Send this undelivered order to the day-time network">
+                    <Sun className="w-3 h-3" /> Day Net
+                  </button>
+                : <span className="text-slate-600 text-xs">—</span> },
         { key: 'delivered_date', header: 'Del Date', width: colW('delivered_date', '110px', '160px') },
         { key: 'mark_delivered_time_stamp', header: 'Del Time', width: colW('mark_delivered_time_stamp', '100px', '150px'), render: (item) => <span className="text-sm">{formatTime(item.mark_delivered_time_stamp)}</span> },
         { key: 'address', header: 'Address', width: colW('address', '220px', '400px'),
@@ -438,6 +497,12 @@ export default function DeliveryListPage() {
                         className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl font-medium disabled:opacity-50">
                         {isSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                         {isSubmitting ? 'Generating...' : 'Generate List'}
+                    </button>
+                    <button onClick={handleCheckDeliveries} disabled={isSubmitting || checkState?.loading}
+                        title="Dry-run tomorrow's generation — shows low-balance and missing-driver problems without creating anything"
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-xl font-medium disabled:opacity-50">
+                        {checkState?.loading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ClipboardCheck className="w-4 h-4" />}
+                        Check deliveries
                     </button>
                     <button onClick={() => setDeleteDialog(true)} disabled={isSubmitting}
                         className="flex items-center gap-2 px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl font-medium disabled:opacity-50">
@@ -576,6 +641,9 @@ export default function DeliveryListPage() {
                     onClose={() => setGenProgress(null)}
                 />
             )}
+            {checkState && (
+                <CheckDeliveriesModal state={checkState} onClose={() => setCheckState(null)} />
+            )}
 
             {/* Edit Qty Modal */}
             {editQtyModal && (
@@ -629,7 +697,7 @@ function GenerateProgressModal({
     selectedDate: string;
     onClose: () => void;
 }) {
-    const [now, setNow] = useState<number>(Date.now());
+    const [now, setNow] = useState<number>(() => Date.now());
 
     useEffect(() => {
         if (!state.active) return;
@@ -725,6 +793,111 @@ function GenerateProgressModal({
                         </button>
                     </>
                 )}
+            </div>
+        </div>
+    );
+}
+
+// ====== Check Deliveries Modal ======
+// Renders the genrate_order_list dry-run problem list for tomorrow:
+// orders that would be skipped/partially delivered for low balance, and
+// orders with no driver assigned. The admin fixes these before the
+// auto-generate cron runs at the daily cutoff.
+function ProblemSection({ title, tone, children }: {
+    title: string;
+    tone: 'red' | 'amber';
+    children: ReactNode;
+}) {
+    const color = tone === 'red' ? 'text-red-400' : 'text-amber-400';
+    return (
+        <div>
+            <h3 className={`text-sm font-semibold ${color} mb-1`}>{title}</h3>
+            <ul className="text-xs text-slate-300 space-y-1 bg-slate-800/40 rounded-xl px-3 py-2 max-h-48 overflow-y-auto">
+                {children}
+            </ul>
+        </div>
+    );
+}
+
+function CheckDeliveriesModal({ state, onClose }: {
+    state: CheckState;
+    onClose: () => void;
+}) {
+    const r = state.result;
+    const problemCount = r ? r.unassigned.length + r.skips.length + r.partials.length : 0;
+    const allClear = !!r && problemCount === 0;
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="glass rounded-2xl p-6 w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto">
+                <div className="flex items-center gap-3 mb-4">
+                    {state.loading
+                        ? <RefreshCw className="w-6 h-6 text-blue-400 animate-spin" />
+                        : state.error
+                            ? <AlertTriangle className="w-6 h-6 text-red-400" />
+                            : allClear
+                                ? <Check className="w-6 h-6 text-green-400" />
+                                : <ClipboardCheck className="w-6 h-6 text-amber-400" />}
+                    <h2 className="text-lg font-bold text-white">Check Deliveries — {state.date}</h2>
+                </div>
+
+                {state.loading && (
+                    <p className="text-sm text-slate-400">
+                        Running a dry-run for tomorrow — no delivery rows are created.
+                    </p>
+                )}
+
+                {!state.loading && state.error && (
+                    <p className="text-sm text-red-300">{state.error}</p>
+                )}
+
+                {!state.loading && r && (
+                    <div className="space-y-4">
+                        <p className="text-sm text-slate-400">
+                            <span className="text-white font-medium">{r.would_insert}</span> delivery row(s)
+                            would be created from {r.considered} order(s) considered.
+                        </p>
+                        {allClear && (
+                            <div className="flex items-center gap-2 text-green-400 text-sm bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2">
+                                <Check className="w-4 h-4" /> No problems — tomorrow&apos;s list will generate clean.
+                            </div>
+                        )}
+                        {r.unassigned.length > 0 && (
+                            <ProblemSection title={`No driver assigned (${r.unassigned.length})`} tone="red">
+                                {r.unassigned.map(u => (
+                                    <li key={u.order_id} className="flex justify-between gap-2">
+                                        <span>Order #{u.order_id} — {u.customer_name || `User ${u.user_id}`}</span>
+                                    </li>
+                                ))}
+                            </ProblemSection>
+                        )}
+                        {r.skips.length > 0 && (
+                            <ProblemSection title={`Not delivered — low balance (${r.skips.length})`} tone="amber">
+                                {r.skips.map(s => (
+                                    <li key={s.orderId} className="flex justify-between gap-2">
+                                        <span>Order #{s.orderId} — {s.customerName || `User ${s.userId}`}</span>
+                                        <span className="text-slate-500 whitespace-nowrap">{s.orderedQty} ordered</span>
+                                    </li>
+                                ))}
+                            </ProblemSection>
+                        )}
+                        {r.partials.length > 0 && (
+                            <ProblemSection title={`Partial delivery — low balance (${r.partials.length})`} tone="amber">
+                                {r.partials.map(p => (
+                                    <li key={p.orderId} className="flex justify-between gap-2">
+                                        <span>Order #{p.orderId} — {p.customerName || `User ${p.userId}`}</span>
+                                        <span className="text-slate-500 whitespace-nowrap">{p.deliveredQty} of {p.orderedQty}</span>
+                                    </li>
+                                ))}
+                            </ProblemSection>
+                        )}
+                    </div>
+                )}
+
+                <button onClick={onClose} disabled={state.loading}
+                    className="mt-5 w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl font-medium disabled:opacity-50">
+                    Close
+                </button>
             </div>
         </div>
     );

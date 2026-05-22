@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useDrivers, Driver } from '@/hooks/useData';
+import { useDrivers, useDropPoints, Driver, DRIVER_ROLES } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import { Plus, X } from 'lucide-react';
 import { POST } from '@/lib/api';
@@ -12,6 +12,7 @@ import { parseApiDate } from '@/lib/dateUtils';
 export default function DriversPage() {
     const queryClient = useQueryClient();
     const { data: drivers = [], isLoading } = useDrivers();
+    const { data: dropPoints = [] } = useDropPoints();
     const [showModal, setShowModal] = useState(false);
     const [isAddMode, setIsAddMode] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -21,6 +22,8 @@ export default function DriversPage() {
     const [formEmail, setFormEmail] = useState('');
     const [formPhone, setFormPhone] = useState('');
     const [formIsLocation, setFormIsLocation] = useState(0);
+    const [formDropPointId, setFormDropPointId] = useState('');
+    const [formRole, setFormRole] = useState(4);
     const [editUserId, setEditUserId] = useState<number | null>(null);
 
     const openAddModal = () => {
@@ -29,6 +32,8 @@ export default function DriversPage() {
         setFormEmail('');
         setFormPhone('');
         setFormIsLocation(0);
+        setFormDropPointId('');
+        setFormRole(4);
         setEditUserId(null);
         setShowModal(true);
     };
@@ -39,6 +44,8 @@ export default function DriversPage() {
         setFormEmail(driver.email || '');
         setFormPhone(driver.phone || '');
         setFormIsLocation(driver.is_location || 0);
+        setFormDropPointId(driver.drop_point_id != null ? String(driver.drop_point_id) : '');
+        setFormRole(driver.role_id || 4);
         setEditUserId(driver.user_id || driver.id);
         setShowModal(true);
     };
@@ -48,10 +55,20 @@ export default function DriversPage() {
         setSaving(true);
         try {
             if (isAddMode) {
-                await POST('/add_user', { name: formName, email: formEmail, phone: formPhone, role: 4 });
+                await POST('/add_user', { name: formName, email: formEmail, phone: formPhone, role: formRole });
                 toast.success('New Driver Added successfully');
             } else {
-                await POST('/update_user', { id: editUserId, name: formName, email: formEmail, phone: formPhone, is_location: formIsLocation });
+                await POST('/update_user', {
+                    id: editUserId,
+                    name: formName,
+                    email: formEmail,
+                    phone: formPhone,
+                    is_location: formIsLocation,
+                    // drop_point_id only applies to last-mile (role 4) drivers.
+                    ...(formRole === 4
+                        ? { drop_point_id: formDropPointId === '' ? null : Number(formDropPointId) }
+                        : {}),
+                });
                 toast.success('User Details Updated successfully');
             }
             queryClient.invalidateQueries({ queryKey: ['drivers'] });
@@ -100,6 +117,16 @@ export default function DriversPage() {
             key: 'name',
             header: 'Name',
             width: '180px',
+        },
+        {
+            key: 'role_label',
+            header: 'Type',
+            width: '110px',
+            render: (item) => (
+                <span className="px-2 py-0.5 rounded-lg bg-slate-700/50 text-slate-300 text-xs font-medium">
+                    {item.role_label || '-'}
+                </span>
+            ),
         },
         {
             key: 'email',
@@ -209,6 +236,35 @@ export default function DriversPage() {
                                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                                 />
                             </div>
+                            {isAddMode && (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Driver Type *</label>
+                                    <select
+                                        value={formRole}
+                                        onChange={(e) => setFormRole(Number(e.target.value))}
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    >
+                                        {DRIVER_ROLES.map((r) => (
+                                            <option key={r.id} value={r.id}>{r.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            {!isAddMode && formRole === 4 && (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Drop Point</label>
+                                    <select
+                                        value={formDropPointId}
+                                        onChange={(e) => setFormDropPointId(e.target.value)}
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    >
+                                        <option value="">— Not assigned —</option>
+                                        {dropPoints.map((dp) => (
+                                            <option key={dp.id} value={dp.id}>{dp.title}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
                             {!isAddMode && (
                                 <div className="flex items-center gap-3">
                                     <label className="text-sm font-medium text-slate-300">Driver Location</label>
