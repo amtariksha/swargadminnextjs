@@ -62,10 +62,9 @@ function PasscodeDialog({ title, selectedDate, onConfirm, onCancel, strictToday 
         setError('Incorrect passcode');
     };
 
-    // Build a friendly hint so admins know the format without revealing the code itself.
-    const hintFormat = isToday
-        ? (strictToday ? 'TODAYYYYYMMDD (e.g. TODAY20260505)' : 'TODAY')
-        : 'YYYYMMDD (8 digits)';
+    // No on-screen hint about the passcode format — it effectively leaked the
+    // passcode (the date is already displayed above). Operators learn the
+    // format from the runbook, not from the dialog.
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
@@ -80,7 +79,6 @@ function PasscodeDialog({ title, selectedDate, onConfirm, onCancel, strictToday 
                         ⚠ Deleting today&apos;s list will erase data the drivers are actively using. Type the full safety code to confirm.
                     </p>
                 )}
-                <p className="text-xs text-slate-500 mb-3">Passcode format: <span className="text-slate-300 font-mono">{hintFormat}</span></p>
                 <input type="text" value={passcode}
                     onChange={(e) => { setPasscode(e.target.value); setError(''); }}
                     onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
@@ -395,28 +393,41 @@ export default function DeliveryListPage() {
         // 0 = "skip this delivery"; rendered amber + struck through so the
         // intent is unambiguous to anyone scanning the list.
         // Use `??` not `||` so 0 isn't silently treated as "no override".
+        // "Qty" = the ORIGINAL ordered qty from orders.qty. This column is
+        // immutable from this screen — admin edits and driver marks land in
+        // "Del Qty" below, never overwrite the customer's stated order.
         { key: 'qty', header: 'Qty', width: colW('qty', '70px', '100px'),
-            render: (item) => {
-                const live = item.delivered_qty ?? item.qty;
-                const wasEdited = typeof item.delivered_qty === 'number' && item.delivered_qty !== item.qty;
-                const isZero = live === 0;
-                const cls = isZero
-                    ? 'text-amber-400 line-through'
-                    : wasEdited ? 'text-amber-400' : '';
-                const tip = isZero
-                    ? `Skipped today (was ${item.qty})`
-                    : wasEdited ? `Edited from ${item.qty}` : undefined;
-                return <span className={`font-semibold ${cls}`} title={tip}>{live}</span>;
-            } },
-        // "Del Qty" shows what was actually delivered (set when driver/admin
-        // marks delivery). Highlighted red when it differs from the SCHEDULED
-        // (live) qty — i.e. the customer got something different from what
-        // was on the route sheet.
+            render: (item) => <span className="font-semibold">{item.qty}</span> },
+        // "Del Qty" = the effective delivered qty:
+        //   1. driver-marked qty (mark_delivered_qty) if present;
+        //   2. else admin scheduled-override (delivered_qty) when it differs
+        //      from the original ordered qty;
+        //   3. else dash — nothing has changed and nothing is marked yet.
+        // Highlighted red when it differs from the original ordered qty (the
+        // customer got — or is scheduled for — something different from what
+        // they ordered). Amber strike-through when zero (skipped today).
         { key: 'mark_delivered_qty', header: 'Del Qty', width: colW('mark_delivered_qty', '80px', '120px'),
             render: (item) => {
-                const live = item.delivered_qty ?? item.qty;
-                const isDiff = item.mark_delivered_qty !== null && item.mark_delivered_qty !== live;
-                return <span className={`font-medium ${isDiff ? 'text-red-400' : ''}`}>{item.mark_delivered_qty ?? '-'}</span>;
+                const adminEdited = typeof item.delivered_qty === 'number' && item.delivered_qty !== item.qty;
+                const effective = item.mark_delivered_qty ?? (adminEdited ? item.delivered_qty : null);
+                if (effective === null || effective === undefined) {
+                    return <span className="text-slate-500">-</span>;
+                }
+                const isZero = effective === 0;
+                const isDiff = effective !== item.qty;
+                const cls = isZero
+                    ? 'text-amber-400 line-through font-medium'
+                    : isDiff
+                        ? 'text-red-400 font-medium'
+                        : 'font-medium';
+                const tip = isZero
+                    ? `Skipped today (ordered ${item.qty})`
+                    : item.mark_delivered_qty == null && adminEdited
+                        ? `Scheduled override — admin edited from ${item.qty}`
+                        : isDiff
+                            ? `Ordered ${item.qty}`
+                            : undefined;
+                return <span className={cls} title={tip}>{effective}</span>;
             } },
         { key: 'delivery_boy_name', header: 'Driver', width: colW('delivery_boy_name', '150px', '250px'), render: (item) => <span>{item.delivery_boy_name || 'Unassigned'}</span> },
         { key: 'status', header: 'Status', width: colW('status', '120px', '160px'),
