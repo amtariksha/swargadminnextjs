@@ -2,10 +2,9 @@
 
 import { useAuth } from '@/lib/auth';
 import { useTheme } from '@/lib/theme';
-import { Menu, LogOut, User, Bell, Sun, Moon, PanelLeftClose, PanelLeft, Globe, LayoutDashboard } from 'lucide-react';
+import { Menu, LogOut, User, Bell, Sun, Moon, PanelLeftClose, PanelLeft } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
 interface TopbarProps {
     onMenuClick: () => void;
@@ -14,30 +13,14 @@ interface TopbarProps {
 }
 
 export default function Topbar({ onMenuClick, sidebarCollapsed, onToggleCollapse }: TopbarProps) {
-    const { admin, logout, hasPermission } = useAuth();
+    const { admin, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const [showDropdown, setShowDropdown] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
-    const router = useRouter();
-    const [cmsMode, setCmsMode] = useState(false);
-    const canAccessCms = hasPermission('cms');
 
-    // Restore CMS mode from localStorage
-    useEffect(() => {
-        const stored = localStorage.getItem('admin-cms-mode');
-        if (stored === 'true') setCmsMode(true);
-    }, []);
-
-    const toggleCmsMode = () => {
-        const next = !cmsMode;
-        setCmsMode(next);
-        localStorage.setItem('admin-cms-mode', String(next));
-        if (next) {
-            router.push('/admin');
-        } else {
-            router.push('/dashboard');
-        }
-    };
+    // (Removed the Operations ↔ CMS toggle: state, useEffect, toggleCmsMode
+    // handler and JSX button. The CMS surface is still reachable from the
+    // Sidebar's "CMS" entry — this just declutters the header.)
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -97,31 +80,6 @@ export default function Topbar({ onMenuClick, sidebarCollapsed, onToggleCollapse
                             : <Moon className="w-5 h-5 text-slate-500" />
                         }
                     </button>
-
-                    {/* Operations ↔ CMS toggle — only for users with the cms permission */}
-                    {canAccessCms && (
-                        <button
-                            onClick={toggleCmsMode}
-                            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
-                                cmsMode
-                                    ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                                    : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-800'
-                            }`}
-                            title={cmsMode ? 'Switch to Operations' : 'Switch to CMS'}
-                        >
-                            {cmsMode ? (
-                                <>
-                                    <Globe className="w-3.5 h-3.5" />
-                                    <span className="hidden sm:inline">CMS</span>
-                                </>
-                            ) : (
-                                <>
-                                    <LayoutDashboard className="w-3.5 h-3.5" />
-                                    <span className="hidden sm:inline">Operations</span>
-                                </>
-                            )}
-                        </button>
-                    )}
 
                     {/* Notifications */}
                     <Link href="/notifications" className="relative p-2.5 hover:bg-slate-800/50 rounded-xl transition-colors">
