@@ -4,13 +4,18 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
-import { Settings as SettingsIcon, Edit, ToggleLeft, ToggleRight, Clock } from 'lucide-react';
+import { Settings as SettingsIcon, Edit, ToggleLeft, ToggleRight, Clock, Smartphone } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
 import { formatApiDate } from '@/lib/dateUtils';
-// Cron-managed rows hidden from /settings; managed from /settings/automation.
-// Keep this list in sync with CRON_JOBS in src/app/(dashboard)/settings/automation/page.tsx.
+// Rows hidden from the General Settings table because a dedicated screen
+// already owns them. Surfacing the same row twice creates a confusing
+// second edit-surface — value can drift visually between paints, and the
+// operator can't tell which page is canonical. All the rows still live in
+// the same `app_settings` table; this is purely a display filter.
+
+// Owned by /settings/automation. Keep in sync with CRON_JOBS there.
 const AUTOMATION_TITLES = new Set<string>([
     'Auto-Generate Delivery List',
     'Auto-Generate Delivery List Time',
@@ -19,6 +24,26 @@ const AUTOMATION_TITLES = new Set<string>([
     'Daytime Incentive Enabled',
     'Daytime Incentive Run Time',
     'Dispatch Broadcasts Enabled',
+]);
+
+// Owned by /app-updates. Two Customer App push-copy rows + the eight
+// Delivery App Android/iOS version-control rows.
+const APP_UPDATE_TITLES = new Set<string>([
+    'Customer App Update Push Title',
+    'Customer App Update Push Body',
+    'Delivery App Android Min Version',
+    'Delivery App Android Force Update',
+    'Delivery App Android Enable Update',
+    'Delivery App Android Store URL',
+    'Delivery App iOS Min Version',
+    'Delivery App iOS Force Update',
+    'Delivery App iOS Enable Update',
+    'Delivery App iOS Store URL',
+]);
+
+const MANAGED_ELSEWHERE = new Set<string>([
+    ...AUTOMATION_TITLES,
+    ...APP_UPDATE_TITLES,
 ]);
 
 interface Setting {
@@ -45,11 +70,11 @@ export default function SettingsPage() {
         },
     });
 
-    // Hide cron-managed rows from the General Settings table. They live in the
-    // same app_settings table (no separate config table) but are owned by the
-    // dedicated /settings/automation page — surfacing them here too would be
-    // a confusing second edit-surface for the same value.
-    const settings = allSettings.filter((s) => !AUTOMATION_TITLES.has(s.title));
+    // Hide rows owned by a dedicated screen (cron settings on /settings/automation,
+    // app-update settings on /app-updates). All still in the same app_settings
+    // table — this is purely a display filter to avoid a second edit-surface
+    // for the same value.
+    const settings = allSettings.filter((s) => !MANAGED_ELSEWHERE.has(s.title));
 
     const handleEdit = (item: Setting) => {
         setEditItem(item);
@@ -127,13 +152,22 @@ export default function SettingsPage() {
                     <h1 className="text-2xl font-bold text-white">General Settings</h1>
                     <p className="text-slate-400">Manage application settings</p>
                 </div>
-                <Link
-                    href="/settings/automation"
-                    className="ml-auto flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-300 hover:text-white hover:bg-slate-800"
-                >
-                    <Clock className="w-4 h-4 text-purple-300" />
-                    Cron / Automation settings
-                </Link>
+                <div className="ml-auto flex items-center gap-2 flex-wrap">
+                    <Link
+                        href="/settings/automation"
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-300 hover:text-white hover:bg-slate-800"
+                    >
+                        <Clock className="w-4 h-4 text-purple-300" />
+                        Cron / Automation
+                    </Link>
+                    <Link
+                        href="/app-updates"
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-300 hover:text-white hover:bg-slate-800"
+                    >
+                        <Smartphone className="w-4 h-4 text-purple-300" />
+                        App Updates
+                    </Link>
+                </div>
             </div>
 
             <DataTable data={settings} columns={columns} loading={isLoading} searchPlaceholder="Search settings..." />
