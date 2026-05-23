@@ -11,11 +11,33 @@ import { toast } from 'sonner';
 import { parseApiDate } from '@/lib/dateUtils';
 export default function DriversPage() {
     const queryClient = useQueryClient();
-    const { data: drivers = [], isLoading } = useDrivers();
+    // Wave-4 #7 — /drivers is the page the admin uses to manage
+    // active/inactive, so it MUST see inactive rows. Every other consumer
+    // (dropdowns, payroll, assignment filters) calls useDrivers() with no
+    // arg → backend filters to active only.
+    const { data: drivers = [], isLoading } = useDrivers({ includeInactive: true });
     const { data: dropPoints = [] } = useDropPoints();
     const [showModal, setShowModal] = useState(false);
     const [isAddMode, setIsAddMode] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [togglingId, setTogglingId] = useState<number | null>(null);
+
+    const toggleActive = async (driver: Driver) => {
+        const currentlyActive = (driver.is_active ?? 1) === 1;
+        const next = currentlyActive ? 0 : 1;
+        const verb = currentlyActive ? 'Deactivate' : 'Reactivate';
+        if (!window.confirm(`${verb} driver "${driver.name}"?`)) return;
+        setTogglingId(driver.user_id);
+        try {
+            await POST('/update_user', { id: driver.user_id, is_active: next });
+            await queryClient.invalidateQueries({ queryKey: ['drivers'] });
+            toast.success(`Driver ${currentlyActive ? 'deactivated' : 'reactivated'}`);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to update driver');
+        } finally {
+            setTogglingId(null);
+        }
+    };
 
     // Form state
     const [formName, setFormName] = useState('');
@@ -127,6 +149,31 @@ export default function DriversPage() {
                     {item.role_label || '-'}
                 </span>
             ),
+        },
+        {
+            // Wave-4 #7 — Active toggle. Inactive drivers stay listed here
+            // (so the admin can re-activate them) but disappear from every
+            // other surface that consumes useDrivers().
+            key: 'is_active',
+            header: 'Active',
+            width: '120px',
+            render: (item) => {
+                const active = (item.is_active ?? 1) === 1;
+                const busy = togglingId === item.user_id;
+                return (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); toggleActive(item); }}
+                        disabled={busy}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-medium disabled:opacity-50 ${active
+                            ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                            : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                            }`}
+                        title={active ? 'Deactivate driver — hides from dropdowns/payroll/assignments' : 'Reactivate driver'}
+                    >
+                        {active ? 'Active' : 'Inactive'}
+                    </button>
+                );
+            },
         },
         {
             key: 'email',
