@@ -97,6 +97,43 @@ export default function WorklistPage() {
                 emptyMessage="No customers are due for a call right now."
                 onRowClick={openCall}
             />
+
+            {/* When the list is empty, surface the backend's diagnostic
+                counts — operators can tell at a glance whether there's no
+                recent delivery activity at all vs. everyone's been called
+                inside the cadence window. */}
+            {data && data.count === 0 && data.diagnostics && (
+                <div className="glass rounded-xl p-4 text-sm text-slate-400 space-y-1">
+                    <p className="text-slate-300 font-medium">Why is this empty?</p>
+                    <p>
+                        Customers active in the last{' '}
+                        <span className="text-white">{data.diagnostics.recent_activity_days}</span>{' '}
+                        days:{' '}
+                        <span className="text-white font-medium">{data.diagnostics.active_customers_last_30d}</span>
+                    </p>
+                    <p>
+                        &lsquo;Done&rsquo; calls inside the{' '}
+                        <span className="text-white">{data.cadence_days}</span>-day cadence:{' '}
+                        <span className="text-white font-medium">{data.diagnostics.done_calls_in_cadence}</span>
+                    </p>
+                    <p>
+                        Follow-ups due today or earlier:{' '}
+                        <span className="text-white font-medium">{data.diagnostics.followups_due}</span>
+                    </p>
+                    {data.diagnostics.active_customers_last_30d === 0 ? (
+                        <p className="text-amber-400 text-xs mt-2">
+                            No recent delivery activity — check whether subscribed_order_delivery /
+                            delivery tables have rows in the last {data.diagnostics.recent_activity_days} days.
+                        </p>
+                    ) : (
+                        <p className="text-amber-400 text-xs mt-2">
+                            Recent activity exists but every customer has a &lsquo;done&rsquo; call inside the
+                            cadence window — adjust <span className="text-white">crm_call_cadence_days</span> in
+                            settings if you want shorter cadence.
+                        </p>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

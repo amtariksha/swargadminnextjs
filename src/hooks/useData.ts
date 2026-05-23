@@ -1316,10 +1316,18 @@ export interface WorklistItem {
     days_since_last_delivery: number | null;
 }
 
+export interface WorklistDiagnostics {
+    recent_activity_days: number;
+    active_customers_last_30d: number;
+    done_calls_in_cadence: number;
+    followups_due: number;
+}
+
 export interface Worklist {
     cadence_days: number;
     count: number;
     items: WorklistItem[];
+    diagnostics?: WorklistDiagnostics;
 }
 
 export interface CallScript {
