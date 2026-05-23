@@ -4,10 +4,23 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
-import { Settings as SettingsIcon, Edit, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Settings as SettingsIcon, Edit, ToggleLeft, ToggleRight, Clock } from 'lucide-react';
+import Link from 'next/link';
 import { toast } from 'sonner';
 
 import { formatApiDate } from '@/lib/dateUtils';
+// Cron-managed rows hidden from /settings; managed from /settings/automation.
+// Keep this list in sync with CRON_JOBS in src/app/(dashboard)/settings/automation/page.tsx.
+const AUTOMATION_TITLES = new Set<string>([
+    'Auto-Generate Delivery List',
+    'Auto-Generate Delivery List Time',
+    'Low Balance Reminder Enabled',
+    'Low Balance Reminder Time',
+    'Daytime Incentive Enabled',
+    'Daytime Incentive Run Time',
+    'Dispatch Broadcasts Enabled',
+]);
+
 interface Setting {
     setting_id: number;
     id?: number;
@@ -23,7 +36,7 @@ export default function SettingsPage() {
     const [newValue, setNewValue] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const { data: settings = [], isLoading } = useQuery({
+    const { data: allSettings = [], isLoading } = useQuery({
         queryKey: ['settings'],
         queryFn: async () => {
             const response = await GET<Setting[]>('/get_settings');
@@ -31,6 +44,12 @@ export default function SettingsPage() {
             return (response.data || []).map(s => ({ ...s, id: s.setting_id }));
         },
     });
+
+    // Hide cron-managed rows from the General Settings table. They live in the
+    // same app_settings table (no separate config table) but are owned by the
+    // dedicated /settings/automation page — surfacing them here too would be
+    // a confusing second edit-surface for the same value.
+    const settings = allSettings.filter((s) => !AUTOMATION_TITLES.has(s.title));
 
     const handleEdit = (item: Setting) => {
         setEditItem(item);
@@ -57,41 +76,21 @@ export default function SettingsPage() {
         }
     };
 
-    const handleDelete = async (item: Setting) => {
-        if (!window.confirm(`Delete setting "${item.title}"? This cannot be undone.`)) return;
-        try {
-            await POST('/delete_settings', { setting_id: item.setting_id });
-            queryClient.invalidateQueries({ queryKey: ['settings'] });
-            toast.success('Setting deleted');
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to delete setting');
-        }
-    };
-
     const isBoolean = (value: string) => value === '0' || value === '1';
 
     const columns: Column<Setting>[] = [
         {
             key: 'actions',
-            header: 'Actions',
-            width: '110px',
+            header: 'Update',
+            width: '70px',
             render: (item) => (
-                <div className="flex items-center gap-1">
-                    <button
-                        onClick={() => handleEdit(item)}
-                        className="p-2 hover:bg-slate-800/50 rounded-lg"
-                        title="Edit"
-                    >
-                        <Edit className="w-4 h-4 text-purple-400" />
-                    </button>
-                    <button
-                        onClick={() => handleDelete(item)}
-                        className="p-2 hover:bg-slate-800/50 rounded-lg"
-                        title="Delete"
-                    >
-                        <Trash2 className="w-4 h-4 text-red-400" />
-                    </button>
-                </div>
+                <button
+                    onClick={() => handleEdit(item)}
+                    className="p-2 hover:bg-slate-800/50 rounded-lg"
+                    title="Edit"
+                >
+                    <Edit className="w-4 h-4 text-purple-400" />
+                </button>
             ),
         },
         { key: 'setting_id', header: 'ID', width: '60px' },
@@ -128,6 +127,13 @@ export default function SettingsPage() {
                     <h1 className="text-2xl font-bold text-white">General Settings</h1>
                     <p className="text-slate-400">Manage application settings</p>
                 </div>
+                <Link
+                    href="/settings/automation"
+                    className="ml-auto flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-300 hover:text-white hover:bg-slate-800"
+                >
+                    <Clock className="w-4 h-4 text-purple-300" />
+                    Cron / Automation settings
+                </Link>
             </div>
 
             <DataTable data={settings} columns={columns} loading={isLoading} searchPlaceholder="Search settings..." />
