@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
-import { Settings as SettingsIcon, Edit, ToggleLeft, ToggleRight, Clock, Smartphone } from 'lucide-react';
+import { Settings as SettingsIcon, Edit, ToggleLeft, ToggleRight, Clock, Smartphone, Bell } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -41,9 +41,24 @@ const APP_UPDATE_TITLES = new Set<string>([
     'Delivery App iOS Store URL',
 ]);
 
+// Owned by /settings/notifications. Master switches + MSG91/WhatsApp
+// template names + the admin-recipients JSON. Keep this in sync with the
+// constants in src/app/(dashboard)/settings/notifications/page.tsx.
+const NOTIFICATION_TITLES = new Set<string>([
+    'Send Email',
+    'Order Delivery Template',
+    'Partial Delivery',
+    'Delivery List Admin Alert',
+    'Low Balance',
+    'Daytime Payment Template',
+    'New User Registered Admin',
+    'Admin Phone Numbers',
+]);
+
 const MANAGED_ELSEWHERE = new Set<string>([
     ...AUTOMATION_TITLES,
     ...APP_UPDATE_TITLES,
+    ...NOTIFICATION_TITLES,
 ]);
 
 interface Setting {
@@ -159,6 +174,13 @@ export default function SettingsPage() {
                     >
                         <Clock className="w-4 h-4 text-purple-300" />
                         Cron / Automation
+                    </Link>
+                    <Link
+                        href="/settings/notifications"
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/50 border border-slate-700/50 text-sm text-slate-300 hover:text-white hover:bg-slate-800"
+                    >
+                        <Bell className="w-4 h-4 text-purple-300" />
+                        Notifications &amp; Templates
                     </Link>
                     <Link
                         href="/app-updates"
