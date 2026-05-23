@@ -24,6 +24,8 @@ const AUTOMATION_TITLES = new Set<string>([
     'Daytime Incentive Enabled',
     'Daytime Incentive Run Time',
     'Dispatch Broadcasts Enabled',
+    'Daily DB Backup Enabled',
+    'Daily DB Backup Time',
 ]);
 
 // Owned by /app-updates. Two Customer App push-copy rows + the eight

@@ -64,6 +64,16 @@ const CRON_JOBS: CronJob[] = [
         description:
             'Sends scheduled WhatsApp / push broadcasts the moment they fall due. Runs every minute.',
     },
+    {
+        key: 'daily-db-backup',
+        name: 'Daily DB Backup',
+        flagTitle: 'Daily DB Backup Enabled',
+        timeTitle: 'Daily DB Backup Time',
+        description:
+            "Dumps the tenant's app_db to Cloudflare R2 once per day. Default 00:00 IST. " +
+            'Daily snapshots roll on a 7-day window; a separate monthly archive on the 1st is retained indefinitely. ' +
+            "Files land in backup/YYYYMMDD_<tenant>.sql.gz (and backup/monthly/...).",
+    },
 ];
 
 // Values that mean "off". Everything else (incl. unknown) means "on" —
