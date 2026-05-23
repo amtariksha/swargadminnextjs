@@ -47,6 +47,15 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.request.use(async (config) => {
     if (!isEncryptionEnabled()) return config;
     if (config.data === undefined || config.data === null) return config;
+    // NEVER encrypt multipart uploads. FormData carries binary file
+    // parts that the browser must send as multipart/form-data with a
+    // boundary; encrypting it to a string would collapse the binary
+    // into base64, set Content-Type: text/plain, and multer on the
+    // backend would 400 with a MulterError (we saw this on the
+    // notification-image + broadcast-image upload paths).
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+        return config;
+    }
 
     try {
         const encrypted = await encryptPayload(config.data);
