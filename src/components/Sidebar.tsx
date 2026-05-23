@@ -92,11 +92,14 @@ const navItems: NavItem[] = [
     { name: 'Refunds', href: '/refunds', icon: <RotateCcw className="w-5 h-5" />, permissionKey: 'refunds' },
     // 12
     { name: 'Payroll', href: '/payroll', icon: <Banknote className="w-5 h-5" />, permissionKey: 'payroll' },
-    // 13-14 — Feature 07 returnable packaging
-    { name: 'Packaging Types', href: '/packaging-types', icon: <PackageCheck className="w-5 h-5" />, permissionKey: 'packaging' },
+    // 13 — Feature 07 returnable packaging (Packaging Types moved into Settings)
     { name: 'Returns & Refunds', href: '/returns-refunds', icon: <RotateCcw className="w-5 h-5" />, permissionKey: 'packaging' },
-    // --- Settings --- (divider after 12)
-    // 13
+    // --- Settings --- (divider after 13)
+    // Catch-all for config screens. Five entries (App Updates, Delivery
+    // Locations, Drop Points, Notification Images, Packaging Types) were
+    // relocated here from the top-level nav to declutter the sidebar —
+    // they're all infrequently-edited config rather than daily ops.
+    // 14
     {
         name: 'Settings',
         icon: <Settings className="w-5 h-5" />,
@@ -111,17 +114,19 @@ const navItems: NavItem[] = [
             { name: 'Banners', href: '/banners', icon: <Image className="w-4 h-4" /> },
             { name: 'Testimonials', href: '/testimonials', icon: <MessageSquare className="w-4 h-4" /> },
             { name: 'Pages', href: '/pages', icon: <FileText className="w-4 h-4" /> },
+            // Moved from top-level — config that's edited rarely.
+            { name: 'App Updates', href: '/app-updates', icon: <Smartphone className="w-4 h-4" />, permissionKey: 'app-updates' },
+            { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-4 h-4" /> },
+            { name: 'Drop Points', href: '/drop-points', icon: <MapPin className="w-4 h-4" />, permissionKey: 'drop-points' },
+            { name: 'Notification Images', href: '/notifications/images', icon: <Image className="w-4 h-4" />, permissionKey: 'notifications' },
+            { name: 'Packaging Types', href: '/packaging-types', icon: <PackageCheck className="w-4 h-4" />, permissionKey: 'packaging' },
         ],
     },
-    // --- Location & Notifications --- (divider after 11)
-    // 12-14
+    // --- Location & Notifications --- (divider after 15)
+    // 16-18 (Delivery Locations, Drop Points, Notification Images, App Updates moved into Settings)
     { name: 'Pincodes', href: '/pincodes', icon: <MapPin className="w-5 h-5" /> },
-    { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-5 h-5" /> },
-    { name: 'Drop Points', href: '/drop-points', icon: <MapPin className="w-5 h-5" />, permissionKey: 'drop-points' },
     { name: 'Notifications', href: '/notifications', icon: <Bell className="w-5 h-5" /> },
-    { name: 'Notification Images', href: '/notifications/images', icon: <Image className="w-5 h-5" />, permissionKey: 'notifications' },
     { name: 'Broadcast', href: '/broadcast', icon: <Megaphone className="w-5 h-5" />, permissionKey: 'broadcast' },
-    { name: 'App Updates', href: '/app-updates', icon: <Smartphone className="w-5 h-5" />, permissionKey: 'app-updates' },
     // --- Communications (WhatsApp) --- (divider after 14)
     // 15
     {
@@ -456,7 +461,12 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                     </Link>
                                 )}
                                 {/* Section dividers */}
-                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 13 || index === 15 || index === 16 || index === 23 || index === 24 || index === 25 || index === 26 || index === 30 || index === 31) && (
+                                {/* Section dividers — recomputed after the five top-level
+                                    items (App Updates / Delivery Locations / Drop Points /
+                                    Notification Images / Packaging Types) moved into Settings.
+                                    Each new index = old index minus the count of removed
+                                    entries at or below the old index. */}
+                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 13 || index === 14 || index === 15 || index === 18 || index === 19 || index === 20 || index === 21 || index === 25 || index === 26) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>
