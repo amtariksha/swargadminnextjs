@@ -7,6 +7,7 @@ import { Megaphone } from 'lucide-react';
 import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
 import CustomerMultiSelect from '@/components/CustomerMultiSelect';
+import { useDrivers } from '@/hooks/useData';
 
 // The 6 Feature-08 categories — broadcasts respect each customer's
 // per-category preference for the chosen category.
@@ -19,7 +20,7 @@ const CATEGORIES = [
     { value: 'partial_delivery', label: 'Partial delivery' },
 ];
 
-type AudienceType = 'all' | 'custom' | 'pincode';
+type AudienceType = 'all' | 'custom' | 'pincode' | 'driver';
 
 interface BroadcastRow {
     id: number;
@@ -44,6 +45,8 @@ export default function BroadcastPage() {
     const [audienceType, setAudienceType] = useState<AudienceType>('all');
     const [userIds, setUserIds] = useState<number[]>([]);
     const [pincode, setPincode] = useState('');
+    const [driverUserId, setDriverUserId] = useState<number | ''>('');
+    const { data: drivers = [], isLoading: driversLoading } = useDrivers();
     const [scheduleMode, setScheduleMode] = useState<'now' | 'scheduled'>('now');
     const [scheduledAt, setScheduledAt] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -63,6 +66,7 @@ export default function BroadcastPage() {
         setAudienceType('all');
         setUserIds([]);
         setPincode('');
+        setDriverUserId('');
         setScheduleMode('now');
         setScheduledAt('');
     };
@@ -100,6 +104,10 @@ export default function BroadcastPage() {
             toast.error('Enter a pincode');
             return;
         }
+        if (audienceType === 'driver' && !driverUserId) {
+            toast.error('Select a delivery driver');
+            return;
+        }
         if (scheduleMode === 'scheduled' && !scheduledAt) {
             toast.error('Pick a date and time to schedule');
             return;
@@ -117,6 +125,7 @@ export default function BroadcastPage() {
             if (deepLink.trim()) payload.deep_link = deepLink.trim();
             if (audienceType === 'custom') payload.user_ids = userIds;
             if (audienceType === 'pincode') payload.pincode = Number(pincode);
+            if (audienceType === 'driver') payload.driver_user_id = Number(driverUserId);
             if (scheduleMode === 'scheduled') payload.scheduled_at = scheduledAt;
 
             const res = await POST('/broadcast', payload);
@@ -234,6 +243,7 @@ export default function BroadcastPage() {
                         ['all', 'All customers'],
                         ['custom', 'Specific customers'],
                         ['pincode', 'By pincode'],
+                        ['driver', 'By delivery driver'],
                     ] as [AudienceType, string][]).map(([val, label]) => (
                         <label
                             key={val}
@@ -265,6 +275,36 @@ export default function BroadcastPage() {
                             className={inputClass}
                             placeholder="e.g. 560001"
                         />
+                    </div>
+                )}
+                {audienceType === 'driver' && (
+                    <div>
+                        <label className="block text-sm text-slate-400 mb-1">
+                            Delivery driver
+                        </label>
+                        <select
+                            value={driverUserId === '' ? '' : String(driverUserId)}
+                            onChange={(e) =>
+                                setDriverUserId(e.target.value ? Number(e.target.value) : '')
+                            }
+                            className={inputClass}
+                            disabled={driversLoading}
+                        >
+                            <option value="">
+                                {driversLoading ? 'Loading drivers…' : 'Choose a driver'}
+                            </option>
+                            {drivers.map((d) => (
+                                <option key={`${d.role_id}-${d.id}`} value={d.user_id ?? d.id}>
+                                    {d.name || `#${d.id}`}
+                                    {d.role_label ? ` · ${d.role_label}` : ''}
+                                    {d.phone ? ` · ${d.phone}` : ''}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="text-xs text-slate-500 mt-1">
+                            Targets every customer currently assigned to the selected
+                            driver via their most-recent order assignment.
+                        </p>
                     </div>
                 )}
             </div>
