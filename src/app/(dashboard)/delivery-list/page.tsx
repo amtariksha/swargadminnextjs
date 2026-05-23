@@ -20,7 +20,7 @@ import {
     getSubscriptionLabel,
     groupByDriver,
 } from '@/lib/deliveryHelpers';
-import { Calendar, RefreshCw, Plus, Truck, Edit, Check, Trash2, Download, AlertTriangle, Package, Navigation, Store, ClipboardCheck, Sun } from 'lucide-react';
+import { Calendar, RefreshCw, Plus, Truck, Edit, Check, Trash2, Download, AlertTriangle, Package, Navigation, Store, ClipboardCheck, Sun, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 
 // formatTime is page-local — only used by the Customer Orders tab in this file.
@@ -100,7 +100,22 @@ function PasscodeDialog({ title, selectedDate, onConfirm, onCancel, strictToday 
 // driver-facing /production-delivery page can render the same view.)
 
 // ====== Main Page ======
-type TabId = 'orders' | 'routewise' | 'packing' | 'dairy';
+type TabId = 'orders' | 'routewise' | 'packing' | 'dairy' | 'drop-points';
+
+interface DropPointStop {
+    drop_point_id: number;
+    title: string;
+    lat: number | null;
+    lng: number | null;
+    route_order: number;
+    status: number;              // 1 = pending, 3 = delivered (mirrors delivery.status)
+    delivered_at: string | null;
+    truck_driver_user_id: number | null;
+    total_qty: number;
+    order_count: number;
+    products: Array<{ product_id: number; product_title: string; qty_text: string | null; total_qty: number }>;
+    photos: Array<{ id: number; image_path: string }>;
+}
 
 // Shape of the genrate_order_list dry-run response (Feature 05-E).
 interface DryRunPartial { orderId: number; userId: number; customerName: string; deliveredQty: number; orderedQty: number; }
@@ -152,6 +167,17 @@ export default function DeliveryListPage() {
         queryKey: ['delivery-list', selectedDate],
         queryFn: async () => {
             const response = await GET<DeliveryItem[]>(`/get_genrated_order_list/${selectedDate}`);
+            return response.data || [];
+        },
+    });
+
+    // Drop-point delivery list — backs the "Drop Points" tab. Aggregates
+    // per-drop-point product totals across every last-mile driver who
+    // collects from that point; status mirrors drop_point_delivery.status.
+    const { data: dropPointStops = [], isLoading: isLoadingDropPoints } = useQuery<DropPointStop[]>({
+        queryKey: ['drop-point-delivery-list', selectedDate],
+        queryFn: async () => {
+            const response = await GET<DropPointStop[]>(`/get_drop_point_delivery_list/${selectedDate}`);
             return response.data || [];
         },
     });
@@ -470,6 +496,7 @@ export default function DeliveryListPage() {
         { id: 'routewise', label: 'Routewise Products', icon: <Navigation className="w-4 h-4" />, count: routewiseGroups.reduce((s, g) => s + g.totalQty, 0) },
         { id: 'packing', label: 'Packing List', icon: <Package className="w-4 h-4" />, count: packingProducts.reduce((s, p) => s + p.qty, 0) },
         { id: 'dairy', label: 'Dairy Pickup', icon: <Store className="w-4 h-4" />, count: dairyGroups.reduce((s, g) => s + g.totalQty, 0) },
+        { id: 'drop-points', label: 'Drop Points', icon: <MapPin className="w-4 h-4" />, count: dropPointStops.reduce((s, p) => s + p.total_qty, 0) },
     ];
 
     return (
@@ -640,6 +667,66 @@ export default function DeliveryListPage() {
             {activeTab === 'dairy' && (
                 <DriverGroupTable groups={dairyGroups} emptyMsg="No dairy pickup data for this date."
                     onExport={() => exportDriverGroupCSV(dairyGroups, `Dairy_Pickup_${selectedDate}.csv`, 'Pickup Point')} />
+            )}
+
+            {activeTab === 'drop-points' && (
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4 text-sm text-slate-400">
+                            <span><strong className="text-white">{dropPointStops.length}</strong> drop points</span>
+                            <span><strong className="text-purple-400">{dropPointStops.reduce((s, p) => s + p.total_qty, 0)}</strong> total qty</span>
+                            <span><strong className="text-green-400">{dropPointStops.filter(p => p.status === 3).length}</strong> delivered</span>
+                        </div>
+                    </div>
+                    {isLoadingDropPoints ? (
+                        <p className="text-slate-400 text-sm">Loading drop points…</p>
+                    ) : dropPointStops.length === 0 ? (
+                        <div className="glass rounded-xl p-8 text-center text-slate-400 text-sm">
+                            No drop-point deliveries for {selectedDate}. Either no last-mile drivers are
+                            assigned to a drop point yet, or the delivery list hasn&apos;t been generated.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {dropPointStops.map((stop) => {
+                                const delivered = stop.status === 3;
+                                return (
+                                    <div key={stop.drop_point_id} className="glass rounded-xl p-5 space-y-3">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-mono text-slate-500">#{stop.route_order}</span>
+                                                    <h2 className="text-white font-semibold">{stop.title}</h2>
+                                                </div>
+                                                <p className="text-xs text-slate-500 mt-0.5">
+                                                    {stop.order_count} customer{stop.order_count === 1 ? '' : 's'} · {stop.total_qty} total qty
+                                                </p>
+                                            </div>
+                                            <span className={`text-xs font-medium px-2 py-1 rounded-lg shrink-0 ${delivered
+                                                ? 'bg-green-500/20 text-green-400'
+                                                : 'bg-amber-500/20 text-amber-300'
+                                                }`}>
+                                                {delivered ? 'Delivered' : 'Pending'}
+                                            </span>
+                                        </div>
+                                        <div className="border-t border-slate-800/50 pt-2 space-y-1">
+                                            {stop.products.map((p) => (
+                                                <div key={p.product_id} className="flex items-center justify-between text-sm">
+                                                    <span className="text-slate-300">{p.product_title}</span>
+                                                    <span className="text-slate-400 font-mono">
+                                                        {p.total_qty}{p.qty_text ? <span className="text-slate-600"> × {p.qty_text}</span> : null}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {stop.delivered_at && (
+                                            <p className="text-xs text-slate-600">Delivered {stop.delivered_at}</p>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
             )}
 
             {/* Dialogs */}
