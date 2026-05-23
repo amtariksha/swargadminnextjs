@@ -11,6 +11,12 @@ export interface User {
     wallet_amount: number;
     created_at: string;
     updated_at: string;
+    // Added by the backend (CTEs in getAllUsers). first_order_date is null
+    // for users who have never placed an order; last_driver_id is the
+    // users.id of the driver assigned to their most-recent order (null when
+    // unassigned). Powers the /users driver filter + tenure columns.
+    first_order_date?: string | null;
+    last_driver_id?: number | null;
 }
 
 export function useUsers() {
