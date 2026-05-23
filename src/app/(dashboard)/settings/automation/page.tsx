@@ -30,9 +30,13 @@ const CRON_JOBS: CronJob[] = [
         key: 'generate-delivery-list',
         name: 'Auto-Generate Delivery List',
         flagTitle: 'Auto-Generate Delivery List',
-        timeTitle: 'Sale availability Ends at',
+        // Dedicated cron-time setting (migration 024). Independent of the
+        // customer-facing "Sale availability Ends at" — the operator can
+        // shift the cron run time without moving the order cutoff.
+        timeTitle: 'Auto-Generate Delivery List Time',
         description:
-            "Generates tomorrow's delivery / order list automatically at the sale-cutoff time. " +
+            "Generates tomorrow's delivery / order list automatically at the configured time. " +
+            'Independent of the customer order cutoff (set in Settings → General). ' +
             'When OFF, generate the list manually from the Delivery List screen.',
     },
     {
@@ -74,6 +78,10 @@ function isEnabled(value: string | undefined): boolean {
 export default function AutomationSettingsPage() {
     const queryClient = useQueryClient();
     const [pendingKey, setPendingKey] = useState<string | null>(null);
+    // Per-job draft HH:MM value while the operator is editing the time input.
+    // Cleared after a successful save. Lets us show a Save button only when
+    // the input value differs from the persisted setting.
+    const [timeEdits, setTimeEdits] = useState<Record<string, string>>({});
 
     const { data: settings = [], isLoading } = useQuery({
         queryKey: ['settings'],
@@ -84,6 +92,32 @@ export default function AutomationSettingsPage() {
     });
 
     const findByTitle = (title: string) => settings.find((s) => s.title === title);
+
+    const handleSaveTime = async (job: CronJob) => {
+        if (!job.timeTitle) return;
+        const timeRow = findByTitle(job.timeTitle);
+        if (!timeRow) {
+            toast.error(`Setting "${job.timeTitle}" not found — run the matching migration first`);
+            return;
+        }
+        const next = timeEdits[job.key];
+        if (next == null || next === '' || next === timeRow.value) return;
+        setPendingKey(job.key);
+        try {
+            await POST('/update_settings', { setting_id: timeRow.setting_id, value: next });
+            await queryClient.invalidateQueries({ queryKey: ['settings'] });
+            setTimeEdits((prev) => {
+                const copy = { ...prev };
+                delete copy[job.key];
+                return copy;
+            });
+            toast.success(`${job.name} time updated to ${next} IST`);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to update time');
+        } finally {
+            setPendingKey(null);
+        }
+    };
 
     const handleToggle = async (job: CronJob) => {
         const flag = findByTitle(job.flagTitle);
@@ -135,15 +169,38 @@ export default function AutomationSettingsPage() {
                         return (
                             <div key={job.key} className="glass rounded-xl p-5 space-y-3">
                                 <div className="flex items-start justify-between gap-3">
-                                    <div>
+                                    <div className="min-w-0 flex-1">
                                         <h2 className="text-white font-semibold">{job.name}</h2>
-                                        <p className="text-xs text-slate-500 mt-0.5">
-                                            {job.everyMinute
-                                                ? 'Runs every minute'
-                                                : timeRow?.value
-                                                    ? `Scheduled daily at ${timeRow.value} IST`
-                                                    : 'Scheduled daily'}
-                                        </p>
+                                        {job.everyMinute ? (
+                                            <p className="text-xs text-slate-500 mt-0.5">Runs every minute</p>
+                                        ) : timeRow ? (
+                                            <div className="flex items-center gap-2 mt-1.5">
+                                                <label className="text-xs text-slate-500">Run at</label>
+                                                <input
+                                                    type="time"
+                                                    value={timeEdits[job.key] ?? timeRow.value}
+                                                    onChange={(e) =>
+                                                        setTimeEdits((prev) => ({ ...prev, [job.key]: e.target.value }))
+                                                    }
+                                                    className="bg-slate-800/50 border border-slate-700/50 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                                                />
+                                                <span className="text-xs text-slate-500">IST</span>
+                                                {timeEdits[job.key] !== undefined &&
+                                                    timeEdits[job.key] !== timeRow.value && (
+                                                        <button
+                                                            onClick={() => handleSaveTime(job)}
+                                                            disabled={busy}
+                                                            className="px-2 py-1 text-xs rounded-lg bg-purple-500/30 text-purple-200 hover:bg-purple-500/40 disabled:opacity-50"
+                                                        >
+                                                            Save
+                                                        </button>
+                                                    )}
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-amber-400 mt-0.5">
+                                                Time setting &quot;{job.timeTitle}&quot; missing — run the matching migration.
+                                            </p>
+                                        )}
                                     </div>
                                     <button
                                         onClick={() => handleToggle(job)}
