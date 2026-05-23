@@ -38,6 +38,9 @@ export interface Driver {
     phone: string;
     image?: string | null;
     is_location?: number;
+    /** Wave-4 #7 — 0 (inactive) hides from every driver dropdown/payroll/
+     *  assignment filter; only the /drivers page sees inactive rows. */
+    is_active?: number;
     wallet_amount?: number;
     drop_point_id?: number | null;
     role_id?: number;
@@ -54,15 +57,24 @@ export const DRIVER_ROLES: { id: number; label: string }[] = [
     { id: 6, label: 'Day' },
 ];
 
-export function useDrivers() {
+/**
+ * Fetch every delivery driver across the three driver roles, tagged with
+ * role.
+ *
+ * Wave-4 #7 — by default returns only `is_active = 1` drivers so every
+ * dropdown / payroll / assignment screen hides retired drivers. The
+ * /drivers page itself passes `{ includeInactive: true }` so the admin
+ * can see and re-activate them.
+ */
+export function useDrivers(opts: { includeInactive?: boolean } = {}) {
+    const includeInactive = opts.includeInactive === true;
     return useQuery({
-        queryKey: ['drivers'],
+        queryKey: ['drivers', includeInactive ? 'all' : 'active'],
         queryFn: async () => {
-            // Fetch every delivery role and tag each row with its role so the
-            // list shows last-mile, truck and day drivers together.
+            const params = includeInactive ? { include_inactive: '1' } : undefined;
             const results = await Promise.allSettled(
                 DRIVER_ROLES.map(async ({ id, label }) => {
-                    const response = await GET<Driver[]>(`/get_user/role/${id}`);
+                    const response = await GET<Driver[]>(`/get_user/role/${id}`, params);
                     return (response.data || []).map((d) => ({
                         ...d,
                         role_id: id,
