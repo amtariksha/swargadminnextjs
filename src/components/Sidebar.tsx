@@ -106,6 +106,7 @@ const navItems: NavItem[] = [
         children: [
             { name: 'General', href: '/settings', icon: <Settings className="w-4 h-4" /> },
             { name: 'Automation', href: '/settings/automation', icon: <Clock className="w-4 h-4" /> },
+            { name: 'Notifications & Templates', href: '/settings/notifications', icon: <Bell className="w-4 h-4" /> },
             { name: 'Web App', href: '/settings/webapp', icon: <Globe className="w-4 h-4" /> },
             { name: 'Invoice', href: '/settings/invoice', icon: <Receipt className="w-4 h-4" /> },
             { name: 'Payment Gateway', href: '/settings/payment', icon: <Banknote className="w-4 h-4" /> },
