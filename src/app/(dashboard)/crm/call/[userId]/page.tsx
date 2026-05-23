@@ -71,7 +71,10 @@ export default function GuidedCallPage() {
     const [callType, setCallType] = useState<CallType>(
         searchParams.get('type') === 'reactivation' ? 'reactivation' : 'feedback',
     );
-    const [scriptOpen, setScriptOpen] = useState(true);
+    // When editing an existing feedback the script panel is collapsed by
+    // default — the caller has already read it once; on new entries we
+    // surface it open so they don't miss the prompt.
+    const [scriptOpen, setScriptOpen] = useState(!isEdit);
     const [form, setForm] = useState({ ...EMPTY_FORM, calling_date: format(new Date(), 'yyyy-MM-dd') });
     const [prefilled, setPrefilled] = useState(false);
 

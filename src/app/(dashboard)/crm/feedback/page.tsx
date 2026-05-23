@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { selectClassName, inputClassName } from '@/components/FormField';
-import { Plus, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Search } from 'lucide-react';
 import { useFeedbackList, useUsers, type CustomerFeedback, type FeedbackListFilters } from '@/hooks/useData';
 import {
     FEEDBACK_STATUS_OPTIONS, CALL_TYPE_OPTIONS, STATUS_BADGE_CLASS, statusLabel, callTypeLabel,
@@ -21,9 +20,29 @@ function fmtDate(value: string | null | undefined): string {
     }
 }
 
+/** Hard-truncate a string to N chars with an ellipsis suffix. */
+function truncate(value: string | null | undefined, max: number): string {
+    if (!value) return '-';
+    const s = String(value);
+    return s.length > max ? `${s.slice(0, max)}…` : s;
+}
+
+/** Long-text field shown inside the expanded panel. */
+function DetailField({ label, value }: { label: string; value: string | null | undefined }) {
+    if (!value) return null;
+    return (
+        <div>
+            <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-0.5">{label}</div>
+            <div className="text-sm text-slate-200 whitespace-pre-wrap">{value}</div>
+        </div>
+    );
+}
+
 export default function AllFeedbackPage() {
     const router = useRouter();
     const [filters, setFilters] = useState<FeedbackListFilters>({});
+    const [search, setSearch] = useState('');
+    const [expanded, setExpanded] = useState<Set<number>>(new Set());
     const { data: feedback = [], isLoading } = useFeedbackList(filters);
 
     // "New feedback" — pick a customer, then route into the guided call
@@ -61,29 +80,26 @@ export default function AllFeedbackPage() {
     const setFilter = (key: keyof FeedbackListFilters, value: string) =>
         setFilters((prev) => ({ ...prev, [key]: value || undefined }));
 
-    const columns: Column<CustomerFeedback>[] = [
-        { key: 'calling_date', header: 'Call Date', width: '120px', render: (f) => fmtDate(f.calling_date) },
-        { key: 'customer_name', header: 'Customer', render: (f) => <span className="text-white font-medium">{f.customer_name || `#${f.user_id}`}</span> },
-        { key: 'customer_phone', header: 'Phone', width: '130px', render: (f) => f.customer_phone || '-' },
-        { key: 'call_type', header: 'Type', width: '120px', render: (f) => callTypeLabel(f.call_type) },
-        {
-            key: 'status', header: 'Status', width: '130px',
-            render: (f) =>
-                f.status ? (
-                    <span className={`px-2 py-1 rounded-lg text-xs font-medium ${STATUS_BADGE_CLASS[f.status] || 'bg-slate-700/40 text-slate-400'}`}>
-                        {statusLabel(f.status)}
-                    </span>
-                ) : <span className="text-slate-600">-</span>,
-        },
-        { key: 'caller_name', header: 'Caller', width: '140px', render: (f) => f.caller_name || '-' },
-        {
-            key: 'problems', header: 'Notes', sortable: false,
-            render: (f) => {
-                const note = f.problems || f.product_feedback || f.delivery_feedback || f.customer_care_notes || '';
-                return <span className="text-sm text-slate-400 line-clamp-2">{note || '-'}</span>;
-            },
-        },
-    ];
+    const toggleRow = (id: number) =>
+        setExpanded((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id); else next.add(id);
+            return next;
+        });
+
+    /** Client-side search across customer + caller + any free-text fields. */
+    const visibleRows = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (!q) return feedback;
+        return feedback.filter((f) => {
+            const haystack = [
+                f.customer_name, f.customer_phone, f.caller_name, f.status,
+                f.problems, f.product_feedback, f.delivery_feedback,
+                f.application_feedback, f.customer_care_notes, f.occupation,
+            ].filter(Boolean).join(' ').toLowerCase();
+            return haystack.includes(q);
+        });
+    }, [feedback, search]);
 
     return (
         <div className="space-y-6">
@@ -140,15 +156,144 @@ export default function AllFeedbackPage() {
                 </div>
             </div>
 
-            <DataTable
-                data={feedback}
-                columns={columns}
-                loading={isLoading}
-                pageSize={25}
-                searchPlaceholder="Search feedback…"
-                emptyMessage="No feedback entries match these filters."
-                onRowClick={(f) => router.push(`/crm/call/${f.user_id}?feedbackId=${f.id}&type=${f.call_type}`)}
-            />
+            {/* Search */}
+            <div className="relative">
+                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search feedback…"
+                    className={`${inputClassName} pl-9`}
+                />
+            </div>
+
+            {/* Table */}
+            <div className="glass rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead className="bg-slate-900/60 text-slate-400 uppercase text-xs tracking-wide">
+                            <tr>
+                                <th className="px-3 py-2 w-8" />
+                                <th className="px-3 py-2 text-left">Call date</th>
+                                <th className="px-3 py-2 text-left">Customer</th>
+                                <th className="px-3 py-2 text-left">Phone</th>
+                                <th className="px-3 py-2 text-left">Type</th>
+                                <th className="px-3 py-2 text-left">Status</th>
+                                <th className="px-3 py-2 text-left">Follow-up</th>
+                                <th className="px-3 py-2 text-left">Caller</th>
+                                <th className="px-3 py-2 text-left">Occupation</th>
+                                <th className="px-3 py-2 text-left">Pref. call time</th>
+                                <th className="px-3 py-2 text-left">Pref. delivery time</th>
+                                <th className="px-3 py-2 text-left">Ring bell</th>
+                                <th className="px-3 py-2 text-left">Drop place</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/40">
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={13} className="px-3 py-8 text-center text-slate-400">
+                                        Loading feedback…
+                                    </td>
+                                </tr>
+                            ) : visibleRows.length === 0 ? (
+                                <tr>
+                                    <td colSpan={13} className="px-3 py-8 text-center text-slate-500">
+                                        No feedback entries match these filters.
+                                    </td>
+                                </tr>
+                            ) : (
+                                visibleRows.map((f) => {
+                                    const isOpen = expanded.has(f.id);
+                                    const longTextPresent =
+                                        f.problems || f.product_feedback || f.delivery_feedback ||
+                                        f.application_feedback || f.customer_care_notes;
+                                    return (
+                                        <Fragment key={f.id}>
+                                            <tr
+                                                onClick={() => router.push(`/crm/call/${f.user_id}?feedbackId=${f.id}&type=${f.call_type}`)}
+                                                className="hover:bg-slate-800/30 cursor-pointer"
+                                            >
+                                                <td className="px-3 py-2.5">
+                                                    {longTextPresent ? (
+                                                        <button
+                                                            onClick={(e) => { e.stopPropagation(); toggleRow(f.id); }}
+                                                            className="p-1 hover:bg-slate-700/50 rounded text-slate-400"
+                                                            aria-label={isOpen ? 'Collapse details' : 'Expand details'}
+                                                        >
+                                                            {isOpen
+                                                                ? <ChevronDown className="w-4 h-4" />
+                                                                : <ChevronRight className="w-4 h-4" />}
+                                                        </button>
+                                                    ) : (
+                                                        <span className="block w-6" />
+                                                    )}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-slate-300 whitespace-nowrap">
+                                                    {fmtDate(f.calling_date)}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-white font-medium" title={f.customer_name ?? `#${f.user_id}`}>
+                                                    {truncate(f.customer_name || `#${f.user_id}`, 20)}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-slate-300 whitespace-nowrap">
+                                                    {f.customer_phone || '-'}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-slate-300 whitespace-nowrap">
+                                                    {callTypeLabel(f.call_type)}
+                                                </td>
+                                                <td className="px-3 py-2.5">
+                                                    {f.status ? (
+                                                        <span className={`px-2 py-0.5 rounded-lg text-xs font-medium ${STATUS_BADGE_CLASS[f.status] || 'bg-slate-700/40 text-slate-400'}`}>
+                                                            {statusLabel(f.status)}
+                                                        </span>
+                                                    ) : <span className="text-slate-600">-</span>}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-slate-300 whitespace-nowrap">
+                                                    {fmtDate(f.followup_date)}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-slate-300" title={f.caller_name ?? ''}>
+                                                    {truncate(f.caller_name, 18)}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-slate-300" title={f.occupation ?? ''}>
+                                                    {truncate(f.occupation, 18)}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-slate-300" title={f.preferred_call_time ?? ''}>
+                                                    {truncate(f.preferred_call_time, 18)}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-slate-300" title={f.preferred_delivery_time ?? ''}>
+                                                    {truncate(f.preferred_delivery_time, 18)}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-slate-300 whitespace-nowrap">
+                                                    {f.ring_bell_pref || '-'}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-slate-300 whitespace-nowrap">
+                                                    {f.drop_place_pref || '-'}
+                                                </td>
+                                            </tr>
+                                            {isOpen && (
+                                                <tr className="bg-slate-900/40">
+                                                    <td colSpan={13} className="px-6 py-4">
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                            <DetailField label="Problems / issues" value={f.problems} />
+                                                            <DetailField label="Product feedback" value={f.product_feedback} />
+                                                            <DetailField label="Delivery feedback" value={f.delivery_feedback} />
+                                                            <DetailField label="App feedback" value={f.application_feedback} />
+                                                            <DetailField label="Customer care notes" value={f.customer_care_notes} />
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </Fragment>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="px-4 py-3 border-t border-slate-800/40 text-xs text-slate-500">
+                    {visibleRows.length} feedback {visibleRows.length === 1 ? 'entry' : 'entries'}
+                </div>
+            </div>
 
             {/* New-feedback customer picker */}
             <Modal
