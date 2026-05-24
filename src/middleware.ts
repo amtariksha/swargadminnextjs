@@ -62,17 +62,25 @@ async function verifyAdminToken(
 // ─── Path matchers ─────────────────────────────────────────────────────────
 
 const WHATSAPP_API_PREFIX = '/api/whatsapp/';
+const LMS_API_PREFIX = '/api/lms/';
 
-// Public WhatsApp API paths — webhooks (signature-verified by handler) and the
-// CTWA OAuth callback (cannot carry an admin token, identifies caller via state).
-const PUBLIC_WHATSAPP_API_PATHS = [
+// Paths that bypass JWT auth. Each must self-authenticate (webhooks verify
+// provider signatures; the public DSAR/intake endpoints do OTP verification).
+const PUBLIC_API_PATHS = [
+    // WhatsApp
     '/api/whatsapp/webhooks/',
     '/api/whatsapp/ctwa/callback',
     '/api/whatsapp/meta/onboard',
+    // LMS — customer-facing intake endpoints (HMAC-signed by source) and
+    // DSAR submission (identity verified via OTP, not admin token).
+    '/api/lms/leads/intake/',
+    '/api/lms/dsar/submit',
+    // LMS — public privacy notice fetch (no PII, just the notice text).
+    '/api/lms/consent/notice/',
 ];
 
-function isPublicWhatsappPath(pathname: string): boolean {
-    return PUBLIC_WHATSAPP_API_PATHS.some((p) => pathname.startsWith(p));
+function isPublicApiPath(pathname: string): boolean {
+    return PUBLIC_API_PATHS.some((p) => pathname.startsWith(p));
 }
 
 // ─── Middleware ────────────────────────────────────────────────────────────
@@ -80,14 +88,18 @@ function isPublicWhatsappPath(pathname: string): boolean {
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
-    // Only the merged WACRM API surface is gated here. Admin panel routes
-    // (/api/auth/**, /api/dev/**, /admin/**, all dashboard pages) are gated
-    // client-side by src/app/(dashboard)/layout.tsx via useAuth().
-    if (!pathname.startsWith(WHATSAPP_API_PREFIX)) {
+    // Gates the merged WACRM API surface (/api/whatsapp/**) AND the new LMS
+    // API surface (/api/lms/**). Both share the same admin Bearer JWT auth.
+    // Admin panel routes (/api/auth/**, /api/dev/**, /admin/**, all dashboard
+    // pages) are gated client-side by src/app/(dashboard)/layout.tsx via useAuth().
+    const isGatedApi =
+        pathname.startsWith(WHATSAPP_API_PREFIX) ||
+        pathname.startsWith(LMS_API_PREFIX);
+    if (!isGatedApi) {
         return NextResponse.next();
     }
 
-    if (isPublicWhatsappPath(pathname)) {
+    if (isPublicApiPath(pathname)) {
         return NextResponse.next();
     }
 
@@ -155,5 +167,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/api/whatsapp/:path*'],
+    matcher: ['/api/whatsapp/:path*', '/api/lms/:path*'],
 };
