@@ -46,6 +46,12 @@ const AVAILABLE_PERMISSIONS = [
     // under /crm/**. Granting this exposes the CRM section in the Sidebar
     // and the Feedback tab on the customer-detail page.
     { key: 'crm', label: 'CRM', icon: '📞' },
+    // LMS — Lead Management & Marketing System under /lms/**. Phase 1
+    // foundation: consent ledger, tags + segments, RFM, leads (5 sources),
+    // welcome + replenishment journeys, referrals, Inner Circle, Agent
+    // Force integration. Requirements doc:
+    // /home/pradeep/Downloads/swarg-requirements.md.
+    { key: 'lms', label: 'LMS', icon: '✨' },
     // Driver-facing page: granting only this permission lets the user
     // log in and reach `/production-delivery` (Routewise / Packing /
     // Dairy Pickup tabs) — and nothing else.

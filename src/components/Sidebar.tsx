@@ -50,6 +50,11 @@ import {
     PackageCheck,
     Sun,
     Clock,
+    Sparkles,
+    UserPlus,
+    Tags,
+    Workflow,
+    ShieldCheck,
 } from 'lucide-react';
 
 interface NavItem {
@@ -157,8 +162,25 @@ const navItems: NavItem[] = [
             { name: 'Call Scripts', href: '/crm/scripts', icon: <FileText className="w-4 h-4" /> },
         ],
     },
-    // --- Archive --- (divider after 16)
-    // 17
+    // --- LMS (Lead Management & Marketing System) --- (divider after 16)
+    // 17 — Phase 1 scaffolding; children populate as C-phases ship.
+    {
+        name: 'LMS',
+        icon: <Sparkles className="w-5 h-5" />,
+        permissionKey: 'lms',
+        children: [
+            { name: 'Today', href: '/lms', icon: <BarChart3 className="w-4 h-4" /> },
+            { name: 'People', href: '/lms/people', icon: <Users className="w-4 h-4" /> },
+            { name: 'Leads', href: '/lms/leads', icon: <UserPlus className="w-4 h-4" /> },
+            { name: 'Segments', href: '/lms/segments', icon: <Tags className="w-4 h-4" /> },
+            { name: 'Campaigns', href: '/lms/campaigns', icon: <Megaphone className="w-4 h-4" /> },
+            { name: 'Journeys', href: '/lms/journeys', icon: <Workflow className="w-4 h-4" /> },
+            { name: 'Inbox', href: '/lms/inbox', icon: <Inbox className="w-4 h-4" /> },
+            { name: 'Privacy & Consent', href: '/lms/settings/privacy', icon: <ShieldCheck className="w-4 h-4" /> },
+        ],
+    },
+    // --- Archive --- (divider after 17)
+    // 18
     {
         name: 'Archive',
         icon: <CalendarDays className="w-5 h-5" />,
@@ -240,6 +262,7 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'admin-users', 'roles', 'production-delivery', 'cms', 'whatsapp',
     'product-sync', 'crm', 'inventory', 'production', 'refunds', 'payroll',
     'app-updates', 'drop-points', 'broadcast', 'packaging', 'day-orders',
+    'lms',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
@@ -467,7 +490,10 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                     Notification Images / Packaging Types) moved into Settings.
                                     Each new index = old index minus the count of removed
                                     entries at or below the old index. */}
-                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 13 || index === 14 || index === 15 || index === 18 || index === 19 || index === 20 || index === 21 || index === 25 || index === 26) && (
+                                {/* Inserting LMS at index 17 (between CRM and Archive) shifted
+                                    every subsequent divider up by 1. New divider after LMS
+                                    (17) separates it from Archive (18). */}
+                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 13 || index === 14 || index === 15 || index === 17 || index === 19 || index === 20 || index === 21 || index === 22 || index === 26 || index === 27) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>
