@@ -19,6 +19,16 @@
  *   Then PostgREST will route REST requests against app_lms.lms_* tables.
  *   Without this, queries fail with "PGRST: schema not found" type errors.
  *
+ * Row-Level Security:
+ *   RLS is enabled on all app_lms.lms_* tables. With no explicit policies,
+ *   Postgres denies access by default — EXCEPT for the `service_role` key,
+ *   which bypasses RLS entirely (this is Supabase's documented behaviour).
+ *   Every API route in this app calls Supabase through the service-role
+ *   client below, so RLS doesn't block us today. When we eventually add
+ *   customer-facing endpoints (e.g. Flutter Preference Center reading its
+ *   own consent rows via the user's JWT), we'll add explicit RLS policies
+ *   for the `authenticated` role to scope by `customer_id = auth.uid()`.
+ *
  * Implementation note: like the underlying `supabaseAdmin`, this export is a
  * lazy Proxy. Calling `.schema('app_lms')` directly at module-load triggers
  * the underlying proxy's getter, which throws if Supabase env vars aren't set

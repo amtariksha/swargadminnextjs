@@ -172,6 +172,7 @@ const navItems: NavItem[] = [
             { name: 'Today', href: '/lms', icon: <BarChart3 className="w-4 h-4" /> },
             { name: 'People', href: '/lms/people', icon: <Users className="w-4 h-4" /> },
             { name: 'Leads', href: '/lms/leads', icon: <UserPlus className="w-4 h-4" /> },
+            { name: 'Tags', href: '/lms/tags', icon: <Tags className="w-4 h-4" /> },
             { name: 'Segments', href: '/lms/segments', icon: <Tags className="w-4 h-4" /> },
             { name: 'Campaigns', href: '/lms/campaigns', icon: <Megaphone className="w-4 h-4" /> },
             { name: 'Journeys', href: '/lms/journeys', icon: <Workflow className="w-4 h-4" /> },
