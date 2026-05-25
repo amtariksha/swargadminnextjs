@@ -5,49 +5,39 @@
  * Source repo:    /home/pradeep/Work/projects/project10-chatagent
  * Tenant slug:    "swarg-food" (existing seed)
  * Endpoints used:
- *   POST /admin/auth/login              — exchange email+password for a 24h JWT
  *   POST /api/v1/chat/swarg-food/stream — SSE invocation against routed agent
  *
- * Implementation notes:
- *   • The JWT is cached in module state so we don't re-auth on every call.
- *     Refresh 1h before its 24h expiry.
- *   • Sync invocations are limited to operations that finish in <5s
- *     (Compliance Guard pre-send check). Async work routes via background
- *     queue + webhook (TODO once Agent Force webhooks are configured).
- *   • In shadow-mode (the default for first 14 days post-deploy), agent
- *     output is logged but never actioned. The caller toggles this via the
- *     `shadowMode` flag on each invoke; the agent-spec definitions below
- *     also encode whether they're shadow-only.
+ * Auth model (Phase 1 — service-token, per integration plan §7):
+ *   Both directions share a single static secret AGENT_FORCE_SERVICE_TOKEN.
+ *     • Admin panel → chatagent (sync invokes): this client sends
+ *       Authorization: Bearer ${AGENT_FORCE_SERVICE_TOKEN}.
+ *     • chatagent → admin panel (tool calls): chatagent sends the same
+ *       token; our middleware accepts it on /api/agent-tools/*.
+ *   No JWT login dance — simpler operationally, same security profile.
+ *   When mTLS is needed later (third-party agents, untrusted networks),
+ *   we'll swap this without touching call sites.
  *
  * Env vars (all optional — if unset, agents short-circuit gracefully):
  *   AGENT_FORCE_URL              — base URL of the chatagent deploy
- *   AGENT_FORCE_EMAIL            — admin login email
- *   AGENT_FORCE_PASSWORD         — admin login password (use a vault!)
+ *   AGENT_FORCE_SERVICE_TOKEN    — shared bearer token (sync invokes)
  *   AGENT_FORCE_TENANT_SLUG      — defaults to "swarg-food"
  */
 
 const TENANT_SLUG_DEFAULT = "swarg-food";
 
-let cachedToken: { token: string; expiresAt: number } | null = null;
-const JWT_LIFETIME_MS = 24 * 60 * 60 * 1000;
-const JWT_REFRESH_BEFORE_MS = 60 * 60 * 1000;
-
 export interface AgentForceConfig {
     baseUrl: string;
-    email: string;
-    password: string;
+    serviceToken: string;
     tenantSlug: string;
 }
 
 export function readConfig(): AgentForceConfig | null {
     const baseUrl = process.env.AGENT_FORCE_URL;
-    const email = process.env.AGENT_FORCE_EMAIL;
-    const password = process.env.AGENT_FORCE_PASSWORD;
-    if (!baseUrl || !email || !password) return null;
+    const serviceToken = process.env.AGENT_FORCE_SERVICE_TOKEN;
+    if (!baseUrl || !serviceToken) return null;
     return {
         baseUrl: baseUrl.replace(/\/$/, ""),
-        email,
-        password,
+        serviceToken,
         tenantSlug: process.env.AGENT_FORCE_TENANT_SLUG ?? TENANT_SLUG_DEFAULT,
     };
 }
@@ -56,39 +46,12 @@ export function isConfigured(): boolean {
     return readConfig() !== null;
 }
 
-// ─── Login + token caching ────────────────────────────────────────────────
-
-async function ensureToken(config: AgentForceConfig): Promise<string> {
-    const now = Date.now();
-    if (cachedToken && cachedToken.expiresAt > now + JWT_REFRESH_BEFORE_MS) {
-        return cachedToken.token;
-    }
-    const res = await fetch(`${config.baseUrl}/admin/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: config.email, password: config.password }),
-    });
-    if (!res.ok) {
-        throw new Error(
-            `[agent-force] login failed: HTTP ${res.status} ${res.statusText}`,
-        );
-    }
-    const body = (await res.json()) as { token?: string };
-    if (!body.token) {
-        throw new Error("[agent-force] login response missing token");
-    }
-    cachedToken = {
-        token: body.token,
-        expiresAt: now + JWT_LIFETIME_MS,
-    };
-    return body.token;
-}
-
 // ─── Invoke ───────────────────────────────────────────────────────────────
 
 export interface InvokeArgs {
-    /** Stable session id — agents use this for memory continuity. Pass a per-customer
-     *  or per-job key so successive calls land on the same conversation row. */
+    /** Stable session id — agents use this for memory continuity. Pass a
+     *  per-customer or per-job key so successive calls land on the same
+     *  conversation row. */
     sessionId: string;
     /** Free-text prompt that the orchestrator will route to the right agent. */
     message: string;
@@ -117,7 +80,6 @@ export async function invoke(args: InvokeArgs): Promise<InvokeResult | null> {
     const config = readConfig();
     if (!config) return null;
 
-    const token = await ensureToken(config);
     const startedAt = Date.now();
     const timeoutMs = args.timeoutMs ?? 30_000;
     const maxBytes = args.maxResponseBytes ?? 32_768;
@@ -134,7 +96,7 @@ export async function invoke(args: InvokeArgs): Promise<InvokeResult | null> {
             {
                 method: "POST",
                 headers: {
-                    Authorization: `Bearer ${token}`,
+                    Authorization: `Bearer ${config.serviceToken}`,
                     "Content-Type": "application/json",
                     Accept: "text/event-stream",
                 },
@@ -187,7 +149,6 @@ export async function invoke(args: InvokeArgs): Promise<InvokeResult | null> {
                         throw new Error(`[agent-force] stream error: ${ev.message ?? ""}`);
                     }
                 } catch (err) {
-                    // Non-JSON SSE line — log and continue.
                     if (err instanceof Error && err.message.startsWith("[agent-force]")) throw err;
                     continue;
                 }

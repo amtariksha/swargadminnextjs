@@ -63,6 +63,8 @@ async function verifyAdminToken(
 
 const WHATSAPP_API_PREFIX = '/api/whatsapp/';
 const LMS_API_PREFIX = '/api/lms/';
+const AGENT_TOOLS_PREFIX = '/api/agent-tools/';
+const AGENT_FORCE_WEBHOOK_PATH = '/api/agent-force/webhook';
 
 // Paths that bypass JWT auth. Each must self-authenticate (webhooks verify
 // provider signatures; the public DSAR/intake endpoints do OTP verification).
@@ -77,6 +79,9 @@ const PUBLIC_API_PATHS = [
     '/api/lms/dsar/submit',
     // LMS — public privacy notice fetch (no PII, just the notice text).
     '/api/lms/consent/notice/',
+    // Agent Force outbound webhook — HMAC-verified by the route handler itself
+    // against AGENT_FORCE_WEBHOOK_SECRET. No admin JWT.
+    AGENT_FORCE_WEBHOOK_PATH,
 ];
 
 function isPublicApiPath(pathname: string): boolean {
@@ -87,6 +92,39 @@ function isPublicApiPath(pathname: string): boolean {
 
 export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
+
+    // Branch A: Agent Force tool surface — gated by a SHARED SERVICE TOKEN
+    // (not admin JWT). chatagent calls these endpoints to read/write LMS
+    // data on behalf of an agent. See integration plan §7.2.
+    //
+    // We inject a synthetic super-admin context downstream so all the
+    // existing service modules (consent / leads / insights etc.) keep
+    // working without per-call rewiring. The X-Agent-Force-* headers are
+    // preserved for audit logging in handlers.
+    if (pathname.startsWith(AGENT_TOOLS_PREFIX)) {
+        const expected = process.env.AGENT_FORCE_SERVICE_TOKEN;
+        if (!expected) {
+            return NextResponse.json(
+                { error: 'AGENT_FORCE_SERVICE_TOKEN not configured' },
+                { status: 503 },
+            );
+        }
+        const authHeader = request.headers.get('authorization') || '';
+        const token = authHeader.startsWith('Bearer ')
+            ? authHeader.slice('Bearer '.length)
+            : '';
+        if (!token || !constantTimeEqual(token, expected)) {
+            return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+        }
+        const orgId = process.env.WACRM_ORG_ID || '';
+        const requestHeaders = new Headers(request.headers);
+        requestHeaders.set('x-user-id', 'agent-force');
+        requestHeaders.set('x-user-email', 'agent-force@swargfood.local');
+        requestHeaders.set('x-user-role', 'super_admin');
+        requestHeaders.set('x-user-name', 'Agent Force');
+        requestHeaders.set('x-user-org-id', orgId);
+        return NextResponse.next({ request: { headers: requestHeaders } });
+    }
 
     // Gates the merged WACRM API surface (/api/whatsapp/**) AND the new LMS
     // API surface (/api/lms/**). Both share the same admin Bearer JWT auth.
@@ -167,5 +205,21 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/api/whatsapp/:path*', '/api/lms/:path*'],
+    matcher: [
+        '/api/whatsapp/:path*',
+        '/api/lms/:path*',
+        '/api/agent-tools/:path*',
+    ],
 };
+
+// ─── Tiny constant-time comparison ────────────────────────────────────────
+// JS doesn't expose `crypto.timingSafeEqual` in the Edge runtime; equal-
+// length char-by-char XOR is the standard workaround.
+function constantTimeEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) {
+        diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return diff === 0;
+}
