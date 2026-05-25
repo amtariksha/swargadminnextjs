@@ -1396,6 +1396,57 @@ export function useFeedbackWorklist() {
     });
 }
 
+// ─── Automation run history ──────────────────────────────────────────
+//
+// /settings/automation/runs reads from `automation_run` table — one row
+// per fire of a timed cron job. `summary` is JSONB; the page renders
+// it per-job (low-balance shows swept/notified, generate-delivery-list
+// shows inserted/skipped, etc).
+
+export interface AutomationRun {
+    id: number;
+    job_name: string;
+    started_at: string;
+    finished_at: string | null;
+    status: 'ok' | 'failed';
+    summary: Record<string, unknown> | null;
+    error: string | null;
+    duration_ms: number | null;
+}
+
+export interface AutomationRunSummary {
+    job_name: string;
+    total_runs: number;
+    ok_runs: number;
+    failed_runs: number;
+    avg_duration_ms: number | null;
+    last_run_at: string | null;
+}
+
+export function useAutomationRuns(filters: { job?: string; status?: string; limit?: number } = {}) {
+    const params: Record<string, string> = {};
+    if (filters.job) params.job = filters.job;
+    if (filters.status) params.status = filters.status;
+    if (filters.limit) params.limit = String(filters.limit);
+    return useQuery({
+        queryKey: ['automation-runs', filters],
+        queryFn: async () => {
+            const response = await GET<AutomationRun[]>('/automation/runs', params);
+            return response.data || [];
+        },
+    });
+}
+
+export function useAutomationRunsSummary() {
+    return useQuery({
+        queryKey: ['automation-runs-summary'],
+        queryFn: async () => {
+            const response = await GET<AutomationRunSummary[]>('/automation/runs/summary');
+            return response.data || [];
+        },
+    });
+}
+
 export function useCustomerContext(userId: number | string | undefined, enabled = true) {
     return useQuery({
         queryKey: ['customer-context', userId],

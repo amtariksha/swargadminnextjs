@@ -152,10 +152,16 @@ export default function AutomationSettingsPage() {
         <div className="space-y-6">
             <div className="flex items-center gap-4">
                 <Clock className="w-8 h-8 text-purple-400" />
-                <div>
+                <div className="flex-1">
                     <h1 className="text-2xl font-bold text-white">Automation</h1>
                     <p className="text-slate-400">Enable or disable scheduled background jobs (cron)</p>
                 </div>
+                <a
+                    href="/settings/automation/runs"
+                    className="px-3 py-2 bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700/50 rounded-lg text-sm text-slate-300"
+                >
+                    View run history →
+                </a>
             </div>
 
             <div className="glass rounded-xl p-4 flex items-start gap-3 text-sm text-slate-300">
