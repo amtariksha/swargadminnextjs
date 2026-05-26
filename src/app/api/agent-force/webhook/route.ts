@@ -11,26 +11,37 @@
  *   tool_call.required    — agent paused waiting for a long-running tool
  *                           (NOT used Phase 1; reserved)
  *
- * Phase 1 behaviour for agent_run.completed:
- *   • Log the run in console (full observability dashboard ships C9 follow-up)
- *   • Capture cost into a future per-agent rollup table (deferred)
- *   • Ack 200 so chatagent doesn't retry
- *
- * Idempotency: chatagent may retry on network errors. The route is a no-op
- * past the log line so duplicate deliveries are safe.
+ * agent_run.completed persistence (migration 005):
+ *   Each event writes one row to app_lms.lms_agent_runs, which feeds the
+ *   /lms/agents/cost dashboard. The unique index on request_id makes
+ *   re-posts idempotent — chatagent retries don't double-count.
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { lmsAdmin } from "@/lib/lms/supabase";
 
 interface WebhookPayload {
     event: "agent_run.completed" | "tool_call.required" | string;
     agentSlug: string;
     sessionId: string;
+    /** Echoes the X-Agent-Force-Request-Id from the originating invoke; used
+     *  for idempotency on the persistence side. */
+    requestId?: string;
+    /** Optional context — agent's view of who they were helping. */
+    customerId?: string;
+    conversationId?: string;
+    /** Agent output (string or structured). Truncated into result_summary for
+     *  at-a-glance scans; full payload in raw_result. */
     result?: unknown;
+    /** True/false based on whether the agent reported a clean exit. Defaults
+     *  TRUE if omitted so existing chatagent versions keep working. */
+    succeeded?: boolean;
+    errorMessage?: string;
     usage?: {
         input_tokens?: number;
         output_tokens?: number;
         cost_usd?: number;
+        latency_ms?: number;
     };
 }
 
@@ -91,12 +102,69 @@ async function handleAgentRunCompleted(payload: WebhookPayload): Promise<void> {
         `[agent-force.webhook] run.completed agent=${payload.agentSlug} session=${payload.sessionId}` +
             (typeof cost === "number" ? ` cost=$${cost.toFixed(4)}` : ""),
     );
-    // Future hooks (deferred):
-    //   • Insert into lms_agent_runs (per-run cost + latency rollup)
-    //   • Trigger downstream follow-up based on agent + result shape
-    //     (e.g. insights run → refresh /lms Today screen client-side via WS)
-    //   • Daily cost cap enforcement (disable agent when daily total exceeds
-    //     AGENT_FORCE_DAILY_COST_USD env)
+
+    const orgId = process.env.WACRM_ORG_ID;
+    if (!orgId) {
+        console.warn(
+            "[agent-force.webhook] WACRM_ORG_ID unset — cannot persist run",
+        );
+        return;
+    }
+
+    const resultText = stringifyResult(payload.result);
+
+    try {
+        const { error } = await lmsAdmin.from("lms_agent_runs").insert({
+            org_id: orgId,
+            agent_slug: payload.agentSlug,
+            session_id: payload.sessionId,
+            customer_id: payload.customerId ?? null,
+            conversation_id: payload.conversationId ?? null,
+            input_tokens: payload.usage?.input_tokens ?? null,
+            output_tokens: payload.usage?.output_tokens ?? null,
+            cost_usd: typeof cost === "number" ? cost : null,
+            latency_ms: payload.usage?.latency_ms ?? null,
+            result_summary: resultText.slice(0, 200),
+            raw_result:
+                payload.result && typeof payload.result === "object"
+                    ? (payload.result as Record<string, unknown>)
+                    : resultText
+                      ? { text: resultText }
+                      : null,
+            succeeded: payload.succeeded ?? true,
+            error_message: payload.errorMessage ?? null,
+            request_id: payload.requestId ?? null,
+        });
+        if (error) {
+            // Unique-constraint violation on request_id is the dedupe path —
+            // log and move on rather than failing the webhook.
+            if (error.message.includes("duplicate") || error.code === "23505") {
+                console.log(
+                    `[agent-force.webhook] duplicate request_id=${payload.requestId} — skipped`,
+                );
+            } else {
+                console.error(
+                    `[agent-force.webhook] persist failed: ${error.message}`,
+                );
+            }
+        }
+    } catch (err) {
+        console.error("[agent-force.webhook] persist threw:", err);
+    }
+}
+
+/** Best-effort string extraction from any result payload shape. */
+function stringifyResult(result: unknown): string {
+    if (result === null || result === undefined) return "";
+    if (typeof result === "string") return result;
+    if (typeof result === "object") {
+        try {
+            return JSON.stringify(result);
+        } catch {
+            return String(result);
+        }
+    }
+    return String(result);
 }
 
 // ─── HMAC verification (Edge-runtime safe, Web Crypto only) ──────────────

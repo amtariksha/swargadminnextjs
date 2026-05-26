@@ -180,6 +180,7 @@ const navItems: NavItem[] = [
             { name: 'Inner Circle', href: '/lms/inner-circle', icon: <Sparkles className="w-4 h-4" /> },
             { name: 'WhatsApp Channels', href: '/lms/channels', icon: <Phone className="w-4 h-4" /> },
             { name: 'Privacy & Consent', href: '/lms/settings/privacy', icon: <ShieldCheck className="w-4 h-4" /> },
+            { name: 'Agent Cost', href: '/lms/agents/cost', icon: <BarChart3 className="w-4 h-4" /> },
             { name: 'System & Jobs', href: '/lms/system', icon: <BarChart3 className="w-4 h-4" /> },
         ],
     },
