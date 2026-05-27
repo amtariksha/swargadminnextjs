@@ -1,5 +1,9 @@
 'use client';
 
+// Automation run history view. Reads from automation_run table via
+// GET /api/automation/runs. The table is populated server-side by the
+// scheduler whenever a timed cron fires (see automationRunRecorder).
+
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
