@@ -131,8 +131,12 @@ const navItems: NavItem[] = [
     // --- Location & Notifications --- (divider after 15)
     // 16-18 (Delivery Locations, Drop Points, Notification Images, App Updates moved into Settings)
     { name: 'Pincodes', href: '/pincodes', icon: <MapPin className="w-5 h-5" /> },
-    { name: 'Notifications', href: '/notifications', icon: <Bell className="w-5 h-5" /> },
-    { name: 'Broadcast', href: '/broadcast', icon: <Megaphone className="w-5 h-5" />, permissionKey: 'broadcast' },
+    // The consolidated /notifications composer absorbed everything the
+    // standalone /broadcast page used to do (and that route now redirects
+    // here). Gate it behind the existing `broadcast` permission so roles
+    // that previously had /broadcast access keep it without any RBAC
+    // migration. /broadcast/page.tsx is a server-side redirect → here.
+    { name: 'Notifications', href: '/notifications', icon: <Bell className="w-5 h-5" />, permissionKey: 'broadcast' },
     // --- Communications (WhatsApp) --- (divider after 14)
     // 15
     {
