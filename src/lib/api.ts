@@ -237,6 +237,21 @@ export const DELETE = async <T = unknown>(
     return response.data;
 };
 
+// Generic PATCH request — used by the variation feature for partial updates
+// on /attributes/:id, /attributes/:id/values/:vid, /products/:id/variants/:vid,
+// /cost-prices, etc. Mirrors POST/PUT semantics for FormData and business-
+// error handling.
+export const PATCH = async <T = unknown>(
+    endpoint: string,
+    data?: Record<string, unknown> | FormData
+): Promise<{ data: T; message?: string }> => {
+    const config = data instanceof FormData ? { headers: { 'Content-Type': undefined } } : {};
+    const response = await apiClient.patch<{ data: T; message?: string }>(endpoint, data, config);
+    const result = response.data;
+    checkBusinessError(result, response.status, response.headers as Record<string, string>);
+    return result;
+};
+
 // Re-export typed error class so consumers can import from one place.
 export { ApiError };
 

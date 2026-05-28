@@ -5,13 +5,13 @@ import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useProduct, useSubcategories, useUpdateProduct, useUploadProductImage, useDeleteProductImage, usePackagingTypes } from '@/hooks/useData';
+import { useProduct, useSubcategories, useUpdateProduct, useUploadProductImage, useDeleteProductImage, usePackagingTypes, useFeatureFlag } from '@/hooks/useData';
 import { useIntermediates } from '@/hooks/useProduction';
 import FormField, { inputClassName, selectClassName, textareaClassName } from '@/components/FormField';
 import ImageUpload from '@/components/ImageUpload';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { IMAGE_BASE_URL } from '@/config/tenant';
-import { ArrowLeft, Save, Trash2, Upload, X } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Upload, X, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import { POST } from '@/lib/api';
 
@@ -41,6 +41,13 @@ const productSchema = z.object({
     // Feature 17 — back order: sell at zero stock with a tentative date.
     allow_back_order: z.boolean().optional(),
     back_order_next_available: z.string().optional(),
+    // Variations (migration 030). 'simple' = legacy (price/SKU/stock live on
+    // product); 'variable' = the variant table holds purchasable units. When
+    // variable, stock_managed_at = 'variant' (per-variant pool) or 'parent'
+    // (shared pool on product.stock_qty).
+    product_type: z.enum(['simple', 'variable']).optional(),
+    stock_managed_at: z.enum(['variant', 'parent']).optional(),
+    cost_price: z.number().min(0).optional(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -65,6 +72,13 @@ export default function EditProductPage() {
     const isManufactured = !!watch('is_manufactured');
     const isReturnablePackaging = !!watch('is_returnable_packaging');
     const allowBackOrder = !!watch('allow_back_order');
+    const productType = watch('product_type') || 'simple';
+    const isVariable = productType === 'variable';
+    // Variations (migration 030). When the tenant flag is off, hide every
+    // variation-aware UI surface — type toggle, "Variations" header button,
+    // stock_managed_at picker. The product can still be 'variable' in the
+    // DB; the admin just can't manage it from here until the flag is on.
+    const variationsEnabled = useFeatureFlag('enable_variations', false);
 
     useEffect(() => {
         if (product) {
@@ -90,6 +104,9 @@ export default function EditProductPage() {
                 packaging_type_id: product.packaging_type_id != null ? String(product.packaging_type_id) : '',
                 allow_back_order: !!product.allow_back_order,
                 back_order_next_available: product.back_order_next_available || '',
+                product_type: product.product_type || 'simple',
+                stock_managed_at: product.stock_managed_at || 'variant',
+                cost_price: product.cost_price ?? undefined,
             });
         }
     }, [product, reset]);
@@ -126,6 +143,14 @@ export default function EditProductPage() {
                 packaging_type_id: returnablePackaging && data.packaging_type_id ? Number(data.packaging_type_id) : null,
                 allow_back_order: backOrder ? 1 : 0,
                 back_order_next_available: backOrder ? data.back_order_next_available : null,
+                // Variations (migration 030). Defaults preserve simple-product
+                // behaviour. When 'variable', stock_managed_at decides if the
+                // product carries a single shared pool or per-variant stock.
+                product_type: data.product_type || 'simple',
+                stock_managed_at: data.product_type === 'variable'
+                    ? (data.stock_managed_at || 'variant')
+                    : 'variant',
+                cost_price: data.cost_price != null && data.cost_price !== 0 ? data.cost_price : null,
             };
             await updateProduct.mutateAsync(payload as unknown as Record<string, unknown>);
             toast.success('Product updated successfully');
@@ -208,6 +233,15 @@ export default function EditProductPage() {
                     <h1 className="text-2xl font-bold text-white">Edit Product</h1>
                     <p className="text-slate-400">{product.title} - #{id}</p>
                 </div>
+                {/* Variations editor — appears when the tenant has the flag
+                    enabled (app_setting key `enable_variations`). Migration
+                    030 / D-7. */}
+                {variationsEnabled && (
+                    <button onClick={() => router.push(`/products/${id}/variations`)}
+                        className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border border-slate-700/50 text-slate-200 rounded-lg text-sm hover:border-purple-500/50">
+                        <Layers className="w-4 h-4" /> Variations
+                    </button>
+                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -262,6 +296,52 @@ export default function EditProductPage() {
                             </select>
                         </FormField>
                     </div>
+
+                    {/* Variations (migration 030) — flips this product between
+                        a simple SKU and a Variable Product whose variants are
+                        managed at /products/:id/variations. Hidden when the
+                        tenant flag is off so unrelated stores never see it. */}
+                    {variationsEnabled && (
+                    <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h4 className="text-sm font-semibold text-white">Product type</h4>
+                                <p className="text-xs text-slate-400 mt-0.5">
+                                    {isVariable
+                                        ? 'Variants are managed at the Variations page. Price / SKU / stock fields above are ignored at storefront.'
+                                        : 'Simple product — one SKU, the fields above are the source of truth.'}
+                                </p>
+                            </div>
+                            {isVariable && (
+                                <button type="button" onClick={() => router.push(`/products/${id}/variations`)}
+                                    className="px-3 py-1.5 text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-lg hover:bg-purple-500/30 whitespace-nowrap">
+                                    Manage variations →
+                                </button>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <FormField label="Type">
+                                <select {...register('product_type')} className={selectClassName}>
+                                    <option value="simple">Simple</option>
+                                    <option value="variable">Variable</option>
+                                </select>
+                            </FormField>
+                            {isVariable && (
+                                <FormField label="Stock managed at">
+                                    <select {...register('stock_managed_at')} className={selectClassName}>
+                                        <option value="variant">Per-variant stock</option>
+                                        <option value="parent">Shared parent pool</option>
+                                    </select>
+                                </FormField>
+                            )}
+                            <FormField label="Cost price (₹) — for margin reports">
+                                <input {...register('cost_price', { valueAsNumber: true })}
+                                    type="number" step="0.01" min={0} placeholder="Optional"
+                                    className={inputClassName} />
+                            </FormField>
+                        </div>
+                    </div>
+                    )}
 
                     {product.cat_title && (
                         <FormField label="Category (read-only)">

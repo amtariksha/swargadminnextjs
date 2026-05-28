@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect, useMemo } from 'react';
 import { BRANDING } from '@/config/tenant';
 import { useAuth } from '@/lib/auth';
+import { useFeatureFlag } from '@/hooks/useData';
 import {
     LayoutDashboard,
     CalendarDays,
@@ -84,10 +85,12 @@ const navItems: NavItem[] = [
     { name: 'Users', href: '/users', icon: <Users className="w-5 h-5" /> },
     { name: 'Drivers', href: '/drivers', icon: <Truck className="w-5 h-5" /> },
     // --- Catalog --- (divider after 5)
-    // 6-8
+    // 6-9
     { name: 'Categories', href: '/categories', icon: <FolderTree className="w-5 h-5" /> },
     { name: 'Subcategories', href: '/subcategories', icon: <Layers className="w-5 h-5" /> },
     { name: 'Products', href: '/products', icon: <Package className="w-5 h-5" /> },
+    // Product variations attribute library (migration 030 / D-7).
+    { name: 'Attributes', href: '/attributes', icon: <Tags className="w-5 h-5" /> },
     // --- Orders & Finance --- (divider after 8)
     // 9-11
     { name: 'Orders', href: '/orders', icon: <ShoppingCart className="w-5 h-5" /> },
@@ -272,6 +275,9 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'product-sync', 'crm', 'inventory', 'production', 'refunds', 'payroll',
     'app-updates', 'drop-points', 'broadcast', 'packaging', 'day-orders',
     'lms',
+    // Variations feature (migration 030 / D-7). Gates the /attributes
+    // library and the per-product /products/:id/variations editor.
+    'attributes',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
@@ -313,14 +319,19 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
     const pathname = usePathname();
     const { hasPermission } = useAuth();
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
+    // Variations (migration 030). app_setting key `enable_variations` gates
+    // the Attributes nav entry per-tenant. Default OFF until the operator
+    // opts in — keeps the admin clean for tenants that don't use variations.
+    const variationsEnabled = useFeatureFlag('enable_variations', false);
 
-    // Filter the nav by the active user's role permissions. Full-access users
-    // see everything (hasPermission returns true for every key); specific-perm
-    // users see only the entries their role grants.
-    const visibleNavItems = useMemo(
-        () => filterNav(navItems, hasPermission),
-        [hasPermission]
-    );
+    // Filter the nav by the active user's role permissions THEN strip
+    // Attributes when the variations flag is off. Two-stage filter so role-
+    // based visibility logic stays untouched.
+    const visibleNavItems = useMemo(() => {
+        const roleFiltered = filterNav(navItems, hasPermission);
+        if (variationsEnabled) return roleFiltered;
+        return roleFiltered.filter((item) => item.href !== '/attributes');
+    }, [hasPermission, variationsEnabled]);
 
     const toggleExpand = (name: string) => {
         setExpandedItems(prev =>
@@ -502,7 +513,9 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                 {/* Inserting LMS at index 17 (between CRM and Archive) shifted
                                     every subsequent divider up by 1. New divider after LMS
                                     (17) separates it from Archive (18). */}
-                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 8 || index === 13 || index === 14 || index === 15 || index === 17 || index === 19 || index === 20 || index === 21 || index === 22 || index === 26 || index === 27) && (
+                                {/* Adding Attributes at nav index 9 shifted every subsequent
+                                    divider down by 1 (old 8 → 9, old 13 → 14, etc.). */}
+                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 9 || index === 14 || index === 15 || index === 16 || index === 18 || index === 20 || index === 21 || index === 22 || index === 23 || index === 27 || index === 28) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>

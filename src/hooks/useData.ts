@@ -176,6 +176,13 @@ export interface Product {
     // Feature 17 — back order: orderable at zero stock with a tentative date.
     allow_back_order?: number;
     back_order_next_available?: string | null;
+    // Variations (migration 030). product_type drives whether the variant
+    // table is read for purchasable units; stock_managed_at decides if
+    // inventory is per-variant or a single parent pool. cost_price feeds
+    // future margin reports + the procurement feeder.
+    product_type?: 'simple' | 'variable';
+    stock_managed_at?: 'variant' | 'parent';
+    cost_price?: number | null;
     // Feature 10 — 1=morning_only, 2=day_only, 3=both.
     delivery_window?: number;
     sub_cat_id?: number;
@@ -383,6 +390,24 @@ export function useSettings() {
             return response.data || [];
         },
     });
+}
+
+/**
+ * Resolve a single app_setting row to its truthy/falsy value. Treats the
+ * row's `value` as truthy when it equals '1', 'true', or 'on' (case-
+ * insensitive). Returns `defaultValue` when the row is missing or while
+ * the query is still loading — UI components can default to "feature
+ * hidden" or "feature visible" depending on their preference.
+ *
+ * Used by the variations rollout gate (`enable_variations`) to flip
+ * Attributes / Variations menu items on per-tenant.
+ */
+export function useFeatureFlag(key: string, defaultValue = false): boolean {
+    const { data: settings = [] } = useSettings();
+    const row = settings.find((s) => s.key === key);
+    if (!row) return defaultValue;
+    const raw = String(row.value ?? '').trim().toLowerCase();
+    return raw === '1' || raw === 'true' || raw === 'on' || raw === 'yes';
 }
 
 // ==========================================
