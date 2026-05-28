@@ -56,6 +56,7 @@ import {
     Tags,
     Workflow,
     ShieldCheck,
+    Calculator,
 } from 'lucide-react';
 
 interface NavItem {
@@ -91,6 +92,8 @@ const navItems: NavItem[] = [
     { name: 'Products', href: '/products', icon: <Package className="w-5 h-5" /> },
     // Product variations attribute library (migration 030 / D-7).
     { name: 'Attributes', href: '/attributes', icon: <Tags className="w-5 h-5" /> },
+    // Customer reviews moderation (migration 033 / Phase H).
+    { name: 'Reviews', href: '/reviews', icon: <MessageSquare className="w-5 h-5" /> },
     // --- Orders & Finance --- (divider after 8)
     // 9-11
     { name: 'Orders', href: '/orders', icon: <ShoppingCart className="w-5 h-5" /> },
@@ -129,6 +132,10 @@ const navItems: NavItem[] = [
             { name: 'Drop Points', href: '/drop-points', icon: <MapPin className="w-4 h-4" />, permissionKey: 'drop-points' },
             { name: 'Notification Images', href: '/notifications/images', icon: <Image className="w-4 h-4" />, permissionKey: 'notifications' },
             { name: 'Packaging Types', href: '/packaging-types', icon: <PackageCheck className="w-4 h-4" />, permissionKey: 'packaging' },
+            // Phase I — multi-currency + multi-warehouse foundations.
+            // Admin housekeeping; no customer-facing consumer yet.
+            { name: 'Currencies', href: '/settings/currencies', icon: <Globe className="w-4 h-4" /> },
+            { name: 'Warehouses', href: '/settings/warehouses', icon: <Warehouse className="w-4 h-4" /> },
         ],
     },
     // --- Location & Notifications --- (divider after 15)
@@ -230,6 +237,8 @@ const navItems: NavItem[] = [
             { name: 'Vendor Payments', href: '/inventory/payments', icon: <Banknote className="w-4 h-4" /> },
             { name: 'Vendor Ledger', href: '/inventory/ledger', icon: <BookText className="w-4 h-4" /> },
             { name: 'Purchase Report', href: '/inventory/report', icon: <BarChart3 className="w-4 h-4" /> },
+            // Phase J — bulk cost-price update shim. Drives PATCH /api/cost-prices.
+            { name: 'Cost Prices (Bulk)', href: '/inventory/cost-prices', icon: <Calculator className="w-4 h-4" /> },
         ],
     },
     // --- Production --- (no divider — same block as Inventory)
@@ -278,6 +287,8 @@ const KNOWN_PERMISSION_KEYS = new Set([
     // Variations feature (migration 030 / D-7). Gates the /attributes
     // library and the per-product /products/:id/variations editor.
     'attributes',
+    // Review moderation (migration 033 / Phase H).
+    'reviews',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
