@@ -377,7 +377,15 @@ export function useUpcomingOrders() {
 // Settings
 export interface Settings {
     id: number;
-    key: string;
+    setting_id?: number;
+    /**
+     * Lookup key for an app_settings row. The DB column is `title` — the
+     * legacy admin code referred to it as `key`. Both names are exposed
+     * for backwards compat; new callers should use `title`.
+     */
+    title: string;
+    /** @deprecated alias of `title` — kept for legacy callers. */
+    key?: string;
     value: string;
     type?: string;
 }
@@ -386,25 +394,30 @@ export function useSettings() {
     return useQuery({
         queryKey: ['settings'],
         queryFn: async () => {
-            const response = await GET<Settings[]>('/get_setting');
+            // Backend mounts the route at /get_settings (plural). The legacy
+            // /get_setting (singular) was a typo and 404s.
+            const response = await GET<Settings[]>('/get_settings');
             return response.data || [];
         },
     });
 }
 
 /**
- * Resolve a single app_setting row to its truthy/falsy value. Treats the
- * row's `value` as truthy when it equals '1', 'true', or 'on' (case-
- * insensitive). Returns `defaultValue` when the row is missing or while
- * the query is still loading — UI components can default to "feature
- * hidden" or "feature visible" depending on their preference.
+ * Resolve a single app_settings row to its truthy/falsy value. Treats
+ * the row's `value` as truthy when it equals '1', 'true', or 'on'
+ * (case-insensitive). Returns `defaultValue` when the row is missing or
+ * while the query is still loading — UI components can default to
+ * "feature hidden" or "feature visible" depending on their preference.
+ *
+ * The lookup key is `app_settings.title` — see migration files
+ * 017/025/etc. for the seed pattern.
  *
  * Used by the variations rollout gate (`enable_variations`) to flip
  * Attributes / Variations menu items on per-tenant.
  */
-export function useFeatureFlag(key: string, defaultValue = false): boolean {
+export function useFeatureFlag(title: string, defaultValue = false): boolean {
     const { data: settings = [] } = useSettings();
-    const row = settings.find((s) => s.key === key);
+    const row = settings.find((s) => s.title === title || s.key === title);
     if (!row) return defaultValue;
     const raw = String(row.value ?? '').trim().toLowerCase();
     return raw === '1' || raw === 'true' || raw === 'on' || raw === 'yes';
