@@ -3,7 +3,7 @@ import { nestedDocsPlugin } from '@payloadcms/plugin-nested-docs'
 import { redirectsPlugin } from '@payloadcms/plugin-redirects'
 import { seoPlugin } from '@payloadcms/plugin-seo'
 import { searchPlugin } from '@payloadcms/plugin-search'
-import { vercelBlobStorage } from '@payloadcms/storage-vercel-blob'
+import { s3Storage } from '@payloadcms/storage-s3'
 import { Plugin } from 'payload'
 import { revalidateRedirects } from '@/hooks/revalidateRedirects'
 import { GenerateTitle, GenerateURL } from '@payloadcms/plugin-seo/types'
@@ -90,16 +90,41 @@ export const plugins: Plugin[] = [
       },
     },
   }),
-  // Vercel Blob storage for the Media collection. Required because Vercel's
-  // serverless filesystem is read-only — Payload's default disk-staticDir
-  // adapter throws 500 on every upload. When BLOB_READ_WRITE_TOKEN is unset
-  // (local dev), the plugin disables itself and Payload falls back to the
-  // disk adapter, which works locally.
-  vercelBlobStorage({
-    enabled: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
-    token: process.env.BLOB_READ_WRITE_TOKEN,
-    collections: { media: true },
-    // Suffix uploads to avoid filename collisions across many WP attachments.
-    addRandomSuffix: true,
+  // Cloudflare R2 (S3-compatible) storage for the Media collection.
+  // Required because Vercel's serverless filesystem is read-only —
+  // Payload's default disk-staticDir adapter throws 500 on every upload.
+  // When the R2 env vars are unset (local dev) the plugin disables itself
+  // and Payload falls back to the disk adapter, which works locally.
+  //
+  // The R2 bucket is **shared** with the swargnodejsbackend (Feature 07
+  // pickup-proof photos etc.). To keep Payload media isolated from
+  // backend uploads in the same bucket, every object is prefixed with
+  // R2_MEDIA_PREFIX (default 'admin-media/'). Override the prefix via
+  // env to point at a different folder.
+  //
+  // Create / reuse an R2 API token in the Cloudflare dashboard
+  // (R2 → Manage R2 API Tokens → Object Read & Write on the bucket).
+  s3Storage({
+    enabled: Boolean(
+      process.env.R2_BUCKET &&
+        process.env.R2_ENDPOINT &&
+        process.env.R2_ACCESS_KEY_ID &&
+        process.env.R2_SECRET_ACCESS_KEY,
+    ),
+    collections: {
+      media: {
+        prefix: process.env.R2_MEDIA_PREFIX || 'admin-media',
+      },
+    },
+    bucket: process.env.R2_BUCKET ?? '',
+    config: {
+      endpoint: process.env.R2_ENDPOINT,
+      // R2 is region-agnostic — the AWS SDK requires *some* region, so use 'auto'.
+      region: 'auto',
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
+      },
+    },
   }),
 ]
