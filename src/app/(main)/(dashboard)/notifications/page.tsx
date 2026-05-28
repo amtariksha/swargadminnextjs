@@ -93,6 +93,18 @@ export default function NotificationsPage() {
         return scenario;
     }, [mode, scenario, titleBodyTouched]);
 
+    // The template's image URL. Sent EVEN WHEN title/body has been
+    // touched — operators expect "I picked a template, the image goes
+    // with it" regardless of whether they tweaked the copy. Without
+    // this, an edited-template broadcast would fall back to
+    // `notification_image[scenario='broadcast']` (which usually isn't
+    // configured) and arrive on the phone as a text-only push.
+    const effectiveTemplateImageUrl = useMemo(() => {
+        if (mode !== 'template' || !scenario) return null;
+        const row = images.find((r) => r.scenario === scenario);
+        return row?.image_url ?? null;
+    }, [mode, scenario, images]);
+
     const selectedScenarioMeta = mode === 'template' ? SCENARIO_BY_SLUG[scenario] : undefined;
     const category = effectiveScenario
         ? selectedScenarioMeta?.category ?? 'promotions'
@@ -153,6 +165,12 @@ export default function NotificationsPage() {
             };
             if (audienceType === 'custom') payload.user_ids = userIds;
             if (audienceType === 'driver') payload.driver_user_id = driverUserId;
+
+            // Always carry the template's image when a template was picked,
+            // even if the operator tweaked title/body. Otherwise the
+            // dispatcher falls back to notification_image[scenario='broadcast']
+            // which usually has no row and the push arrives text-only.
+            if (effectiveTemplateImageUrl) payload.image_url = effectiveTemplateImageUrl;
 
             if (effectiveScenario) {
                 payload.scenario = effectiveScenario;
