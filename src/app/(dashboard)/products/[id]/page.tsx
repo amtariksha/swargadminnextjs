@@ -17,6 +17,9 @@ import { POST } from '@/lib/api';
 
 const productSchema = z.object({
     title: z.string().min(1, 'Title is required'),
+    // Variations (migration 032). Optional — auto-generated from title at
+    // backend create/update time if blank. Admin can override.
+    slug: z.string().optional(),
     qty_text: z.string().min(1, 'Quantity text is required'),
     price: z.number().min(0),
     mrp: z.number().min(0),
@@ -84,6 +87,7 @@ export default function EditProductPage() {
         if (product) {
             reset({
                 title: product.title || '',
+                slug: product.slug || '',
                 qty_text: product.qty_text || '',
                 price: product.price || 0,
                 mrp: product.mrp || 0,
@@ -251,6 +255,13 @@ export default function EditProductPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField label="Product Title" error={errors.title} required>
                             <input {...register('title')} className={inputClassName} />
+                        </FormField>
+                        {/* Variations (migration 032). URL-safe identifier used in
+                            /product/{slug}/[variant-slug] storefront routes.
+                            Auto-derived from title at save time if blank. */}
+                        <FormField label="Slug — URL identifier" error={errors.slug}>
+                            <input {...register('slug')} className={inputClassName}
+                                placeholder="auto-generated from title if blank" />
                         </FormField>
                         <FormField label="Quantity Text" error={errors.qty_text} required>
                             <input {...register('qty_text')} className={inputClassName} placeholder="e.g., 1L, 500g" />

@@ -16,13 +16,16 @@
  */
 
 import { useParams, useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import apiClient from '@/lib/api';
 import {
     ArrowLeft, Plus, Layers, Trash2, Sparkles, Edit3, Star, Archive,
+    Download, Upload, Image as ImageIcon,
 } from 'lucide-react';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import VariantGalleryModal from '@/components/variations/VariantGalleryModal';
 import { useProduct } from '@/hooks/useData';
 import {
     useAttributes,
@@ -49,9 +52,12 @@ export default function ProductVariationsPage() {
     const [showAttributesModal, setShowAttributesModal] = useState(false);
     const [showGenerateModal, setShowGenerateModal] = useState(false);
     const [showBulkModal, setShowBulkModal] = useState(false);
+    const [showImportModal, setShowImportModal] = useState(false);
+    const [galleryTarget, setGalleryTarget] = useState<Variant | null>(null);
     const [showArchived, setShowArchived] = useState(false);
     const [selectedVariantIds, setSelectedVariantIds] = useState<Set<number>>(new Set());
     const [archiveTarget, setArchiveTarget] = useState<Variant | null>(null);
+    const exportInProgress = useRef(false);
 
     const activeVariants = useMemo(() => variants.filter((v) => v.archived_at == null), [variants]);
     const archivedVariants = useMemo(() => variants.filter((v) => v.archived_at != null), [variants]);
@@ -62,6 +68,34 @@ export default function ProductVariationsPage() {
 
     const updateVariantMut = useUpdateVariant();
     const archiveVariantMut = useArchiveVariant();
+
+    /**
+     * CSV export — backend streams the CSV with Content-Disposition. We hit
+     * the endpoint via the shared axios instance (so auth + tenant header
+     * are added) and trigger a browser download from the response blob.
+     */
+    const onExportCsv = async () => {
+        if (exportInProgress.current) return;
+        exportInProgress.current = true;
+        try {
+            const res = await apiClient.get(`/products/${productId}/variants/export.csv`, {
+                responseType: 'blob',
+            });
+            const url = window.URL.createObjectURL(res.data as Blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${product?.title || `product-${productId}`}-variants.csv`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(url);
+            toast.success('CSV exported');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Export failed');
+        } finally {
+            exportInProgress.current = false;
+        }
+    };
 
     const onToggleSelect = (id: number) => {
         setSelectedVariantIds((prev) => {
@@ -183,6 +217,14 @@ export default function ProductVariationsPage() {
                         <p className="text-slate-500 text-xs">Inline-edit price, SKU, and stock. Set a default for legacy clients to see.</p>
                     </div>
                     <div className="flex items-center gap-2">
+                        <button onClick={onExportCsv}
+                            className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border border-slate-700/50 text-slate-200 rounded-lg text-sm hover:border-purple-500/50">
+                            <Download className="w-4 h-4" /> Export CSV
+                        </button>
+                        <button onClick={() => setShowImportModal(true)}
+                            className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border border-slate-700/50 text-slate-200 rounded-lg text-sm hover:border-purple-500/50">
+                            <Upload className="w-4 h-4" /> Import CSV
+                        </button>
                         <button
                             disabled={selectedVariantIds.size === 0}
                             onClick={() => setShowBulkModal(true)}
@@ -228,6 +270,7 @@ export default function ProductVariationsPage() {
                                     onToggleSelect={() => onToggleSelect(v.id)}
                                     onSetDefault={() => onSetDefault(v)}
                                     onArchive={() => setArchiveTarget(v)}
+                                    onOpenGallery={() => setGalleryTarget(v)}
                                 />
                             ))}
                         </tbody>
@@ -295,6 +338,22 @@ export default function ProductVariationsPage() {
                 />
             )}
 
+            {showImportModal && (
+                <ImportCsvModal
+                    productId={productId}
+                    onClose={() => setShowImportModal(false)}
+                />
+            )}
+
+            {galleryTarget && (
+                <VariantGalleryModal
+                    productId={productId}
+                    variantId={galleryTarget.id}
+                    variantLabel={describeVariant(galleryTarget)}
+                    onClose={() => setGalleryTarget(null)}
+                />
+            )}
+
             <ConfirmDialog isOpen={!!archiveTarget}
                 title="Archive variant"
                 message={`Archive "${archiveTarget ? describeVariant(archiveTarget) : ''}"? Historic orders still reference it; it becomes read-only.`}
@@ -314,7 +373,7 @@ function describeVariant(v: Variant): string {
 /* ─── Inline-editable variant row ─── */
 
 function VariantRow({
-    variant, productId, selected, onToggleSelect, onSetDefault, onArchive,
+    variant, productId, selected, onToggleSelect, onSetDefault, onArchive, onOpenGallery,
 }: {
     variant: Variant;
     productId: number;
@@ -322,6 +381,7 @@ function VariantRow({
     onToggleSelect: () => void;
     onSetDefault: () => void;
     onArchive: () => void;
+    onOpenGallery: () => void;
 }) {
     const updateMut = useUpdateVariant();
     const [editing, setEditing] = useState({
@@ -370,10 +430,21 @@ function VariantRow({
                     className="w-24 px-2 py-1 bg-slate-800/50 border border-slate-700/50 rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50" />
             </td>
             <td className="px-3 py-2">
-                <input type="number" min={0} step="0.01" value={editing.sale_price}
-                    onChange={(e) => setField('sale_price', e.target.value)}
-                    placeholder="—"
-                    className="w-24 px-2 py-1 bg-slate-800/50 border border-slate-700/50 rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50" />
+                <div className="flex items-center gap-1">
+                    <input type="number" min={0} step="0.01" value={editing.sale_price}
+                        onChange={(e) => setField('sale_price', e.target.value)}
+                        placeholder="—"
+                        className="w-24 px-2 py-1 bg-slate-800/50 border border-slate-700/50 rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50" />
+                    {/* Sale-window badge — visible when EITHER start or end is set.
+                        Tooltip shows the actual ISO strings; full editing happens
+                        in the Bulk Edit modal. */}
+                    {(variant.sale_starts_at || variant.sale_ends_at) && (
+                        <span
+                            title={`Sale window: ${variant.sale_starts_at || '—'} → ${variant.sale_ends_at || '—'}`}
+                            className="text-amber-400 text-[10px] leading-none px-1 py-0.5 rounded bg-amber-500/10 border border-amber-500/30"
+                        >🏷️</span>
+                    )}
+                </div>
             </td>
             <td className="px-3 py-2">
                 <input type="number" min={0} value={editing.stock_quantity}
@@ -405,6 +476,10 @@ function VariantRow({
                             Save
                         </button>
                     )}
+                    <button onClick={onOpenGallery}
+                        className="p-1.5 hover:bg-purple-500/20 rounded" title="Gallery">
+                        <ImageIcon className="w-3.5 h-3.5 text-purple-300" />
+                    </button>
                     <button onClick={onArchive}
                         className="p-1.5 hover:bg-red-500/20 rounded" title="Archive">
                         <Trash2 className="w-3.5 h-3.5 text-red-400" />
@@ -663,6 +738,12 @@ function BulkEditModal({
     const [form, setForm] = useState({
         regular_price: '',
         sale_price: '',
+        // Variations (PRD §5.6 / D-13): scheduled sale window. Date-time
+        // strings are sent verbatim — backend stores in TIMESTAMP columns.
+        // isSaleWindowActive (variantPricing.js) decides at delivery-cron
+        // time whether sale_price wins over regular_price.
+        sale_starts_at: '',
+        sale_ends_at: '',
         stock_quantity: '',
         stock_status: '',
         is_active: '',
@@ -672,6 +753,8 @@ function BulkEditModal({
         const changes: Record<string, unknown> = {};
         if (form.regular_price !== '') changes.regular_price = parseFloat(form.regular_price);
         if (form.sale_price !== '') changes.sale_price = parseFloat(form.sale_price);
+        if (form.sale_starts_at !== '') changes.sale_starts_at = form.sale_starts_at;
+        if (form.sale_ends_at !== '') changes.sale_ends_at = form.sale_ends_at;
         if (form.stock_quantity !== '') changes.stock_quantity = parseInt(form.stock_quantity, 10);
         if (form.stock_status !== '') changes.stock_status = form.stock_status;
         if (form.is_active !== '') changes.is_active = parseInt(form.is_active, 10);
@@ -707,6 +790,30 @@ function BulkEditModal({
                         <input type="number" step="0.01" min={0}
                             value={form.sale_price}
                             onChange={(e) => setForm({ ...form, sale_price: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white" />
+                    </div>
+                    {/* Variations (PRD §5.6 / D-13): scheduled sale window. Both
+                        bounds optional — leave start blank for "always on" sale,
+                        end blank for "indefinite". Backend honours the window via
+                        isSaleWindowActive at delivery-cron time. */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                            Sale starts at
+                            <span className="text-slate-500 text-xs ml-1">(optional)</span>
+                        </label>
+                        <input type="datetime-local"
+                            value={form.sale_starts_at}
+                            onChange={(e) => setForm({ ...form, sale_starts_at: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                            Sale ends at
+                            <span className="text-slate-500 text-xs ml-1">(optional)</span>
+                        </label>
+                        <input type="datetime-local"
+                            value={form.sale_ends_at}
+                            onChange={(e) => setForm({ ...form, sale_ends_at: e.target.value })}
                             className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white" />
                     </div>
                     <div>
@@ -747,6 +854,112 @@ function BulkEditModal({
                     <button type="button" onClick={onApply} disabled={bulkMut.isPending}
                         className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50 text-sm">
                         {bulkMut.isPending ? 'Applying…' : `Apply to ${variantIds.length}`}
+                    </button>
+                </div>
+            </div>
+        </Modal>
+    );
+}
+
+/* ─── Modal: CSV import ─── */
+
+interface ImportOutcome {
+    row: number;
+    action: 'created' | 'updated' | 'skipped';
+    sku?: string | null;
+    variant_id?: number;
+    errors?: string[];
+}
+interface ImportResult {
+    dryRun: boolean;
+    total: number;
+    created: number;
+    updated: number;
+    skipped: number;
+    outcomes: ImportOutcome[];
+}
+
+function ImportCsvModal({ productId, onClose }: { productId: number; onClose: () => void }) {
+    const [file, setFile] = useState<File | null>(null);
+    const [result, setResult] = useState<ImportResult | null>(null);
+    const [submitting, setSubmitting] = useState(false);
+
+    const submit = async (dryRun: boolean) => {
+        if (!file) {
+            toast.error('Choose a CSV file first');
+            return;
+        }
+        setSubmitting(true);
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            const url = `/products/${productId}/variants/import-csv${dryRun ? '?dryRun=1' : ''}`;
+            const res = await apiClient.post(url, fd);
+            const data = (res.data as { data: ImportResult }).data;
+            setResult(data);
+            const verb = dryRun ? 'Preview' : 'Imported';
+            toast.success(`${verb}: ${data.created} created, ${data.updated} updated, ${data.skipped} skipped`);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Import failed');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <Modal isOpen onClose={onClose} title="Import variants from CSV">
+            <div className="space-y-4">
+                <p className="text-slate-400 text-xs">
+                    CSV columns: sku, slug, regular_price, sale_price, stock_quantity, … plus pairs of
+                    <code className="text-purple-300 mx-1">attribute_1_name / attribute_1_value</code>
+                    per variation-defining attribute. Use <strong>Export CSV</strong> to grab the exact format.
+                    Upsert by SKU; SKU-less rows match against the attribute combination.
+                </p>
+                <div>
+                    <input type="file" accept=".csv,text/csv"
+                        onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); }}
+                        className="block w-full text-sm text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:bg-slate-800 file:text-purple-300 hover:file:bg-slate-700" />
+                </div>
+
+                {result && (
+                    <div className="rounded-lg border border-slate-800/50 bg-slate-900/50 p-3 text-sm space-y-2">
+                        <p className="text-white">
+                            <strong>{result.created}</strong> created · <strong>{result.updated}</strong> updated · <strong>{result.skipped}</strong> skipped
+                            {result.dryRun && <span className="ml-2 text-amber-300 text-xs">(dry run — nothing saved)</span>}
+                        </p>
+                        {result.outcomes.length > 0 && (
+                            <div className="max-h-48 overflow-y-auto text-xs text-slate-400 space-y-1">
+                                {result.outcomes.map((o, i) => (
+                                    <div key={i} className={
+                                        o.action === 'skipped' ? 'text-amber-300' :
+                                        o.action === 'created' ? 'text-emerald-300' :
+                                        'text-purple-300'
+                                    }>
+                                        Row {o.row}: {o.action}
+                                        {o.sku && <span className="text-slate-500"> · sku={o.sku}</span>}
+                                        {o.errors && o.errors.length > 0 && (
+                                            <span className="text-red-400"> — {o.errors.join(', ')}</span>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={onClose}
+                        className="px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl text-sm">
+                        Cancel
+                    </button>
+                    <div className="flex-1" />
+                    <button type="button" onClick={() => submit(true)} disabled={submitting || !file}
+                        className="px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 text-slate-200 rounded-xl text-sm disabled:opacity-50">
+                        {submitting ? '…' : 'Dry run'}
+                    </button>
+                    <button type="button" onClick={() => submit(false)} disabled={submitting || !file}
+                        className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50 text-sm">
+                        {submitting ? 'Importing…' : 'Import'}
                     </button>
                 </div>
             </div>

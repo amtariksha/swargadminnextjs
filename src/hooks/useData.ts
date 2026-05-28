@@ -164,6 +164,9 @@ export function useSubcategories() {
 export interface Product {
     id: number;
     title: string;
+    // Variations (migration 032). URL-safe identifier. Backend auto-derives
+    // from title at create/update unless admin sets an explicit value.
+    slug?: string | null;
     preferences?: number;
     qty_text?: string;
     stock_qty?: number;
