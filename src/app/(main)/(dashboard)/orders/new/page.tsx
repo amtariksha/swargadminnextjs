@@ -7,6 +7,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useUsers, useProducts, useUserAddresses, useAddTransaction } from '@/hooks/useData';
 import { useCreateOrder } from '@/hooks/useOrders';
+import { useVariants } from '@/hooks/useVariations';
+import type { Variant } from '@/lib/types/variations';
 import FormField, { inputClassName, selectClassName } from '@/components/FormField';
 import { ArrowLeft, Save, Search } from 'lucide-react';
 import { toast } from 'sonner';
@@ -23,6 +25,10 @@ const getTomorrowDate = () => {
 const orderSchema = z.object({
     user_id: z.number().min(1, 'Select a user'),
     product_id: z.number().min(1, 'Select a product'),
+    // Variations (migration 030): variant_id is optional. Required when
+    // the picked product is product_type='variable'; the form-level
+    // validation enforces that via refine() below.
+    variant_id: z.number().optional(),
     qty: z.number().min(1, 'Quantity must be at least 1'),
     start_date: z.string().min(1, 'Start date is required'),
     subscription_type: z.number().min(1),
@@ -68,6 +74,7 @@ export default function CreateOrderPage() {
 
     const selectedUserId = watch('user_id');
     const selectedProductId = watch('product_id');
+    const selectedVariantId = watch('variant_id');
     const qty = watch('qty');
     const subscriptionType = watch('subscription_type');
 
@@ -76,6 +83,32 @@ export default function CreateOrderPage() {
     const selectedProduct = useMemo(() => {
         return products.find((p) => p.id === selectedProductId) || null;
     }, [products, selectedProductId]);
+
+    // Variations (migration 030): when the selected product is variable,
+    // fetch its variants so the operator can pick one. The hook is gated
+    // by productId so simple-product flows skip the network call.
+    const isVariableProduct = selectedProduct?.product_type === 'variable';
+    const { data: variants = [] } = useVariants(
+        isVariableProduct ? selectedProductId : null,
+    );
+    const activeVariants = useMemo<Variant[]>(
+        () => variants.filter((v) => v.is_active === 1 && !v.archived_at),
+        [variants],
+    );
+    const selectedVariant = useMemo<Variant | null>(
+        () => activeVariants.find((v) => v.id === selectedVariantId) || null,
+        [activeVariants, selectedVariantId],
+    );
+
+    // Human label for a variant — "Size: 500g, Pack: Gift Box". Falls
+    // back to slug when attribute_pairs aren't enriched.
+    const labelForVariant = (v: Variant): string => {
+        if (!v.attribute_pairs || v.attribute_pairs.length === 0) return v.slug;
+        return v.attribute_pairs
+            .map((p) => `${p.attribute_name ?? ''}: ${p.value ?? ''}`)
+            .filter((s) => s.trim() !== ':')
+            .join(', ');
+    };
 
     const isSubscriptionProduct = selectedProduct?.subscription === 1;
     const isSubscriptionOrder = isSubscriptionProduct && subscriptionType !== 1;
@@ -94,11 +127,46 @@ export default function CreateOrderPage() {
             setValue('subscription_type', 1);
             setValue('order_type', 3);
         }
+        // Variations: clear any stale variant pick when the product
+        // changes — the previous product's variants are no longer valid.
+        setValue('variant_id', undefined);
     }, [selectedProduct?.id]);
+
+    // Variations: when variants land, auto-pick the default (or first
+    // in-stock) variant so the operator sees coherent pricing without an
+    // extra click. Skips when the operator has already picked.
+    useEffect(() => {
+        if (!isVariableProduct || activeVariants.length === 0) return;
+        if (selectedVariantId) return;
+        const def = activeVariants.find((v) => v.is_default === 1);
+        const inStock = activeVariants.find((v) => v.stock_status === 'in_stock');
+        const chosen = def ?? inStock ?? activeVariants[0];
+        if (chosen) setValue('variant_id', chosen.id);
+    }, [isVariableProduct, activeVariants, selectedVariantId]);
+
+    // Variations: when a variant is picked, its price overrides the
+    // parent product price. Tax stays at the parent's value (the variant
+    // schema has no per-variant tax in MVP) so the formula still applies.
+    const variantSalePriceLive =
+        selectedVariant?.sale_price &&
+        selectedVariant.sale_starts_at &&
+        selectedVariant.sale_ends_at
+            ? new Date() >= new Date(selectedVariant.sale_starts_at) &&
+              new Date() <= new Date(selectedVariant.sale_ends_at)
+            : false;
+    const variantUnitPrice =
+        selectedVariant
+            ? (variantSalePriceLive
+                ? selectedVariant.sale_price
+                : selectedVariant.regular_price) ?? selectedProduct?.price ?? 0
+            : null;
+    const effectivePrice = variantUnitPrice ?? selectedProduct?.price ?? 0;
+    const effectiveMrp = selectedVariant?.regular_price ?? selectedProduct?.mrp ?? effectivePrice;
+    const effectiveTax = selectedProduct?.tax || 0;
 
     // Per-unit price incl. tax.
     const unitAmount = selectedProduct
-        ? Math.round((selectedProduct.price + selectedProduct.price * (selectedProduct.tax || 0) / 100) * 100) / 100
+        ? Math.round((effectivePrice + effectivePrice * effectiveTax / 100) * 100) / 100
         : 0;
     // Weekly subscriptions (subscription_type=2) store order_amount as the
     // PER-UNIT price — the per-day quantity lives inside
@@ -148,7 +216,9 @@ export default function CreateOrderPage() {
                     amount: orderAmount,
                     payment_id: 'xxx-admin',
                     type: 2,
-                    description: `Amount debited for ${data.qty} qty of ${selectedProduct?.title || 'product'}`,
+                    description: `Amount debited for ${data.qty} qty of ${selectedProduct?.title || 'product'}${
+                        selectedVariant ? ` — ${labelForVariant(selectedVariant)}` : ''
+                    }`,
                     payment_mode: 1,
                 });
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -174,13 +244,25 @@ export default function CreateOrderPage() {
             const weeklyEntries = Object.entries(weeklyQty)
                 .map(([dc, q]) => ({ dayCode: Number(dc), qty: q }))
                 .sort((a, b) => a.dayCode - b.dayCode);
+            // Variations (migration 030): for a variable product the
+            // operator MUST pick a variant. The backend would otherwise
+            // auto-resolve to the default variant, which is rarely what
+            // the operator intends on a hand-entered order.
+            if (isVariableProduct && !selectedVariantId) {
+                toast.error('Select a variant for this variable product.');
+                return;
+            }
+
             const orderData: Record<string, unknown> = {
                 ...data,
                 qty: isWeekly ? 1 : data.qty,
                 order_amount: orderAmount,
-                price: selectedProduct?.price,
-                mrp: selectedProduct?.mrp || selectedProduct?.price,
-                tax: selectedProduct?.tax || 0,
+                // Variant price wins when a variant was picked; falls back
+                // to parent product price for simple products.
+                price: effectivePrice,
+                mrp: effectiveMrp,
+                tax: effectiveTax,
+                variant_id: selectedVariantId || undefined,
                 payment_mode: 1,
                 selected_days_for_weekly: isWeekly
                     ? JSON.stringify(weeklyEntries)
@@ -284,17 +366,84 @@ export default function CreateOrderPage() {
                     </div>
                 </div>
 
-                {/* Auto-filled product info — all disabled */}
+                {/* Variations (migration 030): variant picker for variable
+                    products. Single-row chip strip — each chip shows the
+                    variant's label (e.g. "Size: 500g") + effective unit
+                    price + stock status. Default variant is auto-picked
+                    above; the operator can override. Hidden entirely for
+                    simple products so the legacy UX is unchanged. */}
+                {selectedProduct && isVariableProduct && (
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                            Variant <span className="text-red-400">*</span>
+                        </label>
+                        {activeVariants.length === 0 ? (
+                            <p className="text-sm text-amber-400">
+                                This product is marked variable but has no active variants. Add variants on the product editor first.
+                            </p>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {activeVariants.map((v) => {
+                                    const label = labelForVariant(v);
+                                    const price = v.sale_price ?? v.regular_price ?? selectedProduct.price;
+                                    const oos = v.stock_status === 'out_of_stock';
+                                    const lowStock =
+                                        v.manage_stock === 1 &&
+                                        typeof v.stock_quantity === 'number' &&
+                                        v.stock_quantity > 0 && v.stock_quantity < 5;
+                                    const isSelected = selectedVariantId === v.id;
+                                    return (
+                                        <button
+                                            key={v.id}
+                                            type="button"
+                                            onClick={() => setValue('variant_id', v.id)}
+                                            className={`p-2.5 rounded-xl text-left text-sm transition-colors border ${
+                                                isSelected
+                                                    ? 'bg-purple-600/20 border-purple-500/50 text-purple-200'
+                                                    : oos
+                                                    ? 'bg-slate-900/40 border-slate-800 text-slate-500'
+                                                    : 'bg-slate-900/50 border-slate-700/30 text-slate-300 hover:bg-slate-800/50'
+                                            }`}
+                                            title={oos ? 'Out of stock' : undefined}
+                                        >
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="font-medium truncate">{label || v.slug}</span>
+                                                {v.is_default === 1 && (
+                                                    <span className="text-[10px] uppercase tracking-wide bg-purple-500/20 text-purple-200 px-1.5 py-0.5 rounded">Default</span>
+                                                )}
+                                            </div>
+                                            <div className="mt-1 flex items-center gap-2 text-xs text-slate-400">
+                                                <span>₹{price}</span>
+                                                {v.sku && <span className="truncate">SKU: {v.sku}</span>}
+                                                {oos ? (
+                                                    <span className="text-red-400">Out of stock</span>
+                                                ) : v.manage_stock === 1 && typeof v.stock_quantity === 'number' ? (
+                                                    <span className={lowStock ? 'text-amber-400' : 'text-emerald-400'}>
+                                                        {v.stock_quantity} left
+                                                    </span>
+                                                ) : null}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Auto-filled product info — all disabled. For variable
+                    products these now reflect the picked variant's price
+                    / mrp; tax is parent-level (no per-variant tax in MVP). */}
                 {selectedProduct && (
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         <FormField label="MRP" required>
-                            <input value={selectedProduct.mrp || selectedProduct.price} disabled className={disabledFieldClass} />
+                            <input value={effectiveMrp} disabled className={disabledFieldClass} />
                         </FormField>
                         <FormField label="Price" required>
-                            <input value={selectedProduct.price} disabled className={disabledFieldClass} />
+                            <input value={effectivePrice} disabled className={disabledFieldClass} />
                         </FormField>
                         <FormField label="Tax" required>
-                            <input value={selectedProduct.tax || 0} disabled className={disabledFieldClass} />
+                            <input value={effectiveTax} disabled className={disabledFieldClass} />
                         </FormField>
                     </div>
                 )}
