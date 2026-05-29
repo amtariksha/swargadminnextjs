@@ -5,8 +5,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useUsers, useProducts, useUserAddresses, useAddTransaction } from '@/hooks/useData';
-import { useCreateOrder } from '@/hooks/useOrders';
+import { useUsers, useProducts, useUserAddresses, useAddTransaction, useDrivers } from '@/hooks/useData';
+import { useCreateOrder, useAssignOrder } from '@/hooks/useOrders';
 import { useVariants } from '@/hooks/useVariations';
 import type { Variant } from '@/lib/types/variations';
 import FormField, { inputClassName, selectClassName } from '@/components/FormField';
@@ -47,6 +47,11 @@ export default function CreateOrderPage() {
 
     const { data: users = [] } = useUsers();
     const { data: products = [] } = useProducts();
+    const { data: drivers = [] } = useDrivers();
+    const assignOrder = useAssignOrder();
+    // Driver chosen for this order. Optional — the operator can still
+    // save without assigning and pick a partner later from the edit page.
+    const [driverId, setDriverId] = useState<number | ''>('');
 
     const [userSearch, setUserSearch] = useState('');
     const [productSearch, setProductSearch] = useState('');
@@ -270,12 +275,49 @@ export default function CreateOrderPage() {
                 trasation_id: transactionId,
             };
 
-            await createOrder.mutateAsync(orderData);
-            toast.success('Order created successfully');
+            const created = await createOrder.mutateAsync(orderData);
+            const newOrderId =
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (created as any)?.id ?? (created as any)?.data?.id ?? null;
+
+            // If the operator picked a delivery partner on this screen,
+            // chain the /add_order_assign call now that the order id
+            // exists. Previously the create form punted the operator to
+            // the edit page for this — saving a click per order.
+            if (driverId && newOrderId) {
+                try {
+                    await assignOrder.mutateAsync({
+                        user_id: Number(driverId),
+                        order_id: Number(newOrderId),
+                    });
+                } catch (assignErr) {
+                    // Order is already created — don't roll back. Tell the
+                    // operator the assignment fell over so they can retry
+                    // from the edit page.
+                    const msg = assignErr instanceof Error ? assignErr.message : 'Failed to assign driver';
+                    toast.error(`Order created but driver assignment failed: ${msg}`);
+                    router.push(`/orders/${newOrderId}`);
+                    return;
+                }
+            }
+
+            toast.success(
+                driverId
+                    ? 'Order created and driver assigned'
+                    : 'Order created successfully',
+            );
             router.push('/orders');
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to create order');
         }
+    };
+
+    // Surface zod validation failures — without this, an invalid field
+    // (e.g. missing user, missing product) silently swallowed the submit
+    // because handleSubmit only fires onSubmit when the schema is clean.
+    const onInvalid = (errs: Record<string, unknown>) => {
+        const first = Object.values(errs)[0] as { message?: string } | undefined;
+        toast.error(first?.message || 'Please check the highlighted fields and try again.');
     };
 
     const disabledFieldClass = `${inputClassName} !text-slate-500 !bg-slate-800/30 cursor-not-allowed`;
@@ -292,7 +334,7 @@ export default function CreateOrderPage() {
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="glass rounded-xl p-6 space-y-6">
+            <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="glass rounded-xl p-6 space-y-6">
                 {/* User + Product Selection */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* User Selection */}
@@ -598,13 +640,22 @@ export default function CreateOrderPage() {
                     </div>
                 )}
 
-                {/* Delivery Partner — assigned from order edit page */}
+                {/* Delivery Partner — optional. When set, /add_order_assign
+                    fires immediately after /add_order succeeds. Operator
+                    can leave blank and assign later from the edit page. */}
                 <FormField label="Delivery Partner">
-                    <input
-                        disabled
-                        value="Please assign delivery partner from the order edit page"
-                        className={`${disabledFieldClass} italic`}
-                    />
+                    <select
+                        value={driverId}
+                        onChange={(e) => setDriverId(e.target.value === '' ? '' : Number(e.target.value))}
+                        className={selectClassName}
+                    >
+                        <option value="">— Assign later —</option>
+                        {drivers.map((d) => (
+                            <option key={d.id} value={d.id}>
+                                {d.name}{d.phone ? ` · ${d.phone}` : ''}{d.role_label ? ` · ${d.role_label}` : ''}
+                            </option>
+                        ))}
+                    </select>
                 </FormField>
 
                 {/* Order Summary */}
