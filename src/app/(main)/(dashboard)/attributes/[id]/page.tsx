@@ -8,9 +8,9 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ArrowLeft, Plus, Trash2, Edit, Archive } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Edit, Archive, Upload } from 'lucide-react';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import {
@@ -20,7 +20,8 @@ import {
     useArchiveAttributeValue,
 } from '@/hooks/useVariations';
 import type { AttributeValue } from '@/lib/types/variations';
-import { ApiError } from '@/lib/api';
+import apiClient, { ApiError } from '@/lib/api';
+import { IMAGE_BASE_URL } from '@/config/tenant';
 
 export default function AttributeDetailPage() {
     const params = useParams<{ id: string }>();
@@ -35,6 +36,8 @@ export default function AttributeDetailPage() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editValue, setEditValue] = useState<AttributeValue | null>(null);
     const [archiveTarget, setArchiveTarget] = useState<AttributeValue | null>(null);
+    const [uploading, setUploading] = useState(false);
+    const swatchFileRef = useRef<HTMLInputElement>(null);
     const [form, setForm] = useState({
         value: '',
         slug: '',
@@ -42,6 +45,43 @@ export default function AttributeDetailPage() {
         swatch_image_url: '',
         sort_order: 0,
     });
+
+    /**
+     * Upload a swatch image file. Only available when editing an existing
+     * value (we need a valueId to POST to). Backend stores the file under
+     * public/uploads/images, sets attribute_value.swatch_image_url to the
+     * returned filename, and we mirror it into the form for the preview.
+     */
+    const handleSwatchUpload = async (file: File) => {
+        if (!editValue) return;
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error('Image must be 5 MB or smaller');
+            return;
+        }
+        setUploading(true);
+        try {
+            const fd = new FormData();
+            fd.append('image', file);
+            const res = await apiClient.post<{ file: string }>(
+                `/attributes/${attributeId}/values/${editValue.id}/swatch-image`,
+                fd,
+            );
+            const filename = (res.data as { file?: string })?.file;
+            if (filename) {
+                setForm((f) => ({ ...f, swatch_image_url: filename }));
+                toast.success('Swatch image uploaded');
+            }
+        } catch (err) {
+            toast.error(err instanceof ApiError ? err.message : (err as Error)?.message || 'Upload failed');
+        } finally {
+            setUploading(false);
+            if (swatchFileRef.current) swatchFileRef.current.value = '';
+        }
+    };
+
+    /** Resolve a swatch image URL — absolute (legacy paste) or uploaded filename. */
+    const swatchImageSrc = (url: string) =>
+        /^https?:\/\//.test(url) ? url : `${IMAGE_BASE_URL}/${url}`;
 
     if (isLoading) {
         return <div className="text-slate-400 p-8">Loading…</div>;
@@ -244,15 +284,31 @@ export default function AttributeDetailPage() {
                         </label>
                         <div className="flex items-center gap-3">
                             {form.swatch_image_url && (
-                                <img src={form.swatch_image_url} alt="preview"
+                                <img src={swatchImageSrc(form.swatch_image_url)} alt="preview"
                                     className="w-12 h-12 rounded object-cover border border-slate-700"
                                     onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.3'; }} />
                             )}
-                            <input type="url" value={form.swatch_image_url}
+                            <input type="text" value={form.swatch_image_url}
                                 onChange={(e) => setForm({ ...form, swatch_image_url: e.target.value })}
-                                placeholder="https://…/red-swatch.jpg"
+                                placeholder="paste URL or upload below"
                                 className="flex-1 px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
                         </div>
+                        {/* Upload only available when editing an existing value —
+                            a valueId is needed to POST the file against. New
+                            values: save first, then re-open to upload. */}
+                        {editValue ? (
+                            <div className="mt-2">
+                                <input ref={swatchFileRef} type="file" accept="image/*" className="hidden"
+                                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleSwatchUpload(f); }} />
+                                <button type="button" disabled={uploading}
+                                    onClick={() => swatchFileRef.current?.click()}
+                                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-800/50 border border-dashed border-slate-700/50 rounded-lg text-xs text-slate-400 hover:text-white hover:border-purple-500/50 disabled:opacity-50">
+                                    <Upload className="w-3.5 h-3.5" /> {uploading ? 'Uploading…' : 'Upload swatch image (max 5 MB)'}
+                                </button>
+                            </div>
+                        ) : (
+                            <p className="mt-2 text-xs text-slate-500">Save the value first, then re-open to upload a swatch image.</p>
+                        )}
                     </div>
 
                     <div className="flex gap-3 pt-4">

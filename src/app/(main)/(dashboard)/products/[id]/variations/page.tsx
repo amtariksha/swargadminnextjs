@@ -26,6 +26,7 @@ import {
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import VariantGalleryModal from '@/components/variations/VariantGalleryModal';
+import { SwatchDot } from '@/components/variations/SwatchDot';
 import { useProduct } from '@/hooks/useData';
 import {
     useAttributes,
@@ -370,6 +371,31 @@ function describeVariant(v: Variant): string {
     return v.attribute_pairs.map((p) => p.value ?? '?').filter(Boolean).join(' · ');
 }
 
+/**
+ * Combination cell with inline swatch dots — renders a colour circle /
+ * image tile next to each attribute value that has one, falling back to
+ * the plain text when the value isn't a swatch type. Backend now ships
+ * swatch_color / swatch_image_url on each variant.attribute_pairs entry.
+ */
+function VariantCombination({ variant }: { variant: Variant }) {
+    const pairs = variant.attribute_pairs ?? [];
+    if (pairs.length === 0) {
+        return <span className="text-slate-400">{variant.slug}</span>;
+    }
+    return (
+        <span className="inline-flex items-center gap-1.5 flex-wrap">
+            {pairs.map((p, i) => (
+                <span key={p.attribute_id} className="inline-flex items-center gap-1">
+                    <SwatchDot swatchColor={p.swatch_color} swatchImageUrl={p.swatch_image_url}
+                        size={14} title={`${p.attribute_name}: ${p.value}`} />
+                    <span>{p.value ?? '?'}</span>
+                    {i < pairs.length - 1 && <span className="text-slate-600">·</span>}
+                </span>
+            ))}
+        </span>
+    );
+}
+
 /* ─── Inline-editable variant row ─── */
 
 function VariantRow({
@@ -417,7 +443,7 @@ function VariantRow({
     return (
         <tr className="border-b border-slate-800/30 hover:bg-slate-800/20">
             <td className="px-3 py-2"><input type="checkbox" checked={selected} onChange={onToggleSelect} /></td>
-            <td className="px-3 py-2 text-sm text-slate-200">{describeVariant(variant)}</td>
+            <td className="px-3 py-2 text-sm text-slate-200"><VariantCombination variant={variant} /></td>
             <td className="px-3 py-2">
                 <input value={editing.sku} onChange={(e) => setField('sku', e.target.value)}
                     placeholder="—"
@@ -613,11 +639,13 @@ function AttributeAssignmentModal({
                                 {row.values.map((v: AttributeValue) => (
                                     <button key={v.id} type="button"
                                         onClick={() => toggleValue(idx, v.id)}
-                                        className={`text-xs px-2 py-1 rounded-full border ${
+                                        className={`text-xs px-2 py-1 rounded-full border inline-flex items-center gap-1.5 ${
                                             row.selectedValueIds.has(v.id)
                                                 ? 'bg-purple-500/20 border-purple-500/40 text-purple-200'
                                                 : 'bg-slate-800/50 border-slate-700/50 text-slate-400 hover:text-white'
                                         }`}>
+                                        <SwatchDot swatchColor={v.swatch_color} swatchImageUrl={v.swatch_image_url}
+                                            size={12} title={v.value} />
                                         {v.value}
                                     </button>
                                 ))}

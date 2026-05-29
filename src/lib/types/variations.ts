@@ -70,6 +70,10 @@ export interface VariantAttributePair {
     attribute_slug?: string;
     value?: string;
     value_slug?: string;
+    // Swatch fields — surfaced by the variant list endpoint so the admin
+    // table can show a colour dot / image chip next to the combination text.
+    swatch_color?: string | null;
+    swatch_image_url?: string | null;
 }
 
 export interface Variant {
