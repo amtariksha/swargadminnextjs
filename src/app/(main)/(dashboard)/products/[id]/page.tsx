@@ -30,6 +30,9 @@ const productSchema = z.object({
     is_active: z.number(),
     sub_cat_id: z.number().min(1, 'Subcategory is required'),
     delivery_window: z.number(),
+    // Feature 20 Phase 2 — marketing-site visibility (new.swargfood.com).
+    // Backend mirrors to Payload's platformVisibility on save.
+    web_visible: z.number(),
     offer_text: z.string().optional(),
     description: z.string().optional(),
     disclaimer: z.string().optional(),
@@ -98,6 +101,11 @@ export default function EditProductPage() {
                 is_active: product.is_active ?? 1,
                 sub_cat_id: product.sub_cat_id || product.subcategory_id || 0,
                 delivery_window: product.delivery_window ?? 1,
+                // Feature 20 Phase 2 — backend formatter defaults to 1 for legacy
+                // rows that pre-date migration 036, so this fallback is a belt-
+                // and-braces for any product fetched before the controller fix
+                // lands in prod.
+                web_visible: product.web_visible ?? 1,
                 offer_text: product.offer_text || '',
                 description: product.description || '',
                 disclaimer: product.disclaimer || '',
@@ -304,6 +312,17 @@ export default function EditProductPage() {
                                 <option value={1}>Morning only</option>
                                 <option value={2}>Day-time only</option>
                                 <option value={3}>Both</option>
+                            </select>
+                        </FormField>
+                        {/* Feature 20 Phase 2 — marketing-site visibility */}
+                        <FormField
+                            label="Show on new.swargfood.com"
+                            error={errors.web_visible}
+                            hint="Controls visibility on the marketing site only. Does not affect the customer app."
+                        >
+                            <select {...register('web_visible', { valueAsNumber: true })} className={selectClassName}>
+                                <option value={1}>Visible on website</option>
+                                <option value={0}>Hidden from website</option>
                             </select>
                         </FormField>
                     </div>

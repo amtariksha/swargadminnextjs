@@ -74,6 +74,23 @@ export default buildConfig({
     // collection schema to Postgres on boot. Use as a one-shot to sync
     // missing columns; turn back off once stable.
     push: process.env.PAYLOAD_PUSH === 'true',
+    // Feature 20 Phase 1 — co-locate Payload tables inside the backend's
+    // Postgres database under a dedicated `web` schema (or whatever value
+    // PAYLOAD_SCHEMA_NAME is set to). Unset / blank → undefined → Payload
+    // uses the default `public` schema, i.e. the pre-Phase-1 behaviour.
+    // Production cutover plan:
+    //   1. Provision a Postgres role on the backend DB with CREATE on
+    //      the `web` schema (Supabase Studio).
+    //   2. Run scripts/migrate-payload-to-web-schema.sh to pg_dump the
+    //      existing Payload DB and restore into backend DB → schema `web`.
+    //   3. Flip DATABASE_URI on swarg-admin-nextjs AND swargfooddotcom
+    //      Vercel projects to the backend DB's connection string, plus
+    //      set PAYLOAD_SCHEMA_NAME=web on both.
+    //   4. Redeploy both projects.
+    // Adapter docs flag this as @experimental but it works in our setup
+    // because the backend uses raw `pg` (not Drizzle) on a different
+    // schema — no cross-schema Drizzle collision.
+    schemaName: process.env.PAYLOAD_SCHEMA_NAME || undefined,
   }),
   collections: [
     // Commerce

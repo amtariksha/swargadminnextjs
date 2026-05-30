@@ -24,6 +24,9 @@ const productSchema = z.object({
     is_active: z.number(),
     sub_cat_id: z.number().min(1, 'Subcategory is required'),
     delivery_window: z.number(),
+    // Feature 20 Phase 2 — marketing-site visibility (new.swargfood.com).
+    // Backend mirrors to Payload's platformVisibility on save.
+    web_visible: z.number(),
     offer_text: z.string().optional(),
     description: z.string().optional(),
     disclaimer: z.string().optional(),
@@ -56,7 +59,7 @@ export default function AddProductPage() {
 
     const { register, handleSubmit, watch, formState: { errors } } = useForm<ProductFormData>({
         resolver: zodResolver(productSchema),
-        defaultValues: { tax: 0, stock_qty: 100, preferences: 0, subscription: 1, is_active: 1, price: 0, mrp: 0, is_returnable_packaging: false, packaging_type_id: '', delivery_window: 1, allow_back_order: false, back_order_next_available: '' },
+        defaultValues: { tax: 0, stock_qty: 100, preferences: 0, subscription: 1, is_active: 1, price: 0, mrp: 0, is_returnable_packaging: false, packaging_type_id: '', delivery_window: 1, web_visible: 1, allow_back_order: false, back_order_next_available: '' },
     });
     const isReturnablePackaging = !!watch('is_returnable_packaging');
     const allowBackOrder = !!watch('allow_back_order');
@@ -173,6 +176,17 @@ export default function AddProductPage() {
                             <option value={1}>Morning only</option>
                             <option value={2}>Day-time only</option>
                             <option value={3}>Both</option>
+                        </select>
+                    </FormField>
+                    {/* Feature 20 Phase 2 — marketing-site visibility */}
+                    <FormField
+                        label="Show on new.swargfood.com"
+                        error={errors.web_visible}
+                        hint="Controls visibility on the marketing site only. Does not affect the customer app."
+                    >
+                        <select {...register('web_visible', { valueAsNumber: true })} className={selectClassName}>
+                            <option value={1}>Visible on website</option>
+                            <option value={0}>Hidden from website</option>
                         </select>
                     </FormField>
                 </div>

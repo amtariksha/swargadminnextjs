@@ -197,6 +197,9 @@ export interface Product {
     disclaimer?: string;
     subscription?: number;
     is_active?: number;
+    // Feature 20 Phase 2 — marketing-site visibility (new.swargfood.com).
+    // Backend default 1 for legacy rows pre-dating migration 036.
+    web_visible?: number;
     cat_id?: number;
     cat_title?: string;
     sub_cat_title?: string;
