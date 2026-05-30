@@ -31,7 +31,9 @@ interface ReasonCatalogRow {
     category: number;
     category_label: string;
     reason_text: string;
-    is_active: number;
+    // Backend (/get_delivery_reason_catalog) already filters WHERE is_active=1
+    // and omits the column from the payload, so it's optional here.
+    is_active?: number;
     sort_order: number;
 }
 
@@ -857,7 +859,7 @@ export default function DeliveryListPage() {
                                         className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white">
                                         <option value="">Pick a canned reason…</option>
                                         {reasonCatalog
-                                            .filter((r) => r.category === reasonModal.reason_category && r.is_active)
+                                            .filter((r) => r.category === reasonModal.reason_category)
                                             .map((r) => <option key={r.id} value={r.reason_text}>{r.reason_text}</option>)}
                                     </select>
                                 </div>
