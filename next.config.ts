@@ -13,34 +13,16 @@ const nextConfig: NextConfig = {
   // from node_modules at runtime instead.
   serverExternalPackages: ['drizzle-kit'],
 
-  // Legacy-path compatibility for the WACRM merge.
-  //
-  // External services (Meta WhatsApp Cloud API, MSG91, Razorpay, Facebook
-  // OAuth for CTWA) were configured to call WACRM at `whatsapp.swargfood.com`
-  // on un-namespaced paths like `/api/webhooks/meta`. Inside the admin panel
-  // those handlers now live under `/api/whatsapp/...`.
-  //
-  // Rather than reconfigure five external dashboards (and risk webhook drops
-  // during cutover), we point `whatsapp.swargfood.com` DNS at the admin
-  // panel and rewrite the old paths internally. The external services keep
-  // hitting the same URL; Next.js routes the request to the new handler.
-  //
-  // These are `afterFiles` rewrites (the default), so they run AFTER our
-  // middleware. Since the middleware matcher is `/api/whatsapp/:path*`, the
-  // legacy `/api/webhooks/...` paths bypass the auth bridge entirely — which
-  // is what we want, because webhooks self-authenticate via provider
-  // signatures (HMAC-SHA256 against FACEBOOK_APP_SECRET / Razorpay secret).
-  async rewrites() {
-    return [
-      // Provider webhooks
-      { source: '/api/webhooks/:path*', destination: '/api/whatsapp/webhooks/:path*' },
-      // Click-to-WhatsApp OAuth callback (Facebook redirect URI registered
-      // in the FB App dashboard points at the legacy path).
-      { source: '/api/ctwa/:path*', destination: '/api/whatsapp/ctwa/:path*' },
-      // Meta Embedded Signup callback used during number onboarding.
-      { source: '/api/meta/:path*', destination: '/api/whatsapp/meta/:path*' },
-    ]
-  },
+  // Historical note: a `rewrites()` block previously mapped legacy WACRM
+  // webhook paths (`/api/webhooks/*`, `/api/ctwa/*`, `/api/meta/*`) to the
+  // namespaced `/api/whatsapp/*` handlers so external services could keep
+  // calling the old `whatsapp.swargfood.com` URLs during the WACRM merge.
+  // The cutover is complete (Meta / MSG91 / Razorpay / FB OAuth now point
+  // at `admin.desicowmilk.com/api/whatsapp/*` directly; the
+  // whatsapp.swargfood.com subdomain has been removed from Vercel + DNS),
+  // so the rewrites have been retired. If you ever need to re-front the
+  // namespaced paths from a vanity URL again, add a fresh `rewrites()`
+  // block here — the underlying handlers haven't moved.
 }
 
 export default withPayload(nextConfig)
