@@ -34,6 +34,8 @@ interface DataTableProps<T> {
     /** Custom export handler. Receives the currently filtered/sorted rows. If omitted, falls back to default CSV export using column headers. */
     onExport?: (filteredRows: T[]) => void;
     title?: string;
+    /** Optional per-row extra class names (e.g. to grey-out soft-deleted rows). */
+    rowClassName?: (item: T) => string;
 }
 
 export default function DataTable<T extends object>({
@@ -47,6 +49,7 @@ export default function DataTable<T extends object>({
     emptyMessage = 'No data found',
     exportable = true,
     onExport,
+    rowClassName,
     title,
 }: DataTableProps<T>) {
     // `loadedPages` is the highest "page" of rows currently rendered. The
@@ -326,6 +329,7 @@ export default function DataTable<T extends object>({
                                     className={`
                                         transition-colors
                                         ${onRowClick ? 'cursor-pointer hover:bg-slate-800/50' : ''}
+                                        ${rowClassName ? rowClassName(item) : ''}
                                     `}
                                 >
                                     {columns.map((column) => (

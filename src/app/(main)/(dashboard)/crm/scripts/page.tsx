@@ -1,25 +1,60 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Save } from 'lucide-react';
+import { Save, Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import { useCallScripts, useUpdateCallScript } from '@/hooks/useData';
+import { useCallScripts, useUpdateCallScript, useCreateCallScript, CALL_SCRIPT_PRESET_TYPES } from '@/hooks/useData';
 import { inputClassName } from '@/components/FormField';
 import MarkdownView from '@/components/crm/MarkdownView';
 
 const SCRIPT_TYPE_LABELS: Record<string, string> = {
     feedback: 'Feedback Script',
     reactivation: 'Reactivation Script',
+    welcome: 'Welcome Script',
+    seasonal: 'Seasonal Script',
+    offer: 'Offer Script',
 };
+
+const titleCaseType = (t: string) => t.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 export default function CallScriptsPage() {
     const { data: scripts = [], isLoading } = useCallScripts();
     const updateMutation = useUpdateCallScript();
+    const createMutation = useCreateCallScript();
 
     const [selectedId, setSelectedId] = useState<number | null>(null);
     const [draftId, setDraftId] = useState<number | null>(null);
     const [title, setTitle] = useState('');
     const [body, setBody] = useState('');
+
+    // Add-Script modal state. typeChoice is a preset key or '__other__'.
+    const [showAdd, setShowAdd] = useState(false);
+    const [typeChoice, setTypeChoice] = useState<string>(CALL_SCRIPT_PRESET_TYPES[0]);
+    const [customType, setCustomType] = useState('');
+    const [newTitle, setNewTitle] = useState('');
+    const [newBody, setNewBody] = useState('');
+
+    const openAdd = () => {
+        setTypeChoice(CALL_SCRIPT_PRESET_TYPES[0]);
+        setCustomType('');
+        setNewTitle('');
+        setNewBody('');
+        setShowAdd(true);
+    };
+
+    const handleCreate = async () => {
+        const scriptType = (typeChoice === '__other__' ? customType : typeChoice).trim();
+        if (!scriptType) { toast.error('Pick or enter a script type.'); return; }
+        if (!newTitle.trim() || !newBody.trim()) { toast.error('Title and body cannot be empty.'); return; }
+        try {
+            const created = await createMutation.mutateAsync({ script_type: scriptType, title: newTitle.trim(), body: newBody });
+            toast.success('Script added');
+            setShowAdd(false);
+            if (created?.data?.id) setSelectedId(created.data.id);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to add script');
+        }
+    };
 
     const selected = useMemo(
         () => scripts.find((s) => s.id === selectedId) ?? scripts[0],
@@ -50,6 +85,45 @@ export default function CallScriptsPage() {
         }
     };
 
+    const renderAddModal = () => (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setShowAdd(false)}>
+            <div className="glass rounded-2xl p-6 w-full max-w-lg space-y-4" onClick={(e) => e.stopPropagation()}>
+                <h2 className="text-lg font-bold text-white">Add call script</h2>
+                <div>
+                    <label className="block text-sm text-slate-300 mb-1.5">Script type</label>
+                    <select value={typeChoice} onChange={(e) => setTypeChoice(e.target.value)} className={inputClassName}>
+                        {CALL_SCRIPT_PRESET_TYPES.map((t) => (
+                            <option key={t} value={t}>{SCRIPT_TYPE_LABELS[t] || titleCaseType(t)}</option>
+                        ))}
+                        <option value="__other__">Other (custom)…</option>
+                    </select>
+                </div>
+                {typeChoice === '__other__' && (
+                    <div>
+                        <label className="block text-sm text-slate-300 mb-1.5">Custom type name</label>
+                        <input value={customType} onChange={(e) => setCustomType(e.target.value)} placeholder="e.g. winback" className={inputClassName} />
+                    </div>
+                )}
+                <div>
+                    <label className="block text-sm text-slate-300 mb-1.5">Title</label>
+                    <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} className={inputClassName} />
+                </div>
+                <div>
+                    <label className="block text-sm text-slate-300 mb-1.5">Body (markdown)</label>
+                    <textarea value={newBody} onChange={(e) => setNewBody(e.target.value)} rows={8}
+                        className="w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-sm font-mono resize-y" />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                    <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm text-slate-300 bg-slate-800/50 rounded-xl hover:bg-slate-800">Cancel</button>
+                    <button onClick={handleCreate} disabled={createMutation.isPending}
+                        className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl disabled:opacity-50">
+                        <Plus className="w-4 h-4" /> {createMutation.isPending ? 'Adding…' : 'Add script'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+
     if (isLoading) {
         return (
             <div className="space-y-4">
@@ -62,11 +136,16 @@ export default function CallScriptsPage() {
     if (scripts.length === 0) {
         return (
             <div className="space-y-6">
-                <h1 className="text-2xl font-bold text-white">Call scripts</h1>
-                <div className="glass rounded-xl p-8 text-center text-slate-400">
-                    No call scripts found. Run the historic import (<code className="text-purple-300">scripts/import-feedback.js</code>)
-                    to seed the feedback and reactivation scripts.
+                <div className="flex items-center justify-between">
+                    <h1 className="text-2xl font-bold text-white">Call scripts</h1>
+                    <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-purple-300 bg-purple-600/20 rounded-xl hover:bg-purple-600/30">
+                        <Plus className="w-4 h-4" /> Add Script
+                    </button>
                 </div>
+                <div className="glass rounded-xl p-8 text-center text-slate-400">
+                    No call scripts yet. Click <span className="text-purple-300">Add Script</span> to create one.
+                </div>
+                {showAdd && renderAddModal()}
             </div>
         );
     }
@@ -80,14 +159,22 @@ export default function CallScriptsPage() {
                         Edit the scripts callers read on the guided call screen. Body is markdown.
                     </p>
                 </div>
-                <button
-                    onClick={handleSave}
-                    disabled={!isDirty || updateMutation.isPending}
-                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl disabled:opacity-50"
-                >
-                    <Save className="w-4 h-4" />
-                    {updateMutation.isPending ? 'Saving…' : 'Save script'}
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={openAdd}
+                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-purple-300 bg-purple-600/20 rounded-xl hover:bg-purple-600/30"
+                    >
+                        <Plus className="w-4 h-4" /> Add Script
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        disabled={!isDirty || updateMutation.isPending}
+                        className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl disabled:opacity-50"
+                    >
+                        <Save className="w-4 h-4" />
+                        {updateMutation.isPending ? 'Saving…' : 'Save script'}
+                    </button>
+                </div>
             </div>
 
             {/* Script selector */}
@@ -132,6 +219,8 @@ export default function CallScriptsPage() {
                     </div>
                 </div>
             </div>
+
+            {showAdd && renderAddModal()}
         </div>
     );
 }

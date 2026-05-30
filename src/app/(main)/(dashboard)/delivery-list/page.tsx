@@ -18,10 +18,22 @@ import {
     dedupeDeliveryItems,
     getStatusLabel,
     getSubscriptionLabel,
+    getReasonCategoryLabel,
+    REASON_CATEGORIES,
     groupByDriver,
 } from '@/lib/deliveryHelpers';
-import { Calendar, RefreshCw, Plus, Truck, Edit, Check, Trash2, Download, AlertTriangle, Package, Navigation, Store, ClipboardCheck, Sun, MapPin } from 'lucide-react';
+import { Calendar, RefreshCw, Plus, Truck, Edit, Check, Trash2, Download, AlertTriangle, Package, Navigation, Store, ClipboardCheck, Sun, MapPin, MessageSquareWarning } from 'lucide-react';
 import { toast } from 'sonner';
+
+// A canned non-delivery reason from /get_delivery_reason_catalog (Item 5).
+interface ReasonCatalogRow {
+    id: number;
+    category: number;
+    category_label: string;
+    reason_text: string;
+    is_active: number;
+    sort_order: number;
+}
 
 // formatTime is page-local — only used by the Customer Orders tab in this file.
 const formatTime = (timestamp: string | null) => {
@@ -143,6 +155,7 @@ export default function DeliveryListPage() {
     const [selectedDriver, setSelectedDriver] = useState<number | ''>('');
     const [activeTab, setActiveTab] = useState<TabId>('orders');
     const [editQtyModal, setEditQtyModal] = useState<{ item: DeliveryItem; newQty: number } | null>(null);
+    const [reasonModal, setReasonModal] = useState<{ item: DeliveryItem; reason_category: number | ''; reason: string; markNotDelivered: boolean } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [generateDialog, setGenerateDialog] = useState(false);
     // Progress overlay shown while genrate_order_list is running.
@@ -309,6 +322,34 @@ export default function DeliveryListPage() {
         finally { setIsSubmitting(false); }
     };
 
+    // ====== Non-delivery reason (Item 5) ======
+    const { data: reasonCatalog = [] } = useQuery<ReasonCatalogRow[]>({
+        queryKey: ['delivery-reason-catalog'],
+        queryFn: async () => {
+            const response = await GET<ReasonCatalogRow[]>('/get_delivery_reason_catalog');
+            return response.data || [];
+        },
+        staleTime: 5 * 60 * 1000,
+    });
+
+    const handleSaveReason = async () => {
+        if (!reasonModal) return;
+        if (reasonModal.reason_category === '') { toast.error('Pick a performance category'); return; }
+        setIsSubmitting(true);
+        try {
+            await POST('/pre_delivery_reason', {
+                id: reasonModal.item.pre_delivery_id,
+                reason_category: reasonModal.reason_category,
+                reason: reasonModal.reason.trim() || null,
+                ...(reasonModal.markNotDelivered ? { status: 2 } : {}),
+            });
+            toast.success('Reason saved');
+            setReasonModal(null);
+            refetch();
+        } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to save reason'); }
+        finally { setIsSubmitting(false); }
+    };
+
     // ====== Exports ======
     // Laravel-parity headers + address formatting. Used by both the
     // search-bar export button (via DataTable onExport) and internal callers.
@@ -318,7 +359,7 @@ export default function DeliveryListPage() {
             'Pre ID', 'Order ID', 'Txn ID', 'Price', 'Amount', 'Deducted',
             'Name', 'Phone',
             'Title', 'Quantity Text', 'Quantity', 'Delivered Quantity',
-            'Delivery Boy', 'Delivery Status', 'Delivered Date', 'Delivered Time',
+            'Delivery Boy', 'Delivery Status', 'Reason Category', 'Reason', 'Delivered Date', 'Delivered Time',
             'Address', 'Pincode', 'Wallet Balance', 'Start Date', 'Subscription Type',
         ];
         const body = rows.map(item => [
@@ -334,6 +375,8 @@ export default function DeliveryListPage() {
             item.qty_text, item.delivered_qty ?? item.qty, item.mark_delivered_qty ?? '',
             item.delivery_boy_name || '',
             getStatusLabel(item.status).label,
+            getReasonCategoryLabel(item.reason_category) === '-' ? '' : getReasonCategoryLabel(item.reason_category),
+            item.reason || '',
             item.delivered_date || '',
             item.mark_delivered_time_stamp ? formatTime(item.mark_delivered_time_stamp) : '',
             composeAddressForExport(item),
@@ -458,6 +501,23 @@ export default function DeliveryListPage() {
         { key: 'delivery_boy_name', header: 'Driver', width: colW('delivery_boy_name', '150px', '250px'), render: (item) => <span>{item.delivery_boy_name || 'Unassigned'}</span> },
         { key: 'status', header: 'Status', width: colW('status', '120px', '160px'),
             render: (item) => { const s = getStatusLabel(item.status); return <span className={`font-semibold ${s.color}`}>{s.label}</span>; } },
+        { key: 'reason', header: 'Reason', width: colW('reason', '200px', '320px'),
+            render: (item) => (
+                <div className="flex items-center gap-2">
+                    <div className="min-w-0">
+                        {item.reason_category != null ? (
+                            <>
+                                <p className="text-xs font-medium text-amber-300">{getReasonCategoryLabel(item.reason_category)}</p>
+                                {item.reason && <p className="text-xs text-slate-400 truncate" title={item.reason}>{item.reason}</p>}
+                            </>
+                        ) : <span className="text-slate-600 text-xs">—</span>}
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); setReasonModal({ item, reason_category: item.reason_category ?? '', reason: item.reason ?? '', markNotDelivered: item.status === 2 }); }}
+                        className="p-1.5 hover:bg-slate-800/50 rounded-lg shrink-0" title="Set non-delivery reason">
+                        <MessageSquareWarning className="w-3 h-3 text-amber-400" />
+                    </button>
+                </div>
+            ) },
         { key: 'day_net', header: 'Day Net', width: '110px',
             // Feature 10 — only not-delivered (status 2) rows can be recovered
             // via the day-time network.
@@ -764,6 +824,61 @@ export default function DeliveryListPage() {
                         <div className="flex gap-3">
                             <button onClick={() => setEditQtyModal(null)} className="flex-1 px-4 py-2 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl">Cancel</button>
                             <button onClick={handleUpdateQty} disabled={isSubmitting}
+                                className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50">
+                                {isSubmitting ? 'Saving...' : 'Save'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {reasonModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+                    <div className="glass rounded-2xl p-6 w-full max-w-md mx-4">
+                        <h2 className="text-xl font-bold text-white mb-1">Non-delivery / Pending Reason</h2>
+                        <p className="text-sm text-slate-400 mb-4">{reasonModal.item.name} — {reasonModal.item.title}</p>
+                        <div className="space-y-3 mb-4">
+                            <div>
+                                <label className="block text-sm text-slate-400 mb-1">Performance Category</label>
+                                <select value={reasonModal.reason_category}
+                                    onChange={(e) => setReasonModal({ ...reasonModal, reason_category: e.target.value === '' ? '' : Number(e.target.value), reason: '' })}
+                                    className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white">
+                                    <option value="">Select category…</option>
+                                    {Object.entries(REASON_CATEGORIES).map(([val, label]) => (
+                                        <option key={val} value={val}>{label}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            {reasonModal.reason_category !== '' && (
+                                <div>
+                                    <label className="block text-sm text-slate-400 mb-1">Canned Reason</label>
+                                    <select value=""
+                                        onChange={(e) => { if (e.target.value) setReasonModal({ ...reasonModal, reason: e.target.value }); }}
+                                        className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white">
+                                        <option value="">Pick a canned reason…</option>
+                                        {reasonCatalog
+                                            .filter((r) => r.category === reasonModal.reason_category && r.is_active)
+                                            .map((r) => <option key={r.id} value={r.reason_text}>{r.reason_text}</option>)}
+                                    </select>
+                                </div>
+                            )}
+                            <div>
+                                <label className="block text-sm text-slate-400 mb-1">Reason (free text)</label>
+                                <textarea value={reasonModal.reason} rows={2}
+                                    onChange={(e) => setReasonModal({ ...reasonModal, reason: e.target.value })}
+                                    placeholder="Optional details…"
+                                    className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white resize-y" />
+                            </div>
+                            <label className="flex items-center gap-2 text-sm text-slate-300">
+                                <input type="checkbox" checked={reasonModal.markNotDelivered}
+                                    onChange={(e) => setReasonModal({ ...reasonModal, markNotDelivered: e.target.checked })}
+                                    className="w-4 h-4 rounded border-slate-600" />
+                                Mark as Not Delivered
+                            </label>
+                        </div>
+                        <div className="flex gap-3">
+                            <button onClick={() => setReasonModal(null)} className="flex-1 px-4 py-2 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl">Cancel</button>
+                            <button onClick={handleSaveReason} disabled={isSubmitting}
                                 className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50">
                                 {isSubmitting ? 'Saving...' : 'Save'}
                             </button>

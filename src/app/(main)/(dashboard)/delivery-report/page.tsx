@@ -16,6 +16,9 @@ interface DeliveryReportItem {
     order_user_id: number;
     name: string;
     s_phone: string;
+    customer_name: string | null;
+    customer_phone: string | null;
+    customer_id: number | null;
     title: string;
     qty: number;
     qty_text: string;
@@ -34,6 +37,28 @@ interface Product {
     id: number;
     title: string;
 }
+
+interface PerformanceDriverRow {
+    driver_id: number | null;
+    driver_name: string | null;
+    delivery_boy: number;
+    customer_care: number;
+    packaging: number;
+    driver: number;
+    total: number;
+}
+
+interface PerformanceReport {
+    buckets: { delivery_boy: number; customer_care: number; packaging: number; driver: number };
+    perDriver: PerformanceDriverRow[];
+}
+
+const REASON_BUCKETS = [
+    { key: 'delivery_boy', label: 'Delivery Boy', color: 'from-purple-600 to-pink-500', text: 'text-purple-300' },
+    { key: 'customer_care', label: 'Customer Care', color: 'from-blue-600 to-cyan-500', text: 'text-blue-300' },
+    { key: 'packaging', label: 'Packaging', color: 'from-amber-600 to-orange-500', text: 'text-amber-300' },
+    { key: 'driver', label: 'Driver', color: 'from-emerald-600 to-green-500', text: 'text-emerald-300' },
+] as const;
 
 const getSubscriptionLabel = (type: number) => {
     const types: Record<number, string> = {
@@ -58,6 +83,7 @@ export default function DeliveryReportPage() {
     const today = format(new Date(), 'yyyy-MM-dd');
     const weekAgo = format(subDays(new Date(), 7), 'yyyy-MM-dd');
 
+    const [activeTab, setActiveTab] = useState<'deliveries' | 'performance'>('deliveries');
     const [startDate, setStartDate] = useState(weekAgo);
     const [endDate, setEndDate] = useState(today);
     const [selectedDriver, setSelectedDriver] = useState<number | ''>('');
@@ -140,6 +166,21 @@ export default function DeliveryReportPage() {
         );
     }, [rawReportItems, selectedProduct]);
 
+    // ── Performance tab (Item 5) — non-delivery reason aggregation ──────────
+    const { data: performance, isLoading: perfLoading, refetch: refetchPerf } = useQuery({
+        queryKey: ['delivery-performance', startDate, endDate, selectedDriver],
+        queryFn: async () => {
+            const driverPath = selectedDriver ? `/${selectedDriver}` : '';
+            const response = await GET<PerformanceReport>(`/get_report/delivery_performance/${startDate}/${endDate}${driverPath}`);
+            return response.data;
+        },
+        enabled: activeTab === 'performance' && !!startDate && !!endDate,
+    });
+
+    const perfBuckets = performance?.buckets ?? { delivery_boy: 0, customer_care: 0, packaging: 0, driver: 0 };
+    const perfMax = Math.max(perfBuckets.delivery_boy, perfBuckets.customer_care, perfBuckets.packaging, perfBuckets.driver, 1);
+    const perfDrivers = performance?.perDriver ?? [];
+
     // Group data by date for chart
     const chartData = useMemo(() => {
         const grouped: Record<string, { count: number; quantity: number; amount: number }> = {};
@@ -173,16 +214,27 @@ export default function DeliveryReportPage() {
 
     const columns: Column<DeliveryReportItem>[] = [
         {
-            key: 'name',
+            key: 'customer_name',
             header: 'Customer',
             render: (item) => (
                 <div>
-                    <p className="font-medium text-white">{item.name}</p>
-                    <p className="text-xs text-slate-400">{item.s_phone}</p>
+                    <p className="font-medium text-white">{item.customer_name || '-'}</p>
+                    <p className="text-xs text-slate-400">{item.customer_phone || '-'}</p>
                 </div>
             ),
         },
-        { key: 'entry_user_id', header: 'User ID', width: '70px' },
+        { key: 'customer_id', header: 'Customer ID', width: '90px', render: (item) => item.customer_id ?? '-' },
+        {
+            key: 'name',
+            header: 'Delivery Boy',
+            render: (item) => (
+                <div>
+                    <p className="font-medium text-white">{item.name || '-'}</p>
+                    <p className="text-xs text-slate-400">{item.s_phone || '-'}</p>
+                </div>
+            ),
+        },
+        { key: 'entry_user_id', header: 'Delivery Boy ID', width: '110px' },
         { key: 'title', header: 'Product' },
         { key: 'qty_text', header: 'Qty Text', width: '100px' },
         {
@@ -221,6 +273,15 @@ export default function DeliveryReportPage() {
         { key: 'date', header: 'Date', width: '100px' },
     ];
 
+    const perfColumns: Column<PerformanceDriverRow>[] = [
+        { key: 'driver_name', header: 'Name', render: (r) => <span className="font-medium text-white">{r.driver_name || 'Unassigned'}</span> },
+        { key: 'delivery_boy', header: 'Delivery Boy', width: '120px', render: (r) => <span className="text-purple-300">{r.delivery_boy}</span> },
+        { key: 'customer_care', header: 'Customer Care', width: '130px', render: (r) => <span className="text-blue-300">{r.customer_care}</span> },
+        { key: 'packaging', header: 'Packaging', width: '110px', render: (r) => <span className="text-amber-300">{r.packaging}</span> },
+        { key: 'driver', header: 'Driver', width: '90px', render: (r) => <span className="text-emerald-300">{r.driver}</span> },
+        { key: 'total', header: 'Total', width: '90px', render: (r) => <span className="font-semibold text-white">{r.total}</span> },
+    ];
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -232,6 +293,23 @@ export default function DeliveryReportPage() {
                         <p className="text-slate-400">Analyze delivery performance</p>
                     </div>
                 </div>
+            </div>
+
+            {/* Tab bar */}
+            <div className="flex gap-2 border-b border-slate-800">
+                {([['deliveries', 'Deliveries'], ['performance', 'Performance']] as const).map(([key, label]) => (
+                    <button
+                        key={key}
+                        onClick={() => setActiveTab(key)}
+                        className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
+                            activeTab === key
+                                ? 'border-purple-500 text-purple-300'
+                                : 'border-transparent text-slate-400 hover:text-white'
+                        }`}
+                    >
+                        {label}
+                    </button>
+                ))}
             </div>
 
             {/* Filters */}
@@ -361,11 +439,12 @@ export default function DeliveryReportPage() {
                         </div>
                     )}
                 </div>
-                <button onClick={() => refetch()} className="p-2 bg-slate-800/50 border border-slate-700/50 rounded-xl">
+                <button onClick={() => (activeTab === 'performance' ? refetchPerf() : refetch())} className="p-2 bg-slate-800/50 border border-slate-700/50 rounded-xl">
                     <RefreshCw className="w-5 h-5 text-slate-400" />
                 </button>
             </div>
 
+            {activeTab === 'deliveries' && (<>
             {/* Stats */}
             <div className="grid grid-cols-3 gap-4">
                 <div className="glass rounded-xl p-4">
@@ -439,6 +518,56 @@ export default function DeliveryReportPage() {
                 searchPlaceholder="Search delivery report..."
                 emptyMessage="No delivery data found"
             />
+            </>)}
+
+            {activeTab === 'performance' && (<>
+                {/* Bucket stat cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    {REASON_BUCKETS.map((b) => (
+                        <div key={b.key} className="glass rounded-xl p-4">
+                            <p className="text-sm text-slate-400">{b.label}</p>
+                            <p className={`text-2xl font-bold ${b.text}`}>{perfBuckets[b.key]}</p>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Bucket bar viz */}
+                <div className="glass rounded-2xl p-6">
+                    <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
+                        <TrendingUp className="w-5 h-5 text-purple-400" />
+                        Non-delivery reasons by category
+                    </h2>
+                    {perfLoading ? (
+                        <div className="h-48 flex items-center justify-center text-slate-400">Loading…</div>
+                    ) : perfBuckets.delivery_boy + perfBuckets.customer_care + perfBuckets.packaging + perfBuckets.driver === 0 ? (
+                        <div className="h-48 flex items-center justify-center text-slate-400">No reasons recorded for selected period</div>
+                    ) : (
+                        <div className="flex items-end gap-8 h-48 px-4">
+                            {REASON_BUCKETS.map((b) => {
+                                const val = perfBuckets[b.key];
+                                const height = Math.max((val / perfMax) * 100, 4);
+                                return (
+                                    <div key={b.key} className="flex flex-col items-center flex-1">
+                                        <span className="text-sm text-slate-300 mb-1">{val}</span>
+                                        <div className={`w-full max-w-[80px] bg-gradient-to-t ${b.color} rounded-t-lg transition-all`} style={{ height: `${height}%` }} />
+                                        <span className="text-xs text-slate-500 mt-2 text-center">{b.label}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                {/* Per-delivery-boy table */}
+                <DataTable
+                    data={perfDrivers}
+                    columns={perfColumns}
+                    loading={perfLoading}
+                    pageSize={50}
+                    searchPlaceholder="Search drivers..."
+                    emptyMessage="No performance data found"
+                />
+            </>)}
         </div>
     );
 }

@@ -460,6 +460,7 @@ export interface Address {
     lat?: string;
     lng?: string;
     created_at?: string;
+    is_deleted?: number; // 1 = soft-deleted; shown greyed-out in admin, hidden in app
 }
 
 export interface UserTransaction {
@@ -641,7 +642,9 @@ export function useUserAddresses(userId: number | string | undefined) {
     return useQuery({
         queryKey: ['user-addresses', userId],
         queryFn: async () => {
-            const response = await GET<Address[]>(`/address/user/${userId}`);
+            // Admin opts in to deleted rows so they render greyed-out; the
+            // customer Flutter app omits the flag and never sees soft-deleted ones.
+            const response = await GET<Address[]>(`/address/user/${userId}?include_deleted=1`);
             return response.data || [];
         },
         enabled: !!userId,
@@ -1374,9 +1377,13 @@ export interface Worklist {
     diagnostics?: WorklistDiagnostics;
 }
 
+// Preset types offered in the admin "Add Script" dropdown. Managers can also
+// create a custom type via "Other", so script_type is a free-form string.
+export const CALL_SCRIPT_PRESET_TYPES = ['feedback', 'reactivation', 'welcome', 'seasonal', 'offer'] as const;
+
 export interface CallScript {
     id: number;
-    script_type: 'feedback' | 'reactivation';
+    script_type: string;
     title: string;
     body: string;
     is_active: number;
@@ -1558,6 +1565,19 @@ export function useUpdateCallScript() {
     return useMutation({
         mutationFn: async ({ id, ...data }: Record<string, unknown> & { id: number | string }) => {
             return PUT<CallScript>(`/crm/scripts/${id}`, data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['call-scripts'] });
+            queryClient.invalidateQueries({ queryKey: ['call-script'] });
+        },
+    });
+}
+
+export function useCreateCallScript() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: { script_type: string; title: string; body: string }) => {
+            return POST<CallScript>('/crm/scripts', data);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['call-scripts'] });

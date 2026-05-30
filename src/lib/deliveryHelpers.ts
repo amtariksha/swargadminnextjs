@@ -55,7 +55,23 @@ export interface DeliveryItem {
     /** Amount actually charged in the per-delivery transaction. Null
      *  when the delivery hasn't been marked yet (no debit row exists). */
     trasation_amount: number | null;
+    /** Non-delivery / pending reason (Item 5). Bucketed into a performance
+     *  category 1..4; null when no reason was recorded. */
+    reason_category: number | null;
+    reason: string | null;
 }
+
+// Performance buckets a non-delivery reason maps to. Keys match
+// delivery.reason_category in the backend (1..4).
+export const REASON_CATEGORIES: Record<number, string> = {
+    1: 'Delivery Boy',
+    2: 'Customer Care',
+    3: 'Packaging',
+    4: 'Driver',
+};
+
+export const getReasonCategoryLabel = (category: number | null | undefined): string =>
+    category != null ? (REASON_CATEGORIES[category] ?? '-') : '-';
 
 export interface ProductAgg {
     title: string;

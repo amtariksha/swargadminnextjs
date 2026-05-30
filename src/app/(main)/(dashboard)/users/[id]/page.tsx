@@ -271,11 +271,19 @@ export default function UserDetailPage() {
             render: (a) => <span className="text-slate-400 text-sm">{[a.flat_no, a.apartment_name, a.area, a.city, a.pincode].filter(Boolean).join(', ')}</span>,
         },
         {
+            key: 'is_deleted', header: 'Status', width: '110px',
+            render: (a) => a.is_deleted
+                ? <span className="px-2 py-1 rounded-lg text-xs font-medium bg-red-500/15 text-red-400">Deleted</span>
+                : <span className="px-2 py-1 rounded-lg text-xs font-medium bg-green-500/15 text-green-400">Active</span>,
+        },
+        {
             key: 'actions', header: 'Actions', width: '100px',
             render: (a) => (
                 <div className="flex gap-1">
                     <button onClick={(e) => { e.stopPropagation(); openEditAddress(a); }} className="p-1.5 hover:bg-slate-800/50 rounded-lg"><Edit className="w-4 h-4 text-blue-400" /></button>
-                    <button onClick={(e) => { e.stopPropagation(); setDeleteAddr(a); }} className="p-1.5 hover:bg-red-500/20 rounded-lg"><Trash2 className="w-4 h-4 text-red-400" /></button>
+                    {!a.is_deleted && (
+                        <button onClick={(e) => { e.stopPropagation(); setDeleteAddr(a); }} className="p-1.5 hover:bg-red-500/20 rounded-lg"><Trash2 className="w-4 h-4 text-red-400" /></button>
+                    )}
                 </div>
             ),
         },
@@ -365,7 +373,7 @@ export default function UserDetailPage() {
                             <Plus className="w-4 h-4" /> Add Address
                         </button>
                     </div>
-                    <DataTable data={addresses} columns={addressColumns} pageSize={10} emptyMessage="No addresses" />
+                    <DataTable data={addresses} columns={addressColumns} pageSize={10} emptyMessage="No addresses" rowClassName={(a) => a.is_deleted ? 'opacity-50 text-slate-500' : ''} />
                 </div>
             ),
         },
@@ -373,10 +381,11 @@ export default function UserDetailPage() {
             label: 'Delivery History', count: deliveryHistory.length,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             content: <DataTable data={deliveryHistory} columns={[
-                { key: 'entry_user_id', header: 'Delivery User Id', width: '130px' },
-                { key: 'name', header: 'Name', render: (d: Record<string, unknown>) => String(d.name || '-') },
-                { key: 'phone', header: 'Phone Number', width: '130px', render: (d: Record<string, unknown>) => String(d.phone || '-') },
-                { key: 'email', header: 'Email', width: '180px', render: (d: Record<string, unknown>) => String(d.email || '-') },
+                { key: 'entry_user_id', header: 'Delivery Boy Id', width: '130px' },
+                { key: 'name', header: 'Delivery Boy', render: (d: Record<string, unknown>) => String(d.name || '-') },
+                { key: 'product_title', header: 'Product', width: '180px', render: (d: Record<string, unknown>) => String(d.product_title || '-') },
+                { key: 'product_qty', header: 'Qty', width: '80px', render: (d: Record<string, unknown>) => (d.product_qty == null ? '-' : String(d.product_qty)) },
+                { key: 'product_price', header: 'Price', width: '110px', render: (d: Record<string, unknown>) => (d.product_price == null ? '-' : `₹${Number(d.product_price).toFixed(2)}`) },
                 { key: 'date', header: 'Delivery Date', width: '130px', render: (d: Record<string, unknown>) => { return formatApiDate(d.date as string, 'yyyy-MM-dd'); } },
                 { key: 'created_at', header: 'Time Stamps', width: '180px', render: (d: Record<string, unknown>) => { return formatApiDate(d.created_at as string, 'yyyy-MM-dd HH:mm:ss'); } },
                 {
