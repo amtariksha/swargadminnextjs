@@ -9,9 +9,14 @@ interface FormFieldProps {
     required?: boolean;
     children: ReactNode;
     className?: string;
+    /**
+     * Optional helper text rendered below the input in a muted style.
+     * Use for short explanations of what the field controls.
+     */
+    hint?: string;
 }
 
-export default function FormField({ label, error, required, children, className = '' }: FormFieldProps) {
+export default function FormField({ label, error, required, children, className = '', hint }: FormFieldProps) {
     return (
         <div className={className}>
             <label className="block text-sm font-medium text-slate-300 mb-1.5">
@@ -19,6 +24,9 @@ export default function FormField({ label, error, required, children, className 
                 {required && <span className="text-red-400 ml-0.5">*</span>}
             </label>
             {children}
+            {hint && !error && (
+                <p className="mt-1 text-xs text-slate-500">{hint}</p>
+            )}
             {error && (
                 <p className="mt-1 text-xs text-red-400">{error.message}</p>
             )}

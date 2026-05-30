@@ -94,6 +94,13 @@ export interface SyncFieldsArgs {
   displayWeight?: string
   /** Active flag (MySQL `is_active`). */
   isActive?: boolean
+  /**
+   * Feature 20 Phase 2 — Payload's `platformVisibility` enum, derived from
+   * the backend's `web_visible` toggle. ON → `'both'` (visible on web+app),
+   * OFF → `'app_only'` (hidden on web). `'web_only'` is rare and stays
+   * editable only via Payload's own UI.
+   */
+  platformVisibility?: 'both' | 'web_only' | 'app_only'
 }
 
 /**
@@ -163,6 +170,7 @@ export function useSyncFieldsToPayload() {
       if (args.mrp !== undefined) body.mrp = args.mrp
       if (args.displayWeight !== undefined) body.displayWeight = args.displayWeight
       if (args.isActive !== undefined) body.isActive = args.isActive
+      if (args.platformVisibility !== undefined) body.platformVisibility = args.platformVisibility
 
       await patchPayloadProduct(args.payloadProductId, body)
     },

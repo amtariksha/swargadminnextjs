@@ -63,6 +63,11 @@ function buildSyncPayload(mp: MysqlProduct, payloadProductId: number): SyncField
     mrp: mp.mrp,
     displayWeight: mp.qty_text ?? undefined,
     isActive: mp.is_active ? Boolean(mp.is_active) : false,
+    // Feature 20 Phase 2 — marketing-site visibility. Backend default is 1
+    // (visible) for legacy rows pre-dating migration 036; treat null/truthy
+    // as visible. The third Payload value 'web_only' isn't reachable from
+    // the bulk push — it stays editable only in Payload's own UI.
+    platformVisibility: (mp.web_visible == null || mp.web_visible) ? 'both' : 'app_only',
   }
 }
 
