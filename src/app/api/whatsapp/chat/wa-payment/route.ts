@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
+import { getRequestContext } from "@/lib/whatsapp/request";
+import { getAppSetting } from "@/lib/whatsapp/settings";
 
 // ─── POST /api/chat/wa-payment ────────────────────────────
 // Send a WA Native Payment (Cashfree via MSG91) interactive message
 export async function POST(request: NextRequest) {
-    const authKey = process.env.MSG91_AUTH_KEY;
-    if (!authKey) {
-        return NextResponse.json(
-            { error: "MSG91_AUTH_KEY not configured" },
-            { status: 500 }
-        );
-    }
+    const { orgId } = getRequestContext(request.headers);
 
     const body = await request.json();
     const {
@@ -27,6 +23,26 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
             { error: "phone, integratedNumber, bodyText, and items are required" },
             { status: 400 }
+        );
+    }
+
+    // Resolve MSG91 auth key: app_settings → organizations → env (parity with chat/send)
+    let authKey = await getAppSetting("msg91_auth_key", "", orgId);
+    if (!authKey) {
+        const { data: orgRow } = await supabaseAdmin
+            .from("organizations")
+            .select("msg91_auth_key")
+            .eq("id", orgId)
+            .maybeSingle();
+        if (orgRow?.msg91_auth_key) authKey = orgRow.msg91_auth_key;
+    }
+    if (!authKey && process.env.MSG91_AUTH_KEY) {
+        authKey = process.env.MSG91_AUTH_KEY;
+    }
+    if (!authKey) {
+        return NextResponse.json(
+            { error: "MSG91 Auth Key not configured. Set it in Settings or as MSG91_AUTH_KEY env variable." },
+            { status: 500 }
         );
     }
 
@@ -126,13 +142,17 @@ export async function POST(request: NextRequest) {
                 body: `💳 Payment request: ${itemsSummary} (Total: ₹${totalAmount.toFixed(2)})`,
                 status: response.ok ? "sent" : "failed",
                 source: "webapp",
+                org_id: orgId,
+                integrated_number: integratedNumber.replace(/^\+/, ""),
+                failure_reason: response.ok ? null : `MSG91 HTTP ${response.status}: ${responseText}`.slice(0, 1000),
+                failed_at: response.ok ? null : new Date().toISOString(),
             });
 
             await supabaseAdmin
                 .from("conversations")
                 .update({
                     last_message: `💳 Payment: ₹${totalAmount.toFixed(2)}`,
-                    last_message_at: new Date().toISOString(),
+                    last_message_time: new Date().toISOString(),
                 })
                 .eq("id", conversationId);
         }

@@ -55,6 +55,7 @@ export interface Message {
   isInternalNote: boolean;
   timestamp: string;
   source?: MessageSource;
+  failureReason?: string; // provider error text when status === "failed"
 }
 
 // ─── Conversation ──────────────────────────────────────────

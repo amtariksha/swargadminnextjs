@@ -15,6 +15,7 @@ function mapMessage(row: Record<string, unknown>) {
         isInternalNote: row.is_internal_note || false,
         timestamp: row.created_at,
         source: row.source || undefined,
+        failureReason: row.failure_reason || undefined,
     };
 }
 

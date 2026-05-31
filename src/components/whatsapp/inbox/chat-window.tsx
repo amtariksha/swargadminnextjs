@@ -127,7 +127,7 @@ function CTWAReferralBanner({ log }: { log: CTWALog }) {
     );
 }
 
-function StatusIcon({ status }: { status: MessageStatus }) {
+function StatusIcon({ status, failureReason }: { status: MessageStatus; failureReason?: string }) {
     switch (status) {
         case "sending":
             return <Clock className="w-3.5 h-3.5 text-slate-400" />;
@@ -138,7 +138,7 @@ function StatusIcon({ status }: { status: MessageStatus }) {
         case "read":
             return <CheckCheck className="w-3.5 h-3.5 text-blue-500" />;
         case "failed":
-            return <span title="Delivery failed — check MSG91/Meta dashboard or server logs"><AlertCircle className="w-3.5 h-3.5 text-red-500" /></span>;
+            return <span title={failureReason || "Delivery failed — check MSG91/Meta dashboard or server logs"}><AlertCircle className="w-3.5 h-3.5 text-red-500" /></span>;
         default:
             return null;
     }
@@ -438,7 +438,7 @@ function MessageBubble({ message }: { message: Message }) {
                 >
                     {isOutbound && !isNote && <SourceIcon source={message.source} />}
                     <span className="text-[10px]">{time}</span>
-                    {isOutbound && !isNote && <StatusIcon status={message.status} />}
+                    {isOutbound && !isNote && <StatusIcon status={message.status} failureReason={message.failureReason} />}
                 </div>
             </div>
         </div>

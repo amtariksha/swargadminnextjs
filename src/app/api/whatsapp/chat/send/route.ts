@@ -165,6 +165,7 @@ export async function POST(request: NextRequest) {
 
     let finalStatus = "sent";
     let finalResponse: unknown = null;
+    let failureReason: string | null = null;
 
     if (provider === "meta") {
         // ─── Send via Meta Cloud API ──────────────────────────────
@@ -239,6 +240,7 @@ export async function POST(request: NextRequest) {
             if (!response.ok) {
                 console.error("[Chat Send] Meta error:", response.status, responseText);
                 finalStatus = "failed";
+                failureReason = `Meta HTTP ${response.status}: ${responseText}`.slice(0, 1000);
             } else {
                 console.log("[Chat Send] Meta success:", responseText);
                 const data = finalResponse as { messages?: { id: string }[] };
@@ -250,6 +252,7 @@ export async function POST(request: NextRequest) {
         } catch (err) {
             console.error("[Chat Send] Meta network error:", err);
             finalStatus = "failed";
+            failureReason = `Meta network error: ${err instanceof Error ? err.message : String(err)}`.slice(0, 1000);
         }
     } else {
         // ─── Send via MSG91 ──────────────────────────────────────
@@ -308,21 +311,26 @@ export async function POST(request: NextRequest) {
                 console.error("[Chat Send] MSG91 HTTP error:", response.status, responseText);
                 console.error("[Chat Send] Payload was:", JSON.stringify(msg91Payload, null, 2));
                 finalStatus = "failed";
+                failureReason = `MSG91 HTTP ${response.status}: ${responseText}`.slice(0, 1000);
             } else if (typeof finalResponse === "object" && finalResponse !== null && (finalResponse as any).hasError) {
                 // MSG91 sometimes returns 200 with { hasError: true, errors: "..." }
                 const errMsg = (finalResponse as any).errors || "";
+                const errText = typeof errMsg === "string" ? errMsg : JSON.stringify(errMsg);
                 console.error("[Chat Send] MSG91 API error:", responseText);
                 console.error("[Chat Send] Payload was:", JSON.stringify(msg91Payload, null, 2));
-                if (errMsg.includes("not integrated")) {
+                const notIntegrated = errText.includes("not integrated");
+                if (notIntegrated) {
                     console.error(`[Chat Send] Number ${sendFromNumber} is not integrated on MSG91. Verify the number is activated on your MSG91 account, or check if this number uses Meta provider instead.`);
                 }
                 finalStatus = "failed";
+                failureReason = `MSG91 error: ${errText}${notIntegrated ? ` — number ${sendFromNumber} not activated on MSG91` : ""}`.slice(0, 1000);
             } else {
                 console.log("[Chat Send] MSG91 success:", responseText);
             }
         } catch (err) {
             console.error("[Chat Send] MSG91 network error:", err);
             finalStatus = "failed";
+            failureReason = `MSG91 network error: ${err instanceof Error ? err.message : String(err)}`.slice(0, 1000);
         }
     }
 
@@ -352,6 +360,8 @@ export async function POST(request: NextRequest) {
             external_id: providerMessageId,
             source: "webapp",
             org_id: orgId,
+            failure_reason: finalStatus === "failed" ? failureReason : null,
+            failed_at: finalStatus === "failed" ? new Date().toISOString() : null,
         })
         .select()
         .single();
@@ -394,6 +404,7 @@ export async function POST(request: NextRequest) {
         isInternalNote: message.is_internal_note || false,
         timestamp: message.created_at,
         source: message.source || "webapp",
+        failureReason: finalStatus === "failed" ? failureReason ?? undefined : undefined,
         providerResponse: finalResponse,
         providerError: finalStatus === "failed" ? {
             provider,
