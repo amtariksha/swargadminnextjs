@@ -231,6 +231,7 @@ export async function POST(request: NextRequest) {
 
         let sendStatus: "sent" | "failed" = "failed";
         let providerMessageId: string | undefined;
+        let failureReason: string | null = null;
 
         // Check if the 24-hour session window is still open
         let sessionActive = false;
@@ -277,17 +278,21 @@ export async function POST(request: NextRequest) {
 
                     if (!response.ok) {
                         console.error("[Payment WA Send] MSG91 session error:", response.status, responseText);
+                        failureReason = `MSG91 session HTTP ${response.status}: ${responseText}`.slice(0, 1000);
                     } else if (typeof responseData === "object" && responseData !== null && responseData.hasError) {
                         console.error("[Payment WA Send] MSG91 session API error:", responseText);
+                        failureReason = `MSG91 session error: ${typeof responseData.errors === "string" ? responseData.errors : JSON.stringify(responseData.errors)}`.slice(0, 1000);
                     } else {
                         console.log("[Payment WA Send] Session message success:", responseText);
                         sendStatus = "sent";
+                        failureReason = null;
                         providerMessageId = responseData?.data?.requestId
                             || responseData?.requestId
                             || responseData?.data?.request_id;
                     }
                 } catch (err) {
                     console.error("[Payment WA Send] Session message error:", err);
+                    failureReason = `MSG91 session network error: ${err instanceof Error ? err.message : String(err)}`.slice(0, 1000);
                 }
             }
 
@@ -337,26 +342,34 @@ export async function POST(request: NextRequest) {
 
                     if (!response.ok) {
                         console.error("[Payment WA Send] Template error:", response.status, responseText);
+                        failureReason = `MSG91 template HTTP ${response.status}: ${responseText}`.slice(0, 1000);
                     } else if (typeof responseData === "object" && responseData !== null && responseData.hasError) {
                         console.error("[Payment WA Send] Template API error:", responseText);
+                        failureReason = `MSG91 template error: ${typeof responseData.errors === "string" ? responseData.errors : JSON.stringify(responseData.errors)}`.slice(0, 1000);
                     } else {
                         console.log("[Payment WA Send] Template message success:", responseText);
                         sendStatus = "sent";
+                        failureReason = null;
                         providerMessageId = responseData?.data?.requestId
                             || responseData?.requestId
                             || responseData?.data?.request_id;
                     }
                 } catch (err) {
                     console.error("[Payment WA Send] Template message error:", err);
+                    failureReason = `MSG91 template network error: ${err instanceof Error ? err.message : String(err)}`.slice(0, 1000);
                 }
             }
 
             // If no template configured and session is expired, log a helpful message
             if (sendStatus === "failed" && !sessionActive && !paymentTemplateName) {
                 console.error("[Payment WA Send] Session expired and no MSG91_PAYMENT_TEMPLATE_NAME configured. Set this env var with an approved WhatsApp template name to send payment links outside the 24h window.");
+                if (!failureReason) {
+                    failureReason = "Session window closed (no inbound in 24h) and no payment_template_name configured — payment link cannot be sent outside the 24h window. Set an approved template at /whatsapp/settings.";
+                }
             }
         } else {
             console.error("[Payment WA Send] MSG91_AUTH_KEY not configured");
+            failureReason = "MSG91 auth key not configured (app_settings.msg91_auth_key / MSG91_AUTH_KEY).";
         }
 
         // Persist the payment link message
@@ -372,6 +385,9 @@ export async function POST(request: NextRequest) {
                 external_id: providerMessageId || null,
                 request_id: providerMessageId || null,
                 source: "webapp",
+                org_id: orgId,
+                failure_reason: sendStatus === "failed" ? failureReason : null,
+                failed_at: sendStatus === "failed" ? new Date().toISOString() : null,
             });
 
             // Update conversation last message
