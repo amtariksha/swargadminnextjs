@@ -66,6 +66,10 @@ const AVAILABLE_PERMISSIONS = [
     { key: 'inventory', label: 'Inventory', icon: '🏬' },
     // Production (Feature 16) — intermediates, recipes, production records.
     { key: 'production', label: 'Production', icon: '🏭' },
+    // Accounting (AI-Accountant) — GST invoicing, customer ledgers, HSN/rate
+    // mapping, Tally sync, bank reconciliation, B2C consolidation, payment
+    // reminders. Granting this exposes the Accounting section in the Sidebar.
+    { key: 'accounting', label: 'Accounting', icon: '🧮' },
     // App Updates (Feature 02) — version + force-update management for the
     // customer and delivery apps.
     { key: 'app-updates', label: 'App Updates', icon: '📱' },

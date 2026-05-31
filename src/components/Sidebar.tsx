@@ -255,6 +255,25 @@ const navItems: NavItem[] = [
             { name: 'Reports', href: '/production/reports', icon: <BarChart3 className="w-4 h-4" /> },
         ],
     },
+    // --- Accounting (AI-Accountant: GST invoicing, ledgers, Tally) ---
+    // 23 — gated by the `accounting` permission. Records always enqueue to
+    // Tally; posting is switched per-tenant from the Tally settings page.
+    {
+        name: 'Accounting',
+        icon: <Calculator className="w-5 h-5" />,
+        permissionKey: 'accounting',
+        children: [
+            { name: 'Overview', href: '/accounting', icon: <Settings className="w-4 h-4" /> },
+            { name: 'Customers', href: '/accounting/customers', icon: <Users className="w-4 h-4" /> },
+            { name: 'HSN & Rates', href: '/accounting/hsn', icon: <Tags className="w-4 h-4" /> },
+            { name: 'Invoices', href: '/accounting/invoices', icon: <FileText className="w-4 h-4" /> },
+            { name: 'Ledgers', href: '/accounting/ledgers', icon: <BookText className="w-4 h-4" /> },
+            { name: 'Tally', href: '/accounting/tally-settings', icon: <Receipt className="w-4 h-4" /> },
+            { name: 'Bank Recon', href: '/accounting/bank-reconciliation', icon: <Banknote className="w-4 h-4" /> },
+            { name: 'B2C Consolidation', href: '/accounting/b2c-consolidation', icon: <CalendarDays className="w-4 h-4" /> },
+            { name: 'Reminders', href: '/accounting/reminders', icon: <Bell className="w-4 h-4" /> },
+        ],
+    },
 ];
 
 interface SidebarProps {
@@ -284,6 +303,8 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'product-sync', 'crm', 'inventory', 'production', 'refunds', 'payroll',
     'app-updates', 'drop-points', 'broadcast', 'packaging', 'day-orders',
     'lms',
+    // AI-Accountant section (GST invoicing, ledgers, Tally sync, bank recon).
+    'accounting',
     // Variations feature (migration 030 / D-7). Gates the /attributes
     // library and the per-product /products/:id/variations editor.
     'attributes',
