@@ -102,10 +102,25 @@ export async function middleware(request: NextRequest) {
     // working without per-call rewiring. The X-Agent-Force-* headers are
     // preserved for audit logging in handlers.
     if (pathname.startsWith(AGENT_TOOLS_PREFIX)) {
-        const expected = process.env.AGENT_FORCE_SERVICE_TOKEN;
+        // Token model is asymmetric (per chatagent's implementation):
+        //   • AGENT_FORCE_INBOUND_TOKEN — what chatagent PRESENTS when calling
+        //     us. This is what we verify here.
+        //   • AGENT_FORCE_SERVICE_TOKEN — what WE present when calling
+        //     chatagent (see src/lib/lms/agent-force/client.ts). Different value.
+        //
+        // Fallback: if AGENT_FORCE_INBOUND_TOKEN isn't set, accept
+        // AGENT_FORCE_SERVICE_TOKEN — preserves backwards compat with the
+        // earlier single-shared-secret model so an env rotation can be
+        // staged without a hard cutover.
+        const expected =
+            process.env.AGENT_FORCE_INBOUND_TOKEN ||
+            process.env.AGENT_FORCE_SERVICE_TOKEN;
         if (!expected) {
             return NextResponse.json(
-                { error: 'AGENT_FORCE_SERVICE_TOKEN not configured' },
+                {
+                    error:
+                        'Neither AGENT_FORCE_INBOUND_TOKEN nor AGENT_FORCE_SERVICE_TOKEN configured',
+                },
                 { status: 503 },
             );
         }
