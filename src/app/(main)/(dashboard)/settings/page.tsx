@@ -57,10 +57,23 @@ const NOTIFICATION_TITLES = new Set<string>([
     'Admin Phone Numbers',
 ]);
 
+// Owned by a dedicated screen that stores its config in a SINGLE app_settings
+// row (structured JSON / a mode flag), not a flat value the operator should
+// edit as a raw blob here. Surfacing it in General too exposes a second
+// edit-surface that can silently clobber the structured editor's value.
+//   * refund_reasons        → /settings/refund-reasons (structured JSON editor)
+//   * packaging_refund_mode → packaging refund-mode toggle (backend
+//                             /packaging/refund_mode)
+const DEDICATED_PAGE_TITLES = new Set<string>([
+    'refund_reasons',
+    'packaging_refund_mode',
+]);
+
 const MANAGED_ELSEWHERE = new Set<string>([
     ...AUTOMATION_TITLES,
     ...APP_UPDATE_TITLES,
     ...NOTIFICATION_TITLES,
+    ...DEDICATED_PAGE_TITLES,
 ]);
 
 interface Setting {
