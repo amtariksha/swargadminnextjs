@@ -217,11 +217,24 @@ export interface Product {
     subcategory_id?: number;
 }
 
-export function useProducts() {
+/**
+ * Fetch products from the MySQL ops backend.
+ *
+ * Feature 10 — delivery window channel. The backend now hides day-time-only
+ * products (delivery_window=2) from /get_product BY DEFAULT so the customer
+ * morning app stops seeing them. Admin management screens need to see ALL
+ * products (to list/edit day-only ones), so by default this hook passes
+ * `include_daytime=1`. Pass `{ morningOnly: true }` to get the morning
+ * channel view (day-only excluded) — used by the morning order-create
+ * picker so an operator can't place a morning order for a day-only product.
+ */
+export function useProducts(opts: { morningOnly?: boolean } = {}) {
+    const morningOnly = opts.morningOnly === true;
     return useQuery({
-        queryKey: ['products'],
+        queryKey: ['products', morningOnly ? 'morning' : 'all'],
         queryFn: async () => {
-            const response = await GET<Product[]>('/get_product');
+            const params = morningOnly ? undefined : { include_daytime: '1' };
+            const response = await GET<Product[]>('/get_product', params);
             return response.data || [];
         },
     });

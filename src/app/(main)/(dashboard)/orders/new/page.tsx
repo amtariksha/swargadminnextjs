@@ -46,7 +46,10 @@ export default function CreateOrderPage() {
     const preselectedUserId = searchParams.get('user_id');
 
     const { data: users = [] } = useUsers();
-    const { data: products = [] } = useProducts();
+    // Morning order picker — exclude day-time-only products (they belong to
+    // the day-orders flow). Management screens use the default useProducts()
+    // which still lists day-only products.
+    const { data: products = [] } = useProducts({ morningOnly: true });
     const { data: drivers = [] } = useDrivers();
     const assignOrder = useAssignOrder();
     // Driver chosen for this order. Optional — the operator can still
