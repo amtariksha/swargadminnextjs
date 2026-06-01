@@ -81,6 +81,21 @@ const TEMPLATE_FIELDS: { title: string; description: string; placeholder: string
         placeholder: 'e.g. app_daytime_payment',
     },
     {
+        title: 'Daytime Order Placed Template',
+        description: 'Sent to the customer when a day-time order is placed (confirmed).',
+        placeholder: 'e.g. app_daytime_order_placed',
+    },
+    {
+        title: 'Daytime Order Picked Template',
+        description: 'Sent when a day driver picks up (claims) the order from the pool.',
+        placeholder: 'e.g. app_daytime_order_picked',
+    },
+    {
+        title: 'Daytime Order Delivered Template',
+        description: 'Sent to the customer when the day-time order is marked delivered.',
+        placeholder: 'e.g. app_daytime_order_delivered',
+    },
+    {
         title: 'New User Registered Admin',
         description: 'Admin notification fired on every new customer signup.',
         placeholder: 'e.g. swarg_internal_notification',

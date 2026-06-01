@@ -6,18 +6,129 @@
  * preview; the backend re-computes total_amount authoritatively from items.
  */
 import { useMemo, useState } from 'react';
-import { useDaytimeProducts, DaytimeOrder } from '@/hooks/useData';
+import {
+    useDaytimeProducts,
+    useUserAddresses,
+    DaytimeProduct,
+    DaytimeOrder,
+    type Address,
+} from '@/hooks/useData';
+import { useVariants } from '@/hooks/useVariations';
+import type { Variant } from '@/lib/types/variations';
 import CustomerPicker, { CustomerValue } from '@/components/CustomerPicker';
+import AddressMapPicker from '@/components/AddressMapPicker';
+import { isMapsConfigured, type PickedPlace } from '@/lib/maps';
 import FormField, { inputClassName, selectClassName, textareaClassName } from '@/components/FormField';
 import { POST, PUT, ApiError } from '@/lib/api';
-import { Plus, Trash2, Save } from 'lucide-react';
+import { MapPin, Plus, Trash2, Save } from 'lucide-react';
 import { toast } from 'sonner';
+
+/** Compose a saved customer address into a single doorstep line. */
+function composeAddress(a: Address): string {
+    return [a.flat_no, a.apartment_name, a.area, a.landmark, a.city, a.pincode]
+        .filter(Boolean)
+        .join(', ');
+}
 
 interface ItemRow {
     product_id: number | '';
+    variant_id: number | '';
     qty: string;
     unit_price: string;
     is_bulk_rate: boolean;
+}
+
+/** Human-readable variant option label, e.g. "Size: 500 g — ₹240". */
+function variantLabel(v: Variant): string {
+    const text = (v.attribute_pairs || [])
+        .filter((p) => p.value)
+        .map((p) => `${p.attribute_name}: ${p.value}`)
+        .join(', ');
+    const price = v.regular_price != null ? ` — ₹${v.regular_price}` : '';
+    return (text || v.qty_text || v.slug) + price;
+}
+
+interface LineItemRowProps {
+    item: ItemRow;
+    idx: number;
+    products: DaytimeProduct[];
+    onProductChange: (idx: number, productId: number) => void;
+    onChange: (idx: number, patch: Partial<ItemRow>) => void;
+    onRemove: (idx: number) => void;
+}
+
+/**
+ * One line of the order. Split into its own component so `useVariants` can be
+ * called per row (hooks can't run inside a `.map`). The variant picker only
+ * appears for a `product_type === 'variable'` product that actually has
+ * active variants; picking one defaults the unit price to the variant price.
+ */
+function LineItemRow({ item, idx, products, onProductChange, onChange, onRemove }: LineItemRowProps) {
+    const product = products.find((p) => p.id === item.product_id);
+    const isVariable = product?.product_type === 'variable';
+    const { data: allVariants = [] } = useVariants(
+        isVariable && item.product_id !== '' ? Number(item.product_id) : null,
+    );
+    const variants = useMemo(
+        () => allVariants.filter((v) => v.is_active && !v.archived_at),
+        [allVariants],
+    );
+
+    const onVariantChange = (variantId: number | '') => {
+        if (variantId === '') {
+            onChange(idx, { variant_id: '' });
+            return;
+        }
+        const variant = variants.find((v) => v.id === variantId);
+        onChange(idx, {
+            variant_id: variantId,
+            unit_price: variant?.regular_price != null ? String(variant.regular_price) : item.unit_price,
+        });
+    };
+
+    return (
+        <div className="space-y-2 border-b border-slate-800/30 pb-2 last:border-0">
+            <div className="grid grid-cols-12 gap-2 items-center">
+                <select
+                    value={item.product_id}
+                    onChange={(e) => onProductChange(idx, Number(e.target.value))}
+                    className={`${selectClassName} col-span-4`}
+                >
+                    <option value="">Select product</option>
+                    {products.map((p) => (
+                        <option key={p.id} value={p.id}>{p.title}{p.qty_text ? ` (${p.qty_text})` : ''}</option>
+                    ))}
+                </select>
+                <input type="number" min="0" step="0.01" value={item.qty}
+                    onChange={(e) => onChange(idx, { qty: e.target.value })}
+                    placeholder="Qty" className={`${inputClassName} col-span-2`} />
+                <input type="number" min="0" step="0.01" value={item.unit_price}
+                    onChange={(e) => onChange(idx, { unit_price: e.target.value })}
+                    placeholder="Unit ₹" className={`${inputClassName} col-span-2`} />
+                <label className="col-span-3 flex items-center gap-1.5 text-xs text-slate-400">
+                    <input type="checkbox" checked={item.is_bulk_rate}
+                        onChange={(e) => onChange(idx, { is_bulk_rate: e.target.checked })} />
+                    Bulk rate
+                </label>
+                <button type="button" onClick={() => onRemove(idx)}
+                    className="col-span-1 p-2 hover:bg-red-500/20 rounded-lg justify-self-end">
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                </button>
+            </div>
+            {isVariable && variants.length > 0 && (
+                <select
+                    value={item.variant_id}
+                    onChange={(e) => onVariantChange(e.target.value === '' ? '' : Number(e.target.value))}
+                    className={`${selectClassName} w-full md:w-2/3`}
+                >
+                    <option value="">Variation — base product</option>
+                    {variants.map((v) => (
+                        <option key={v.id} value={v.id}>{variantLabel(v)}</option>
+                    ))}
+                </select>
+            )}
+        </div>
+    );
 }
 
 interface DaytimeOrderFormProps {
@@ -27,6 +138,23 @@ interface DaytimeOrderFormProps {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Where the order came in from. A curated subset of the LMS LeadSource enum
+ * (src/lib/lms/leads/types.ts), trimmed to the channels day-orders actually
+ * arrive through. Stored as a VARCHAR — values must match LeadSource so the
+ * two modules stay reconcilable.
+ */
+const DAY_ORDER_ENTRY_TYPES: ReadonlyArray<{ value: string; label: string }> = [
+    { value: 'whatsapp', label: 'WhatsApp' },
+    { value: 'phone', label: 'Phone call' },
+    { value: 'stall', label: 'Stall (walk-in)' },
+    { value: 'website_form', label: 'Website form' },
+    { value: 'app_install', label: 'App' },
+    { value: 'referral', label: 'Referral' },
+    { value: 'social', label: 'Social media' },
+    { value: 'other', label: 'Other' },
+];
 
 export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeOrderFormProps) {
     const { data: products = [] } = useDaytimeProducts();
@@ -38,7 +166,17 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
             : null,
     );
     const [deliveryDate, setDeliveryDate] = useState(initial?.delivery_date || '');
+    const [desiredTime, setDesiredTime] = useState(initial?.desired_delivery_time || '');
+    const [priority, setPriority] = useState<number>(initial?.priority ?? 0);
     const [deliveryAddress, setDeliveryAddress] = useState(initial?.delivery_address || '');
+    const [deliveryLat, setDeliveryLat] = useState(
+        initial?.delivery_lat != null ? String(initial.delivery_lat) : '',
+    );
+    const [deliveryLng, setDeliveryLng] = useState(
+        initial?.delivery_lng != null ? String(initial.delivery_lng) : '',
+    );
+    const [showMap, setShowMap] = useState(false);
+    const [savedAddrId, setSavedAddrId] = useState<number | ''>('');
     const [entryType, setEntryType] = useState(initial?.entry_type || '');
     const [discountFlat, setDiscountFlat] = useState(String(initial?.discount_flat ?? ''));
     const [discountReason, setDiscountReason] = useState(initial?.discount_reason || '');
@@ -48,13 +186,39 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
         initial?.items?.length
             ? initial.items.map((it) => ({
                   product_id: it.product_id,
+                  variant_id: it.variant_id ?? '',
                   qty: String(it.qty),
                   unit_price: String(it.unit_price),
                   is_bulk_rate: it.is_bulk_rate,
               }))
-            : [{ product_id: '', qty: '1', unit_price: '', is_bulk_rate: false }],
+            : [{ product_id: '', variant_id: '', qty: '1', unit_price: '', is_bulk_rate: false }],
     );
     const [saving, setSaving] = useState(false);
+
+    // Saved addresses for the picked customer (disabled for a brand-new customer).
+    const savedUserId = customer && !customer.isNew ? customer.userId ?? undefined : undefined;
+    const { data: savedAddresses = [] } = useUserAddresses(savedUserId);
+    const activeSavedAddresses = useMemo(
+        () => savedAddresses.filter((a) => !a.is_deleted),
+        [savedAddresses],
+    );
+
+    const onSelectSavedAddress = (id: number | '') => {
+        setSavedAddrId(id);
+        if (id === '') return;
+        const a = activeSavedAddresses.find((x) => x.id === id);
+        if (!a) return;
+        setDeliveryAddress(composeAddress(a));
+        setDeliveryLat(a.lat || '');
+        setDeliveryLng(a.lng || '');
+    };
+
+    const onPickFromMap = (p: PickedPlace) => {
+        if (p.formatted) setDeliveryAddress(p.formatted);
+        setDeliveryLat(String(p.lat));
+        setDeliveryLng(String(p.lng));
+        setSavedAddrId(''); // a map pick is no longer "a saved address"
+    };
 
     const subtotal = useMemo(
         () => round2(items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unit_price) || 0), 0)),
@@ -69,12 +233,14 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
         const product = products.find((p) => p.id === productId);
         updateItem(idx, {
             product_id: productId,
+            // Switching the product invalidates any previously-picked variant.
+            variant_id: '',
             // Default the unit price to the catalogue price on first pick.
             unit_price: items[idx].unit_price || (product ? String(product.price) : ''),
         });
     };
     const addItem = () =>
-        setItems((prev) => [...prev, { product_id: '', qty: '1', unit_price: '', is_bulk_rate: false }]);
+        setItems((prev) => [...prev, { product_id: '', variant_id: '', qty: '1', unit_price: '', is_bulk_rate: false }]);
     const removeItem = (idx: number) =>
         setItems((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev));
 
@@ -86,6 +252,7 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
             .filter((it) => it.product_id !== '' && Number(it.qty) > 0)
             .map((it) => ({
                 product_id: Number(it.product_id),
+                variant_id: it.variant_id === '' ? undefined : Number(it.variant_id),
                 qty: Number(it.qty),
                 unit_price: it.unit_price === '' ? undefined : Number(it.unit_price),
                 is_bulk_rate: it.is_bulk_rate,
@@ -94,7 +261,11 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
 
         const payload: Record<string, unknown> = {
             delivery_address: deliveryAddress || null,
+            delivery_lat: deliveryLat === '' ? null : Number(deliveryLat),
+            delivery_lng: deliveryLng === '' ? null : Number(deliveryLng),
             delivery_date: deliveryDate,
+            desired_delivery_time: desiredTime || null,
+            priority,
             entry_type: entryType || null,
             discount_flat: Number(discountFlat) || 0,
             discount_reason: discountReason || null,
@@ -139,14 +310,76 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
                     <input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)}
                         className={inputClassName} />
                 </FormField>
-                <FormField label="Delivery Address">
-                    <input value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)}
-                        className={inputClassName} placeholder="Doorstep address" />
-                </FormField>
                 <FormField label="Entry Type">
-                    <input value={entryType} onChange={(e) => setEntryType(e.target.value)}
-                        className={inputClassName} placeholder="e.g. WhatsApp group, walk-in" />
+                    <select value={entryType} onChange={(e) => setEntryType(e.target.value)}
+                        className={selectClassName}>
+                        <option value="">Select source</option>
+                        {DAY_ORDER_ENTRY_TYPES.map((t) => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                        {/* Preserve a legacy free-text value so editing never silently drops it. */}
+                        {entryType && !DAY_ORDER_ENTRY_TYPES.some((t) => t.value === entryType) && (
+                            <option value={entryType}>{entryType}</option>
+                        )}
+                    </select>
                 </FormField>
+                <FormField label="Desired Delivery Time">
+                    <input type="time" value={desiredTime} onChange={(e) => setDesiredTime(e.target.value)}
+                        className={inputClassName} />
+                </FormField>
+                <FormField label="Priority">
+                    <select value={priority} onChange={(e) => setPriority(Number(e.target.value))}
+                        className={selectClassName}>
+                        <option value={0}>Normal</option>
+                        <option value={1}>High (red-flash for drivers)</option>
+                    </select>
+                </FormField>
+            </div>
+
+            {/* Delivery address — saved-address dropdown, optional map picker, manual fallback */}
+            <div className="space-y-3 border-t border-slate-800/50 pt-4">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-white">Delivery Address</h3>
+                    {isMapsConfigured() && (
+                        <button type="button" onClick={() => setShowMap((s) => !s)}
+                            className="flex items-center gap-1 text-sm text-purple-400 hover:text-purple-300">
+                            <MapPin className="w-4 h-4" /> {showMap ? 'Hide map' : 'Pick on map'}
+                        </button>
+                    )}
+                </div>
+
+                {activeSavedAddresses.length > 0 && (
+                    <select
+                        value={savedAddrId}
+                        onChange={(e) => onSelectSavedAddress(e.target.value === '' ? '' : Number(e.target.value))}
+                        className={selectClassName}
+                    >
+                        <option value="">Use a saved address…</option>
+                        {activeSavedAddresses.map((a) => (
+                            <option key={a.id} value={a.id}>{composeAddress(a)}</option>
+                        ))}
+                    </select>
+                )}
+
+                {showMap && (
+                    <AddressMapPicker
+                        lat={deliveryLat ? Number(deliveryLat) : null}
+                        lng={deliveryLng ? Number(deliveryLng) : null}
+                        onPick={onPickFromMap}
+                    />
+                )}
+
+                <input value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)}
+                    className={inputClassName} placeholder="Doorstep address" />
+
+                <div className="grid grid-cols-2 gap-2">
+                    <input value={deliveryLat} inputMode="decimal"
+                        onChange={(e) => setDeliveryLat(e.target.value)}
+                        className={inputClassName} placeholder="Latitude" />
+                    <input value={deliveryLng} inputMode="decimal"
+                        onChange={(e) => setDeliveryLng(e.target.value)}
+                        className={inputClassName} placeholder="Longitude" />
+                </div>
             </div>
 
             {/* Line items */}
@@ -159,33 +392,15 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
                     </button>
                 </div>
                 {items.map((it, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                        <select
-                            value={it.product_id}
-                            onChange={(e) => onProductChange(idx, Number(e.target.value))}
-                            className={`${selectClassName} col-span-4`}
-                        >
-                            <option value="">Select product</option>
-                            {products.map((p) => (
-                                <option key={p.id} value={p.id}>{p.title}{p.qty_text ? ` (${p.qty_text})` : ''}</option>
-                            ))}
-                        </select>
-                        <input type="number" min="0" step="0.01" value={it.qty}
-                            onChange={(e) => updateItem(idx, { qty: e.target.value })}
-                            placeholder="Qty" className={`${inputClassName} col-span-2`} />
-                        <input type="number" min="0" step="0.01" value={it.unit_price}
-                            onChange={(e) => updateItem(idx, { unit_price: e.target.value })}
-                            placeholder="Unit ₹" className={`${inputClassName} col-span-2`} />
-                        <label className="col-span-3 flex items-center gap-1.5 text-xs text-slate-400">
-                            <input type="checkbox" checked={it.is_bulk_rate}
-                                onChange={(e) => updateItem(idx, { is_bulk_rate: e.target.checked })} />
-                            Bulk rate
-                        </label>
-                        <button type="button" onClick={() => removeItem(idx)}
-                            className="col-span-1 p-2 hover:bg-red-500/20 rounded-lg justify-self-end">
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
-                    </div>
+                    <LineItemRow
+                        key={idx}
+                        item={it}
+                        idx={idx}
+                        products={products}
+                        onProductChange={onProductChange}
+                        onChange={updateItem}
+                        onRemove={removeItem}
+                    />
                 ))}
             </div>
 

@@ -15,6 +15,8 @@ import TabPanel from '@/components/TabPanel';
 import Modal from '@/components/Modal';
 import RefundModal from '@/components/RefundModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import AddressMapPicker from '@/components/AddressMapPicker';
+import { isMapsConfigured, type PickedPlace } from '@/lib/maps';
 import { inputClassName, selectClassName } from '@/components/FormField';
 import ActivityWindowStrip from '@/components/crm/ActivityWindowStrip';
 import { STATUS_BADGE_CLASS, statusLabel, callTypeLabel } from '@/lib/crm';
@@ -39,6 +41,7 @@ export default function UserDetailPage() {
     const [showTxnModal, setShowTxnModal] = useState(false);
     const [showRefundModal, setShowRefundModal] = useState<UserTransaction | null>(null);
     const [showAddressModal, setShowAddressModal] = useState(false);
+    const [showAddrMap, setShowAddrMap] = useState(false);
     const [editAddress, setEditAddress] = useState<Address | null>(null);
     const [deleteHoliday, setDeleteHoliday] = useState<UserHoliday | null>(null);
     const [deleteAddr, setDeleteAddr] = useState<Address | null>(null);
@@ -132,6 +135,24 @@ export default function UserDetailPage() {
     };
 
 
+    // Map pick fills the geocodable fields; flat/apartment stay manual.
+    const onPickAddrFromMap = (p: PickedPlace) => {
+        setAddrForm((prev) => ({
+            ...prev,
+            area: p.area || prev.area,
+            city: p.city || prev.city,
+            pincode: p.pincode || prev.pincode,
+            lat: String(p.lat),
+            lng: String(p.lng),
+        }));
+    };
+
+    const closeAddressModal = () => {
+        setShowAddressModal(false);
+        setShowAddrMap(false);
+        setEditAddress(null);
+    };
+
     const handleSaveAddress = async () => {
         try {
             if (editAddress) {
@@ -142,6 +163,7 @@ export default function UserDetailPage() {
                 toast.success('Address added');
             }
             setShowAddressModal(false);
+            setShowAddrMap(false);
             setEditAddress(null);
             setAddrForm({ name: '', s_phone: '', flat_no: '', apartment_name: '', area: '', landmark: '', city: '', pincode: '', lat: '', lng: '' });
         } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to save address'); }
@@ -537,8 +559,23 @@ export default function UserDetailPage() {
             )}
 
             {/* Address Modal */}
-            <Modal isOpen={showAddressModal} onClose={() => { setShowAddressModal(false); setEditAddress(null); }} title={editAddress ? 'Edit Address' : 'Add Address'}>
+            <Modal isOpen={showAddressModal} onClose={closeAddressModal} title={editAddress ? 'Edit Address' : 'Add Address'} size="lg">
                 <div className="space-y-4">
+                    {isMapsConfigured() && (
+                        <div className="space-y-2">
+                            <button type="button" onClick={() => setShowAddrMap((s) => !s)}
+                                className="flex items-center gap-1 text-sm text-purple-400 hover:text-purple-300">
+                                <MapPin className="w-4 h-4" /> {showAddrMap ? 'Hide map' : 'Pick on map'}
+                            </button>
+                            {showAddrMap && (
+                                <AddressMapPicker
+                                    lat={addrForm.lat ? Number(addrForm.lat) : null}
+                                    lng={addrForm.lng ? Number(addrForm.lng) : null}
+                                    onPick={onPickAddrFromMap}
+                                />
+                            )}
+                        </div>
+                    )}
                     <div className="grid grid-cols-2 gap-3">
                         <div><label className="block text-xs text-slate-400 mb-1">Name *</label><input value={addrForm.name} onChange={(e) => setAddrForm({ ...addrForm, name: e.target.value })} className={inputClassName} placeholder="Name" /></div>
                         <div><label className="block text-xs text-slate-400 mb-1">Phone *</label><input value={addrForm.s_phone} onChange={(e) => setAddrForm({ ...addrForm, s_phone: e.target.value })} className={inputClassName} placeholder="Phone" /></div>
@@ -552,7 +589,7 @@ export default function UserDetailPage() {
                         <div><label className="block text-xs text-slate-400 mb-1">Longitude</label><input value={addrForm.lng} onChange={(e) => setAddrForm({ ...addrForm, lng: e.target.value })} className={inputClassName} placeholder="Longitude" /></div>
                     </div>
                     <div className="flex gap-3">
-                        <button onClick={() => { setShowAddressModal(false); setEditAddress(null); }} className="flex-1 px-4 py-2.5 text-sm text-slate-300 bg-slate-800/50 rounded-xl">Cancel</button>
+                        <button onClick={closeAddressModal} className="flex-1 px-4 py-2.5 text-sm text-slate-300 bg-slate-800/50 rounded-xl">Cancel</button>
                         <button onClick={handleSaveAddress} disabled={addAddressMutation.isPending || updateAddressMutation.isPending || !addrForm.name || !addrForm.flat_no}
                             className="flex-1 px-4 py-2.5 text-sm text-white bg-purple-600 rounded-xl disabled:opacity-50">
                             {(addAddressMutation.isPending || updateAddressMutation.isPending) ? 'Saving...' : 'Save Address'}

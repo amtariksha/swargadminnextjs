@@ -53,6 +53,9 @@ const NOTIFICATION_TITLES = new Set<string>([
     'Delivery List Admin Alert',
     'Low Balance',
     'Daytime Payment Template',
+    'Daytime Order Placed Template',
+    'Daytime Order Picked Template',
+    'Daytime Order Delivered Template',
     'New User Registered Admin',
     'Admin Phone Numbers',
 ]);

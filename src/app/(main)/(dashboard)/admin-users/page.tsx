@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useAdminUsers, useRoles, useCreateAdminUser, useUpdateAdminUser, useDeleteAdminUser, useResetAdminPassword, AdminUser } from '@/hooks/useAdminUsers';
+import { useAdminUsers, useRoles, useCreateAdminUser, useUpdateAdminUser, useUpdateAdminUserRole, useDeleteAdminUser, useResetAdminPassword, AdminUser } from '@/hooks/useAdminUsers';
 import DataTable, { Column } from '@/components/DataTable';
 import { Plus, UserCog, Shield, Trash2, X, Loader2, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
@@ -11,6 +11,7 @@ export default function AdminUsersPage() {
     const { data: roles = [] } = useRoles();
     const createMutation = useCreateAdminUser();
     const updateMutation = useUpdateAdminUser();
+    const roleChangeMutation = useUpdateAdminUserRole();
     const deleteMutation = useDeleteAdminUser();
     const resetPasswordMutation = useResetAdminPassword();
 
@@ -18,6 +19,7 @@ export default function AdminUsersPage() {
     const [isAddMode, setIsAddMode] = useState(true);
     const [saving, setSaving] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [roleConfirmOpen, setRoleConfirmOpen] = useState(false);
     const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false);
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -29,6 +31,9 @@ export default function AdminUsersPage() {
     const [formPhone, setFormPhone] = useState('');
     const [formPassword, setFormPassword] = useState('');
     const [formRoleId, setFormRoleId] = useState(2);
+    // The role the user held when the edit modal opened — used to detect a
+    // role change on save (role updates go through a separate, gated endpoint).
+    const [initialRoleId, setInitialRoleId] = useState(2);
 
     const openAddModal = () => {
         setIsAddMode(true);
@@ -38,6 +43,7 @@ export default function AdminUsersPage() {
         setFormPhone('');
         setFormPassword('');
         setFormRoleId(2);
+        setInitialRoleId(2);
         setShowModal(true);
     };
 
@@ -48,7 +54,9 @@ export default function AdminUsersPage() {
         setFormEmail(user.email || '');
         setFormPhone(user.phone || '');
         setFormPassword('');
-        setFormRoleId(user.role?.[0]?.role_id || 2);
+        const currentRoleId = user.role?.[0]?.role_id || 2;
+        setFormRoleId(currentRoleId);
+        setInitialRoleId(currentRoleId);
         setShowModal(true);
     };
 
@@ -81,6 +89,12 @@ export default function AdminUsersPage() {
                     return;
                 }
                 toast.success('Admin user updated');
+                // A role change is a separate, super-admin-gated action — confirm
+                // it explicitly rather than bundling it into the profile save.
+                if (formRoleId !== initialRoleId) {
+                    setRoleConfirmOpen(true);
+                    return;
+                }
             }
             setShowModal(false);
         } catch (error) {
@@ -88,6 +102,32 @@ export default function AdminUsersPage() {
         } finally {
             setSaving(false);
         }
+    };
+
+    const handleRoleChange = async () => {
+        if (!editId) return;
+        setSaving(true);
+        try {
+            const result = await roleChangeMutation.mutateAsync({ user_id: editId, role_id: formRoleId });
+            if (result.response !== 200) {
+                toast.error((result as { message?: string }).message || 'Failed to change role');
+                return;
+            }
+            toast.success('Role updated');
+            setInitialRoleId(formRoleId);
+            setRoleConfirmOpen(false);
+            setShowModal(false);
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to change role');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const cancelRoleChange = () => {
+        setFormRoleId(initialRoleId);
+        setRoleConfirmOpen(false);
+        setShowModal(false);
     };
 
     const handleDelete = async () => {
@@ -320,39 +360,42 @@ export default function AdminUsersPage() {
                                 />
                             </div>
                             {isAddMode && (
-                                <>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-300 mb-1">Password *</label>
-                                        <input
-                                            type="password"
-                                            value={formPassword}
-                                            onChange={(e) => setFormPassword(e.target.value)}
-                                            required
-                                            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-slate-300 mb-1">Role *</label>
-                                        <select
-                                            value={formRoleId}
-                                            onChange={(e) => setFormRoleId(Number(e.target.value))}
-                                            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                        >
-                                            {roles.length > 0 ? (
-                                                roles.map((role) => (
-                                                    <option key={role.id} value={role.id}>{role.title}</option>
-                                                ))
-                                            ) : (
-                                                <>
-                                                    <option value={1}>Super Admin</option>
-                                                    <option value={2}>Admin</option>
-                                                    <option value={3}>Sub Admin</option>
-                                                </>
-                                            )}
-                                        </select>
-                                    </div>
-                                </>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Password *</label>
+                                    <input
+                                        type="password"
+                                        value={formPassword}
+                                        onChange={(e) => setFormPassword(e.target.value)}
+                                        required
+                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                    />
+                                </div>
                             )}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Role *</label>
+                                <select
+                                    value={formRoleId}
+                                    onChange={(e) => setFormRoleId(Number(e.target.value))}
+                                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                >
+                                    {roles.length > 0 ? (
+                                        roles.map((role) => (
+                                            <option key={role.id} value={role.id}>{role.title}</option>
+                                        ))
+                                    ) : (
+                                        <>
+                                            <option value={1}>Super Admin</option>
+                                            <option value={2}>Admin</option>
+                                            <option value={3}>Sub Admin</option>
+                                        </>
+                                    )}
+                                </select>
+                                {!isAddMode && formRoleId !== initialRoleId && (
+                                    <p className="text-xs text-amber-400 mt-1">
+                                        Saving will change this user&apos;s admin access. Only a super-admin can do this.
+                                    </p>
+                                )}
+                            </div>
                             <div className="flex gap-3 pt-2">
                                 <button
                                     type="submit"
@@ -448,6 +491,38 @@ export default function AdminUsersPage() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Role Change Confirmation Dialog */}
+            {roleConfirmOpen && (
+                <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4" onClick={cancelRoleChange}>
+                    <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                                <Shield className="w-5 h-5 text-purple-400" />
+                            </div>
+                            <h3 className="text-lg font-semibold text-white">Change Role</h3>
+                        </div>
+                        <p className="text-slate-400 mb-6">
+                            Change <span className="text-white font-medium">{formName}</span>&apos;s role to{' '}
+                            <span className="text-white font-medium">
+                                {roles.find((r) => r.id === formRoleId)?.title || `Role #${formRoleId}`}
+                            </span>
+                            ? This updates their admin access immediately.
+                        </p>
+                        <div className="flex gap-3">
+                            <button onClick={cancelRoleChange} disabled={saving}
+                                className="flex-1 px-4 py-2 border border-slate-600 text-slate-300 rounded-lg hover:bg-slate-800 disabled:opacity-50">
+                                Cancel
+                            </button>
+                            <button onClick={handleRoleChange} disabled={saving}
+                                className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center justify-center gap-2">
+                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                                Change Role
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

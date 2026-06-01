@@ -1980,10 +1980,22 @@ export function useSetRefundMode() {
 // Feature 10 — Day-time delivery network
 // ─────────────────────────────────────────────────────────────────────────
 
+export interface DaytimeVariantAttr {
+    attribute_name: string;
+    value: string;
+    swatch_color?: string;
+    swatch_image_url?: string;
+}
+
 export interface DaytimeOrderItem {
     id?: number;
     product_id: number;
+    // For a variant line the backend synthesises "Kaju Katli — Size: 500 g".
     product_title?: string;
+    // The unadorned product name, so the edit form can re-match the product select.
+    base_product_title?: string;
+    variant_id?: number | null;
+    variant_attributes_snapshot?: DaytimeVariantAttr[] | null;
     qty: number;
     unit_price: number;
     is_bulk_rate: boolean;
@@ -2002,6 +2014,8 @@ export interface DaytimeOrder {
     delivery_lat?: number | null;
     delivery_lng?: number | null;
     delivery_date: string;
+    desired_delivery_time?: string | null;
+    priority?: number;
     entry_type?: string | null;
     subtotal: number;
     discount_flat: number;
@@ -2036,6 +2050,8 @@ export interface DaytimeProduct {
     price: number;
     mrp: number;
     delivery_window: number;
+    // 'simple' | 'variable' — drives whether the order form shows a variant picker.
+    product_type?: string;
 }
 
 export interface SalesIncentiveRow {

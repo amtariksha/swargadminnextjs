@@ -130,6 +130,22 @@ export function useUpdateAdminUser() {
     });
 }
 
+// Change an admin user's role — uses /update_admin_user_role (super-admin only).
+// The backend replaces the user's assign_role rows transactionally.
+export function useUpdateAdminUserRole() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (data: { user_id: number; role_id: number }) => {
+            const response = await POST('/update_admin_user_role', data);
+            return response;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+        },
+    });
+}
+
 // Reset admin user password — uses /reset_user_password.
 // Backend hashes with bcrypt (12 rounds) and updates `users.password`.
 // Mutation does NOT invalidate the admin-users list (no row data changes).

@@ -19,6 +19,7 @@ export default function DaytimeOrderDetailPage() {
     const { data: order, isLoading } = useDaytimeOrder(id);
     const [busy, setBusy] = useState<string | null>(null);
     const [confirmCancel, setConfirmCancel] = useState(false);
+    const [confirmPay, setConfirmPay] = useState<'cash' | 'wallet' | null>(null);
 
     const refresh = () => {
         queryClient.invalidateQueries({ queryKey: ['daytime-order', id] });
@@ -51,7 +52,8 @@ export default function DaytimeOrderDetailPage() {
 
     const markPaid = (mode: 'cash' | 'wallet') =>
         runAction(mode, () => POST(`/daytime/orders/${id}/mark_paid`, { payment_mode: mode }),
-            mode === 'cash' ? 'Marked paid in cash' : 'Wallet debited');
+            mode === 'cash' ? 'Marked paid in cash' : 'Wallet debited')
+            .then(() => setConfirmPay(null));
 
     const cancelOrder = () =>
         runAction('cancel', () => POST(`/daytime/orders/${id}/cancel`), 'Order cancelled')
@@ -107,11 +109,11 @@ export default function DaytimeOrderDetailPage() {
                             <Link2 className="w-4 h-4" />
                             {busy === 'link' ? 'Generating…' : order.payment_link_id ? 'Resend payment link' : 'Generate & send payment link'}
                         </button>
-                        <button onClick={() => markPaid('cash')} disabled={busy !== null}
+                        <button onClick={() => setConfirmPay('cash')} disabled={busy !== null}
                             className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-800/60 text-slate-200 rounded-xl hover:bg-slate-800 disabled:opacity-50">
                             <Banknote className="w-4 h-4" /> {busy === 'cash' ? 'Saving…' : 'Mark cash'}
                         </button>
-                        <button onClick={() => markPaid('wallet')} disabled={busy !== null}
+                        <button onClick={() => setConfirmPay('wallet')} disabled={busy !== null}
                             className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-800/60 text-slate-200 rounded-xl hover:bg-slate-800 disabled:opacity-50">
                             <Wallet className="w-4 h-4" /> {busy === 'wallet' ? 'Saving…' : 'Pay from wallet'}
                         </button>
@@ -166,6 +168,18 @@ export default function DaytimeOrderDetailPage() {
                 onCancel={() => setConfirmCancel(false)}
                 variant="danger"
                 confirmText="Cancel order"
+            />
+
+            <ConfirmDialog
+                isOpen={confirmPay !== null}
+                title={confirmPay === 'wallet' ? 'Pay from customer wallet' : 'Mark paid in cash'}
+                message={confirmPay === 'wallet'
+                    ? `Debit ₹${Number(order.total_amount).toFixed(2)} from ${order.customer_name}'s wallet now? This happens immediately and cannot be undone.`
+                    : `Mark this ₹${Number(order.total_amount).toFixed(2)} order as paid in cash? This cannot be undone.`}
+                onConfirm={() => confirmPay && markPaid(confirmPay)}
+                onCancel={() => setConfirmPay(null)}
+                confirmText={confirmPay === 'wallet' ? 'Debit wallet' : 'Mark cash'}
+                isLoading={busy === confirmPay}
             />
         </div>
     );
