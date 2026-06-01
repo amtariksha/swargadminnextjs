@@ -16,7 +16,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { redeemCode } from "@/lib/lms/referrals/service";
 
 const schema = z.object({
@@ -27,16 +26,12 @@ const schema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     const parsed = schema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
         return NextResponse.json({ error: "Invalid body" }, { status: 400 });
     }
     try {
-        const result = await redeemCode({ orgId, ...parsed.data });
+        const result = await redeemCode({ ...parsed.data });
         if (!result.success) {
             return NextResponse.json(result, { status: 409 });
         }

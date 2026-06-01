@@ -6,26 +6,19 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { lmsAdmin } from "@/lib/lms/supabase";
 import type { RfmSegmentLabel, ChurnRisk } from "@/lib/lms/rfm/types";
 
-export async function GET(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
+export async function GET(_request: NextRequest) {
     try {
         const [{ data: rfm, error: rfmErr }, { data: health, error: healthErr }] =
             await Promise.all([
                 lmsAdmin
                     .from("lms_rfm_scores")
-                    .select("segment, computed_at")
-                    .eq("org_id", orgId),
+                    .select("segment, computed_at"),
                 lmsAdmin
                     .from("lms_health_scores")
-                    .select("churn_risk, score, computed_at")
-                    .eq("org_id", orgId),
+                    .select("churn_risk, score, computed_at"),
             ]);
         if (rfmErr) throw new Error(rfmErr.message);
         if (healthErr) throw new Error(healthErr.message);

@@ -12,18 +12,13 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { seedDemoRfm } from "@/lib/lms/rfm/seed-demo";
 
 export const maxDuration = 60;
 
-export async function POST(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
+export async function POST(_request: NextRequest) {
     try {
-        const result = await seedDemoRfm({ orgId });
+        const result = await seedDemoRfm();
         return NextResponse.json(result);
     } catch (err) {
         console.error("[POST /api/lms/rfm/seed-demo]", err);

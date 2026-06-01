@@ -32,16 +32,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const orgId = process.env.WACRM_ORG_ID;
-    if (!orgId) {
-        return NextResponse.json(
-            { error: "WACRM_ORG_ID not configured" },
-            { status: 503 },
-        );
-    }
-
     try {
-        const result = await tickAllDue({ orgId });
+        const result = await tickAllDue();
         return NextResponse.json({ ok: true, ...result });
     } catch (err) {
         console.error("[cron/journeys-tick]", err);

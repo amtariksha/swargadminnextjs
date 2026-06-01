@@ -51,13 +51,11 @@ export interface TagAssignment {
 // ─── Read ─────────────────────────────────────────────────────────────────
 
 export async function listTags(args: {
-    orgId: string;
     namespace?: TagNamespace;
-}): Promise<Tag[]> {
+} = {}): Promise<Tag[]> {
     let q = lmsAdmin
         .from("lms_tags")
         .select("*")
-        .eq("org_id", args.orgId)
         .order("namespace")
         .order("name");
     if (args.namespace) q = q.eq("namespace", args.namespace);
@@ -68,17 +66,14 @@ export async function listTags(args: {
 
 /** Tag list with active-assignment counts. Useful for the operator-facing
  *  Tag list page so they can see which tags are widely used vs. orphan. */
-export async function listTagsWithCounts(args: {
-    orgId: string;
-}): Promise<Tag[]> {
-    const tags = await listTags({ orgId: args.orgId });
+export async function listTagsWithCounts(): Promise<Tag[]> {
+    const tags = await listTags();
     if (tags.length === 0) return tags;
 
     // Count active assignments per tag using the denormalised view.
     const { data, error } = await lmsAdmin
         .from("v_lms_customer_tags_flat")
         .select("tag_id, customer_id")
-        .eq("org_id", args.orgId)
         .eq("effective", true);
     if (error) {
         // Counts are nice-to-have — return tags without them if the view query fails.
@@ -94,7 +89,6 @@ export async function listTagsWithCounts(args: {
 }
 
 export async function getCustomerTags(args: {
-    orgId: string;
     customerId: string;
 }): Promise<Tag[]> {
     const { data, error } = await lmsAdmin
@@ -102,7 +96,6 @@ export async function getCustomerTags(args: {
         .select(
             "tag_id, tag_name, namespace, source, assigned_at, expires_at, effective, org_id",
         )
-        .eq("org_id", args.orgId)
         .eq("customer_id", args.customerId)
         .eq("effective", true)
         .order("namespace");
@@ -119,7 +112,6 @@ export async function getCustomerTags(args: {
 // ─── Write ────────────────────────────────────────────────────────────────
 
 export async function createTag(args: {
-    orgId: string;
     name: string;
     namespace: TagNamespace;
     color?: string;
@@ -128,7 +120,6 @@ export async function createTag(args: {
     const { data, error } = await lmsAdmin
         .from("lms_tags")
         .insert({
-            org_id: args.orgId,
             name: args.name,
             namespace: args.namespace,
             color: args.color ?? null,
@@ -141,14 +132,12 @@ export async function createTag(args: {
 }
 
 export async function deleteTag(args: {
-    orgId: string;
     tagId: string;
 }): Promise<void> {
     // ON DELETE CASCADE on lms_customer_tags.tag_id handles unassignment.
     const { error } = await lmsAdmin
         .from("lms_tags")
         .delete()
-        .eq("org_id", args.orgId)
         .eq("id", args.tagId);
     if (error) throw new Error(`[tags] delete failed: ${error.message}`);
 }

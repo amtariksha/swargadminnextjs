@@ -16,7 +16,6 @@ import type { DsarRequest, DsarRequestType, DsarStatus } from "@/lib/lms/types";
 const SLA_DAYS = 7;
 
 export async function submitDsar(args: {
-    orgId: string;
     customerId?: string;
     contactPhone?: string;
     contactEmail?: string;
@@ -33,7 +32,6 @@ export async function submitDsar(args: {
     const { data, error } = await lmsAdmin
         .from("lms_dsar_requests")
         .insert({
-            org_id: args.orgId,
             customer_id: args.customerId ?? null,
             contact_phone: args.contactPhone ?? null,
             contact_email: args.contactEmail ?? null,
@@ -52,13 +50,11 @@ export async function submitDsar(args: {
 }
 
 export async function listDsar(args: {
-    orgId: string;
     status?: DsarStatus | "all";
-}): Promise<DsarRequest[]> {
+} = {}): Promise<DsarRequest[]> {
     let q = lmsAdmin
         .from("lms_dsar_requests")
         .select("*")
-        .eq("org_id", args.orgId)
         .order("sla_deadline", { ascending: true });
     if (args.status && args.status !== "all") {
         q = q.eq("status", args.status);

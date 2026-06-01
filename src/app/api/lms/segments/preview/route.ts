@@ -8,7 +8,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { previewSegment } from "@/lib/lms/segments/service";
 import { validateFilterDsl } from "@/lib/lms/segments/dsl";
 
@@ -18,10 +17,6 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     const parsed = bodySchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
         return NextResponse.json(
@@ -39,7 +34,6 @@ export async function POST(request: NextRequest) {
     }
     try {
         const preview = await previewSegment({
-            orgId,
             filter: parsed.data.filterDsl as Parameters<typeof previewSegment>[0]["filter"],
             sampleLimit: parsed.data.sampleLimit,
         });

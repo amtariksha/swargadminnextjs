@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { getOrCreateCode } from "@/lib/lms/referrals/service";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 
@@ -36,15 +35,11 @@ export async function POST(
 }
 
 async function ensureCode(
-    request: NextRequest,
+    _request: NextRequest,
     params: Promise<{ customerId: string }>,
     overrides: z.infer<typeof bodySchema>,
 ) {
     const { customerId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     try {
         // Look up the contact's name so the code prefix is mnemonic.
         const { data: contact } = await supabaseAdmin
@@ -54,7 +49,6 @@ async function ensureCode(
             .maybeSingle();
 
         const code = await getOrCreateCode({
-            orgId,
             ownerCustomerId: customerId,
             ownerName: contact?.name as string | undefined,
             rewardGiver: overrides.rewardGiver ?? DEFAULT_REWARD,

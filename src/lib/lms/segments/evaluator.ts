@@ -39,12 +39,11 @@ export interface EvaluationResult {
  * Optionally cap to a sample size for preview UI (full recompute uses no cap).
  */
 export async function evaluateSegment(args: {
-    orgId: string;
     filter: FilterNode;
     sampleLimit?: number;
 }): Promise<EvaluationResult> {
-    const allCustomers = await fetchAllOrgCustomers(args.orgId);
-    const matched = await evalNode(args.filter, args.orgId, allCustomers);
+    const allCustomers = await fetchAllCustomers();
+    const matched = await evalNode(args.filter, allCustomers);
 
     let ids = Array.from(matched);
     const count = ids.length;
@@ -58,14 +57,13 @@ export async function evaluateSegment(args: {
 
 async function evalNode(
     n: FilterNode,
-    orgId: string,
     universe: Set<string>,
 ): Promise<Set<string>> {
     if (isCombineNode(n)) {
         if (n.op === "AND") {
             let acc: Set<string> | null = null;
             for (const child of n.children) {
-                const set = await evalNode(child, orgId, universe);
+                const set = await evalNode(child, universe);
                 acc = acc ? intersect(acc, set) : set;
                 if (acc.size === 0) return acc; // short-circuit
             }
@@ -74,28 +72,27 @@ async function evalNode(
         if (n.op === "OR") {
             const acc = new Set<string>();
             for (const child of n.children) {
-                const set = await evalNode(child, orgId, universe);
+                const set = await evalNode(child, universe);
                 set.forEach((id) => acc.add(id));
             }
             return acc;
         }
         if (n.op === "NOT") {
-            const inner = await evalNode(n.children[0], orgId, universe);
+            const inner = await evalNode(n.children[0], universe);
             return difference(universe, inner);
         }
     }
-    return evalLeaf(n as LeafNode, orgId);
+    return evalLeaf(n as LeafNode);
 }
 
 // ─── Leaf evaluators ──────────────────────────────────────────────────────
 
-async function evalLeaf(n: LeafNode, orgId: string): Promise<Set<string>> {
+async function evalLeaf(n: LeafNode): Promise<Set<string>> {
     switch (n.type) {
         case "has_tag": {
             let q = lmsAdmin
                 .from("v_lms_customer_tags_flat")
                 .select("customer_id")
-                .eq("org_id", orgId)
                 .eq("tag_name", n.tag)
                 .eq("effective", true);
             if (n.namespace) q = q.eq("namespace", n.namespace);
@@ -108,7 +105,6 @@ async function evalLeaf(n: LeafNode, orgId: string): Promise<Set<string>> {
             const { data, error } = await lmsAdmin
                 .from("lms_rfm_scores")
                 .select("customer_id")
-                .eq("org_id", orgId)
                 .in("segment", n.segments);
             if (error)
                 throw new Error(`[evaluator] rfm_segment_in failed: ${error.message}`);
@@ -119,7 +115,6 @@ async function evalLeaf(n: LeafNode, orgId: string): Promise<Set<string>> {
             const { data, error } = await lmsAdmin
                 .from("v_lms_customer_consent_effective")
                 .select("customer_id")
-                .eq("org_id", orgId)
                 .eq("purpose", n.purpose)
                 .eq("granted", n.granted);
             if (error)
@@ -145,8 +140,7 @@ async function evalLeaf(n: LeafNode, orgId: string): Promise<Set<string>> {
             const col = "score";
             let q = lmsAdmin
                 .from("lms_health_scores")
-                .select("customer_id")
-                .eq("org_id", orgId);
+                .select("customer_id");
             if (n.operator === "gte") q = q.gte(col, n.value);
             else if (n.operator === "lte") q = q.lte(col, n.value);
             else q = q.eq(col, n.value);
@@ -166,12 +160,11 @@ async function evalLeaf(n: LeafNode, orgId: string): Promise<Set<string>> {
 
 // ─── Universe + set helpers ───────────────────────────────────────────────
 
-/** All contact IDs in the org. The universe set for NOT operations. */
-async function fetchAllOrgCustomers(orgId: string): Promise<Set<string>> {
+/** All contact IDs. The universe set for NOT operations. */
+async function fetchAllCustomers(): Promise<Set<string>> {
     const { data, error } = await supabaseAdmin
         .from("contacts")
-        .select("id")
-        .eq("org_id", orgId);
+        .select("id");
     if (error) throw new Error(`[evaluator] universe fetch failed: ${error.message}`);
     return new Set((data ?? []).map((r) => r.id as string));
 }

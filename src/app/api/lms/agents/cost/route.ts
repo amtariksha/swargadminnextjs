@@ -15,7 +15,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { lmsAdmin } from "@/lib/lms/supabase";
 
 type GroupBy = "agent" | "conversation" | "customer" | "day";
@@ -42,11 +41,6 @@ interface RawRun {
 }
 
 export async function GET(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
-
     const sp = new URL(request.url).searchParams;
     const parsed = schema.safeParse({
         from: sp.get("from") ?? undefined,
@@ -68,8 +62,7 @@ export async function GET(request: NextRequest) {
             .from("lms_agent_runs")
             .select(
                 "agent_slug, session_id, customer_id, conversation_id, input_tokens, output_tokens, cost_usd, latency_ms, succeeded, created_at",
-            )
-            .eq("org_id", orgId);
+            );
         if (from) q = q.gte("created_at", from);
         if (to) q = q.lt("created_at", to);
         const { data, error } = await q;

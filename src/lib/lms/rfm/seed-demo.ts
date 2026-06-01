@@ -27,14 +27,13 @@ interface SeedDemoResult {
     computedAt: string;
 }
 
-export async function seedDemoRfm(args: { orgId: string }): Promise<SeedDemoResult> {
+export async function seedDemoRfm(): Promise<SeedDemoResult> {
     const computedAt = new Date().toISOString();
 
     // 1. Pull contacts.
     const { data, error } = await supabaseAdmin
         .from("contacts")
-        .select("id")
-        .eq("org_id", args.orgId);
+        .select("id");
     if (error) throw new Error(`[rfm-seed] fetch contacts failed: ${error.message}`);
 
     const contacts = (data ?? []).map((c) => c.id as string);
@@ -64,7 +63,6 @@ export async function seedDemoRfm(args: { orgId: string }): Promise<SeedDemoResu
     for (let i = 0; i < rfmRows.length; i += BATCH) {
         const slice = rfmRows.slice(i, i + BATCH).map((r) => ({
             customer_id: r.customerId,
-            org_id: args.orgId,
             recency_days: r.recencyDays,
             recency_score: r.recencyScore,
             frequency_count: r.frequencyCount,
@@ -83,7 +81,6 @@ export async function seedDemoRfm(args: { orgId: string }): Promise<SeedDemoResu
     for (let i = 0; i < healthRows.length; i += BATCH) {
         const slice = healthRows.slice(i, i + BATCH).map((h) => ({
             customer_id: h.customerId,
-            org_id: args.orgId,
             score: h.score,
             churn_risk: h.churnRisk,
             next_best_action: h.nextBestAction,

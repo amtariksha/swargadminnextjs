@@ -34,24 +34,21 @@ export interface JourneyRun {
 
 // ─── Journeys ─────────────────────────────────────────────────────────────
 
-export async function listJourneys(args: { orgId: string }): Promise<Journey[]> {
+export async function listJourneys(): Promise<Journey[]> {
     const { data, error } = await lmsAdmin
         .from("lms_journeys")
         .select("*")
-        .eq("org_id", args.orgId)
         .order("name");
     if (error) throw new Error(`[journeys] list: ${error.message}`);
     return (data ?? []).map(mapJourneyRow);
 }
 
 export async function getJourneyByName(args: {
-    orgId: string;
     name: string;
 }): Promise<Journey | null> {
     const { data, error } = await lmsAdmin
         .from("lms_journeys")
         .select("*")
-        .eq("org_id", args.orgId)
         .eq("name", args.name)
         .order("version", { ascending: false })
         .limit(1)
@@ -61,7 +58,6 @@ export async function getJourneyByName(args: {
 }
 
 export async function upsertJourney(args: {
-    orgId: string;
     name: string;
     triggerEvent: JourneyTrigger;
     dsl: JourneyDsl;
@@ -69,7 +65,7 @@ export async function upsertJourney(args: {
     overwriteLatest?: boolean;
 }): Promise<Journey> {
     validateJourneyDsl(args.dsl);
-    const existing = await getJourneyByName({ orgId: args.orgId, name: args.name });
+    const existing = await getJourneyByName({ name: args.name });
 
     if (existing && args.overwriteLatest) {
         const { data, error } = await lmsAdmin
@@ -86,7 +82,6 @@ export async function upsertJourney(args: {
     const { data, error } = await lmsAdmin
         .from("lms_journeys")
         .insert({
-            org_id: args.orgId,
             name: args.name,
             trigger_event: args.triggerEvent,
             dsl: args.dsl,
@@ -100,14 +95,12 @@ export async function upsertJourney(args: {
 }
 
 export async function setJourneyActive(args: {
-    orgId: string;
     journeyId: string;
     isActive: boolean;
 }): Promise<Journey> {
     const { data, error } = await lmsAdmin
         .from("lms_journeys")
         .update({ is_active: args.isActive })
-        .eq("org_id", args.orgId)
         .eq("id", args.journeyId)
         .select("*")
         .single();
@@ -118,19 +111,17 @@ export async function setJourneyActive(args: {
 // ─── Enrolment ────────────────────────────────────────────────────────────
 
 export async function enrollCustomer(args: {
-    orgId: string;
     journeyId: string;
     customerId: string;
 }): Promise<JourneyRun> {
     // 1. Load journey to confirm active + grab first step.
     const { data: j, error: jErr } = await lmsAdmin
         .from("lms_journeys")
-        .select("id, org_id, dsl, is_active")
+        .select("id, dsl, is_active")
         .eq("id", args.journeyId)
         .maybeSingle();
     if (jErr) throw new Error(`[journeys] enrol fetch: ${jErr.message}`);
     if (!j) throw new Error("Journey not found");
-    if (j.org_id !== args.orgId) throw new Error("Journey/org mismatch");
     if (!j.is_active) throw new Error("Journey is paused");
 
     const dsl = j.dsl as JourneyDsl;

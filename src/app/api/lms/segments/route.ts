@@ -16,13 +16,9 @@ const createSchema = z.object({
     isDynamic: z.boolean().optional(),
 });
 
-export async function GET(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
+export async function GET(_request: NextRequest) {
     try {
-        const segments = await listSegments({ orgId });
+        const segments = await listSegments();
         return NextResponse.json({ count: segments.length, segments });
     } catch (err) {
         console.error("[GET /api/lms/segments]", err);
@@ -34,10 +30,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-    const { orgId, userId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
+    const { userId } = getRequestContext(request.headers);
     const parsed = createSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
         return NextResponse.json(
@@ -55,7 +48,6 @@ export async function POST(request: NextRequest) {
     }
     try {
         const segment = await createSegment({
-            orgId,
             name: parsed.data.name,
             description: parsed.data.description,
             filterDsl: parsed.data.filterDsl,

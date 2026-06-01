@@ -44,7 +44,6 @@ export interface ReferralCode {
 }
 
 export async function getOrCreateCode(args: {
-    orgId: string;
     ownerCustomerId: string;
     ownerName?: string;
     rewardGiver?: number;
@@ -55,7 +54,6 @@ export async function getOrCreateCode(args: {
     const { data: existing, error: lookupErr } = await lmsAdmin
         .from("lms_referral_codes")
         .select("*")
-        .eq("org_id", args.orgId)
         .eq("owner_customer_id", args.ownerCustomerId)
         .eq("active", true)
         .order("created_at", { ascending: false })
@@ -69,7 +67,6 @@ export async function getOrCreateCode(args: {
         const candidate = generateCode(args.ownerName);
         const { error } = await lmsAdmin.from("lms_referral_codes").insert({
             code: candidate,
-            org_id: args.orgId,
             owner_customer_id: args.ownerCustomerId,
             reward_giver: args.rewardGiver ?? null,
             reward_receiver: args.rewardReceiver ?? null,
@@ -134,7 +131,6 @@ export interface RedeemRejection {
 }
 
 export async function redeemCode(args: {
-    orgId: string;
     code: string;
     newCustomerId: string;
     firstOrderId: string;
@@ -148,7 +144,6 @@ export async function redeemCode(args: {
     const { data: code, error: codeErr } = await lmsAdmin
         .from("lms_referral_codes")
         .select("*")
-        .eq("org_id", args.orgId)
         .eq("code", args.code.toUpperCase())
         .maybeSingle();
     if (codeErr) {
@@ -227,13 +222,10 @@ export interface InnerCircleMember {
     innerCircleSince: string | null;
 }
 
-export async function listInnerCircle(args: {
-    orgId: string;
-}): Promise<InnerCircleMember[]> {
+export async function listInnerCircle(): Promise<InnerCircleMember[]> {
     const { data, error } = await lmsAdmin
         .from("lms_loyalty_accounts")
         .select("*")
-        .eq("org_id", args.orgId)
         .eq("in_inner_circle", true)
         .order("inner_circle_since", { ascending: false });
     if (error) throw new Error(`[innercircle] list failed: ${error.message}`);
@@ -241,7 +233,6 @@ export async function listInnerCircle(args: {
 }
 
 export async function addToInnerCircle(args: {
-    orgId: string;
     customerId: string;
     tier?: string;
 }): Promise<InnerCircleMember> {
@@ -251,7 +242,6 @@ export async function addToInnerCircle(args: {
         .from("lms_loyalty_accounts")
         .upsert(
             {
-                org_id: args.orgId,
                 customer_id: args.customerId,
                 tier: args.tier ?? "inner_circle",
                 in_inner_circle: true,
@@ -266,13 +256,11 @@ export async function addToInnerCircle(args: {
 }
 
 export async function removeFromInnerCircle(args: {
-    orgId: string;
     customerId: string;
 }): Promise<void> {
     const { error } = await lmsAdmin
         .from("lms_loyalty_accounts")
         .update({ in_inner_circle: false, inner_circle_since: null })
-        .eq("org_id", args.orgId)
         .eq("customer_id", args.customerId);
     if (error) throw new Error(`[innercircle] remove failed: ${error.message}`);
 }

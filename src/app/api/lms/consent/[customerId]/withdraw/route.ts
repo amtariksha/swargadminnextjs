@@ -15,7 +15,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { hashIp, withdrawAllMarketing } from "@/lib/lms/consent/service";
 import { getLatestNotice } from "@/lib/lms/consent/notice";
 import type { ConsentSource } from "@/lib/lms/types";
@@ -39,13 +38,6 @@ export async function POST(
     { params }: { params: Promise<{ customerId: string }> },
 ) {
     const { customerId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json(
-            { error: "Missing org context" },
-            { status: 400 },
-        );
-    }
 
     const json = await request.json().catch(() => null);
     const parsed = bodySchema.safeParse(json);
@@ -66,7 +58,6 @@ export async function POST(
 
     try {
         const records = await withdrawAllMarketing({
-            orgId,
             customerId,
             source: body.source,
             noticeVersion,

@@ -8,20 +8,15 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { recomputeSegment } from "@/lib/lms/segments/service";
 
 export async function POST(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ segmentId: string }> },
 ) {
     const { segmentId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     try {
-        const result = await recomputeSegment({ orgId, segmentId });
+        const result = await recomputeSegment({ segmentId });
         return NextResponse.json({ ...result, segmentId });
     } catch (err) {
         console.error("[POST /api/lms/segments/:id/recompute]", err);

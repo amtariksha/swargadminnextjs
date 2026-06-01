@@ -13,7 +13,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { enrollCustomer } from "@/lib/lms/journeys/service";
 
 const schema = z.object({ customerId: z.string().uuid() });
@@ -23,17 +22,12 @@ export async function POST(
     { params }: { params: Promise<{ journeyId: string }> },
 ) {
     const { journeyId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     const parsed = schema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
         return NextResponse.json({ error: "Invalid body" }, { status: 400 });
     }
     try {
         const run = await enrollCustomer({
-            orgId,
             journeyId,
             customerId: parsed.data.customerId,
         });

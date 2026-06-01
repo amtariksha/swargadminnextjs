@@ -52,7 +52,6 @@ interface OrderAggregate {
 // ─── Public entrypoint ────────────────────────────────────────────────────
 
 export async function runRfmRecompute(args: {
-    orgId: string;
     /**
      * Admin Bearer JWT — forwarded to the swargnodejsbackend so its
      * `authenticateToken` middleware accepts the request. If omitted, the
@@ -61,11 +60,11 @@ export async function runRfmRecompute(args: {
     authToken?: string;
     /** Override the backend base URL (defaults to NEXT_PUBLIC_API_BASE_URL). */
     backendUrl?: string;
-}): Promise<RfmRunResult> {
+} = {}): Promise<RfmRunResult> {
     const startedAt = Date.now();
     const computedAt = new Date(startedAt).toISOString();
 
-    const contacts = await fetchContacts(args.orgId);
+    const contacts = await fetchContacts();
     if (contacts.length === 0) {
         return {
             contactCount: 0,
@@ -129,7 +128,6 @@ export async function runRfmRecompute(args: {
 
     // Step 6: bulk upsert (delete-then-insert for simplicity; small dataset).
     const rowsWritten = await writeRfmAndHealth({
-        orgId: args.orgId,
         computedAt,
         rfm: rfmRows,
         health: healthRows.map((h) => ({
@@ -153,13 +151,10 @@ export async function runRfmRecompute(args: {
 
 // ─── Step 1: contacts ─────────────────────────────────────────────────────
 
-async function fetchContacts(
-    orgId: string,
-): Promise<Array<{ id: string; phone: string }>> {
+async function fetchContacts(): Promise<Array<{ id: string; phone: string }>> {
     const { data, error } = await supabaseAdmin
         .from("contacts")
         .select("id, phone")
-        .eq("org_id", orgId)
         .not("phone", "is", null);
     if (error) throw new Error(`[rfm] fetchContacts failed: ${error.message}`);
     return (data ?? [])
@@ -275,7 +270,6 @@ function extractAmount(order: Record<string, unknown>): number {
 // ─── Step 6: write to Supabase ────────────────────────────────────────────
 
 async function writeRfmAndHealth(args: {
-    orgId: string;
     computedAt: string;
     rfm: RfmOutput[];
     health: Array<{
@@ -290,7 +284,6 @@ async function writeRfmAndHealth(args: {
     // previous snapshot in place (the PK is customer_id on both tables).
     const rfmRows = args.rfm.map((r) => ({
         customer_id: r.customerId,
-        org_id: args.orgId,
         recency_days: r.recencyDays,
         recency_score: r.recencyScore,
         frequency_count: r.frequencyCount,
@@ -302,7 +295,6 @@ async function writeRfmAndHealth(args: {
     }));
     const healthRows = args.health.map((h) => ({
         customer_id: h.customerId,
-        org_id: args.orgId,
         score: h.score,
         churn_risk: h.churnRisk,
         next_best_action: h.nextBestAction,

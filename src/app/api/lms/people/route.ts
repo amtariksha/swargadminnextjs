@@ -11,7 +11,6 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { lmsAdmin } from "@/lib/lms/supabase";
 import type { ChurnRisk, RfmSegmentLabel } from "@/lib/lms/rfm/types";
@@ -28,10 +27,6 @@ export interface UnifiedPerson {
 }
 
 export async function GET(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     const sp = new URL(request.url).searchParams;
     const search = sp.get("q")?.trim();
     const segment = sp.get("segment") as RfmSegmentLabel | "all" | null;
@@ -39,11 +34,10 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Math.max(parseInt(sp.get("limit") ?? "100", 10), 1), 500);
 
     try {
-        // 1. Contacts in this org.
+        // 1. All contacts.
         let q = supabaseAdmin
             .from("contacts")
             .select("id, name, phone, email, created_at", { count: "exact" })
-            .eq("org_id", orgId)
             .order("created_at", { ascending: false })
             .limit(limit);
         if (search) {
@@ -63,12 +57,10 @@ export async function GET(request: NextRequest) {
             lmsAdmin
                 .from("lms_rfm_scores")
                 .select("customer_id, segment")
-                .eq("org_id", orgId)
                 .in("customer_id", ids),
             lmsAdmin
                 .from("lms_health_scores")
                 .select("customer_id, score, churn_risk")
-                .eq("org_id", orgId)
                 .in("customer_id", ids),
         ]);
 

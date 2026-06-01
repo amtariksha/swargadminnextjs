@@ -6,7 +6,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { deleteLead, getLead, updateLead } from "@/lib/lms/leads/service";
 import type { LeadStatus } from "@/lib/lms/leads/types";
 
@@ -37,12 +36,8 @@ export async function GET(
     { params }: { params: Promise<{ leadId: string }> },
 ) {
     const { leadId } = await params;
-    const { orgId } = getRequestContext(_req.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     try {
-        const lead = await getLead({ orgId, leadId });
+        const lead = await getLead({ leadId });
         if (!lead) return NextResponse.json({ error: "Lead not found" }, { status: 404 });
         return NextResponse.json({ lead });
     } catch (err) {
@@ -59,10 +54,6 @@ export async function PATCH(
     { params }: { params: Promise<{ leadId: string }> },
 ) {
     const { leadId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     const parsed = patchSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
         return NextResponse.json(
@@ -86,7 +77,7 @@ export async function PATCH(
         if (parsed.data.tags !== undefined) patch.tags = parsed.data.tags ?? undefined;
         if (parsed.data.notes !== undefined) patch.notes = parsed.data.notes ?? undefined;
 
-        const lead = await updateLead({ orgId, leadId, patch });
+        const lead = await updateLead({ leadId, patch });
         return NextResponse.json({ lead });
     } catch (err) {
         console.error("[PATCH /api/lms/leads/:id]", err);
@@ -98,16 +89,12 @@ export async function PATCH(
 }
 
 export async function DELETE(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ leadId: string }> },
 ) {
     const { leadId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     try {
-        await deleteLead({ orgId, leadId });
+        await deleteLead({ leadId });
         return NextResponse.json({ ok: true });
     } catch (err) {
         console.error("[DELETE /api/lms/leads/:id]", err);

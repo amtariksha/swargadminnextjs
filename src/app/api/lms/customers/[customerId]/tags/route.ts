@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { assignTag, getCustomerTags } from "@/lib/lms/tags/service";
 
 const assignSchema = z.object({
@@ -15,16 +14,12 @@ const assignSchema = z.object({
 });
 
 export async function GET(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ customerId: string }> },
 ) {
     const { customerId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     try {
-        const tags = await getCustomerTags({ orgId, customerId });
+        const tags = await getCustomerTags({ customerId });
         return NextResponse.json({ customerId, tags });
     } catch (err) {
         console.error("[GET /api/lms/customers/:id/tags]", err);

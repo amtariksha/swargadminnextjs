@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import {
     createTag,
     listTagsWithCounts,
@@ -28,13 +27,9 @@ const createSchema = z.object({
     autoRule: z.record(z.string(), z.unknown()).optional(),
 });
 
-export async function GET(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
+export async function GET(_request: NextRequest) {
     try {
-        const tags = await listTagsWithCounts({ orgId });
+        const tags = await listTagsWithCounts();
         return NextResponse.json({ count: tags.length, tags });
     } catch (err) {
         console.error("[GET /api/lms/tags]", err);
@@ -46,10 +41,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     const parsed = createSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
         return NextResponse.json(
@@ -58,7 +49,7 @@ export async function POST(request: NextRequest) {
         );
     }
     try {
-        const tag = await createTag({ orgId, ...parsed.data });
+        const tag = await createTag({ ...parsed.data });
         return NextResponse.json({ tag }, { status: 201 });
     } catch (err) {
         console.error("[POST /api/lms/tags]", err);

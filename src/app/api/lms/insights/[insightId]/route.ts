@@ -28,10 +28,7 @@ export async function PATCH(
     { params }: { params: Promise<{ insightId: string }> },
 ) {
     const { insightId } = await params;
-    const { orgId, userId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
+    const { userId } = getRequestContext(request.headers);
     const parsed = schema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
         return NextResponse.json({ error: "Invalid body" }, { status: 400 });
@@ -53,7 +50,6 @@ export async function PATCH(
         const { data, error } = await lmsAdmin
             .from("lms_insights_feed")
             .update(update)
-            .eq("org_id", orgId)
             .eq("id", insightId)
             .select("*")
             .single();

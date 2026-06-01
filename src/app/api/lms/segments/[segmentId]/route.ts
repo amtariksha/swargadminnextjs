@@ -6,7 +6,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import {
     deleteSegment,
     getSegment,
@@ -22,16 +21,12 @@ const patchSchema = z.object({
 });
 
 export async function GET(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ segmentId: string }> },
 ) {
     const { segmentId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     try {
-        const segment = await getSegment({ orgId, segmentId });
+        const segment = await getSegment({ segmentId });
         if (!segment) {
             return NextResponse.json({ error: "Segment not found" }, { status: 404 });
         }
@@ -50,10 +45,6 @@ export async function PATCH(
     { params }: { params: Promise<{ segmentId: string }> },
 ) {
     const { segmentId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     const parsed = patchSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
         return NextResponse.json(
@@ -83,7 +74,7 @@ export async function PATCH(
         if (parsed.data.isDynamic !== undefined)
             patchPayload.isDynamic = parsed.data.isDynamic;
 
-        const segment = await updateSegment({ orgId, segmentId, patch: patchPayload });
+        const segment = await updateSegment({ segmentId, patch: patchPayload });
         return NextResponse.json({ segment });
     } catch (err) {
         console.error("[PATCH /api/lms/segments/:id]", err);
@@ -95,16 +86,12 @@ export async function PATCH(
 }
 
 export async function DELETE(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ segmentId: string }> },
 ) {
     const { segmentId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     try {
-        await deleteSegment({ orgId, segmentId });
+        await deleteSegment({ segmentId });
         return NextResponse.json({ ok: true });
     } catch (err) {
         console.error("[DELETE /api/lms/segments/:id]", err);

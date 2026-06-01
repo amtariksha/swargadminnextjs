@@ -5,7 +5,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import {
     addToInnerCircle,
     removeFromInnerCircle,
@@ -18,14 +17,9 @@ export async function POST(
     { params }: { params: Promise<{ customerId: string }> },
 ) {
     const { customerId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     const parsed = addSchema.safeParse(await request.json().catch(() => ({})));
     try {
         const member = await addToInnerCircle({
-            orgId,
             customerId,
             tier: parsed.success ? parsed.data.tier : undefined,
         });
@@ -40,16 +34,12 @@ export async function POST(
 }
 
 export async function DELETE(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ customerId: string }> },
 ) {
     const { customerId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     try {
-        await removeFromInnerCircle({ orgId, customerId });
+        await removeFromInnerCircle({ customerId });
         return NextResponse.json({ ok: true });
     } catch (err) {
         console.error("[DELETE /api/lms/inner-circle/:id]", err);

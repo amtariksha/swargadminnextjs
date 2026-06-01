@@ -14,24 +14,16 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { getConsentHistory } from "@/lib/lms/consent/service";
 
 export async function GET(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ customerId: string }> },
 ) {
     const { customerId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json(
-            { error: "Missing org context" },
-            { status: 400 },
-        );
-    }
 
     try {
-        const history = await getConsentHistory({ orgId, customerId });
+        const history = await getConsentHistory({ customerId });
         return NextResponse.json({ customerId, count: history.length, history });
     } catch (err) {
         console.error("[GET /api/lms/consent/audit/:id]", err);

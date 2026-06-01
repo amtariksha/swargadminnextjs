@@ -7,14 +7,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { lmsAdmin } from "@/lib/lms/supabase";
 
 export async function GET(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     const sp = new URL(request.url).searchParams;
     const limit = Math.min(Math.max(parseInt(sp.get("limit") ?? "100", 10), 1), 500);
     const purpose = sp.get("purpose");
@@ -23,7 +18,6 @@ export async function GET(request: NextRequest) {
         let q = lmsAdmin
             .from("lms_routing_audit")
             .select("*", { count: "exact" })
-            .eq("org_id", orgId)
             .order("created_at", { ascending: false })
             .limit(limit);
         if (purpose) q = q.eq("purpose", purpose);

@@ -10,7 +10,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import {
     getEffectiveConsents,
     hashIp,
@@ -55,21 +54,13 @@ const recordSchema = z.object({
 // ─── GET ─────────────────────────────────────────────────────────────────
 
 export async function GET(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ customerId: string }> },
 ) {
     const { customerId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-
-    if (!orgId) {
-        return NextResponse.json(
-            { error: "Missing org context" },
-            { status: 400 },
-        );
-    }
 
     try {
-        const consents = await getEffectiveConsents({ orgId, customerId });
+        const consents = await getEffectiveConsents({ customerId });
         return NextResponse.json({ customerId, consents });
     } catch (err) {
         console.error("[GET /api/lms/consent/:id]", err);
@@ -87,13 +78,6 @@ export async function POST(
     { params }: { params: Promise<{ customerId: string }> },
 ) {
     const { customerId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json(
-            { error: "Missing org context" },
-            { status: 400 },
-        );
-    }
 
     const json = await request.json().catch(() => null);
     const parsed = recordSchema.safeParse(json);
@@ -117,7 +101,6 @@ export async function POST(
 
     try {
         const record = await recordConsent({
-            orgId,
             customerId,
             purpose: body.purpose,
             granted: body.granted,

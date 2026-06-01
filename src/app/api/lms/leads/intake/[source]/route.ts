@@ -127,21 +127,9 @@ export async function POST(
         );
     }
 
-    // ── Resolve tenant ─────────────────────────────────────────────────
-    // Phase B will replace this with per-domain → tenant_code → org_id
-    // resolution. Day 1 is single-tenant.
-    const orgId = process.env.WACRM_ORG_ID;
-    if (!orgId) {
-        return NextResponse.json(
-            { error: "Service misconfigured — WACRM_ORG_ID not set" },
-            { status: 503 },
-        );
-    }
-
     // ── Persist ───────────────────────────────────────────────────────
     try {
         const result = await createLead({
-            orgId,
             source,
             sourceDetails: {
                 ...(parsed.data.metadata ?? {}),
@@ -183,7 +171,6 @@ export async function POST(
             if (!purpose) continue;
             try {
                 await recordConsent({
-                    orgId,
                     customerId: result.lead.id, // stand-in until conversion re-tags
                     purpose: purpose as Parameters<typeof recordConsent>[0]["purpose"],
                     granted: parsed.data.marketingConsentGranted,

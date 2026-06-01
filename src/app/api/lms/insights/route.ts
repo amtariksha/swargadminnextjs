@@ -6,19 +6,13 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { lmsAdmin } from "@/lib/lms/supabase";
 
-export async function GET(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
+export async function GET(_request: NextRequest) {
     try {
         const { data, error } = await lmsAdmin
             .from("lms_insights_feed")
             .select("*")
-            .eq("org_id", orgId)
             .eq("state", "pending")
             .gt("expires_at", new Date().toISOString())
             .order("priority", { ascending: false })

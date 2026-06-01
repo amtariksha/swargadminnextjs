@@ -24,10 +24,12 @@ import {
 
 /** Read the latest record per purpose for one customer. */
 export async function getEffectiveConsents(args: {
-    orgId: string;
     customerId: string;
+    /** Accepted but ignored — single internal org (see ORG_ID). Kept so the
+     *  out-of-scope /api/agent-tools callers compile unchanged. */
+    orgId?: string;
 }): Promise<CustomerConsentMap> {
-    const { orgId, customerId } = args;
+    const { customerId } = args;
 
     // Pull every consent row for this customer, ordered newest-first.
     // We compute "effective" client-side by taking first occurrence per purpose
@@ -38,7 +40,6 @@ export async function getEffectiveConsents(args: {
         .select(
             "id, org_id, customer_id, purpose, granted, source, notice_version, language, granted_at, withdrawn_at, created_at",
         )
-        .eq("org_id", orgId)
         .eq("customer_id", customerId)
         .order("created_at", { ascending: false });
 
@@ -77,7 +78,6 @@ export async function getEffectiveConsents(args: {
 
 /** Convenience: just check if a specific purpose is currently granted. */
 export async function hasConsent(args: {
-    orgId: string;
     customerId: string;
     purpose: ConsentPurpose;
 }): Promise<boolean> {
@@ -87,13 +87,11 @@ export async function hasConsent(args: {
 
 /** Full history for DSAR fulfilment + audit. Returns newest-first. */
 export async function getConsentHistory(args: {
-    orgId: string;
     customerId: string;
 }): Promise<ConsentRecord[]> {
     const { data, error } = await lmsAdmin
         .from("lms_consent_records")
         .select("*")
-        .eq("org_id", args.orgId)
         .eq("customer_id", args.customerId)
         .order("created_at", { ascending: false });
 
@@ -110,7 +108,6 @@ export async function getConsentHistory(args: {
  * Append-only — this always INSERTs a new row, never UPDATEs.
  */
 export async function recordConsent(args: {
-    orgId: string;
     customerId: string;
     purpose: ConsentPurpose;
     granted: boolean;
@@ -120,10 +117,12 @@ export async function recordConsent(args: {
     ipHash?: string;
     userAgent?: string;
     evidenceBlob?: Record<string, unknown>;
+    /** Accepted but ignored — single internal org (see ORG_ID). Kept so the
+     *  out-of-scope /api/agent-tools callers compile unchanged. */
+    orgId?: string;
 }): Promise<ConsentRecord> {
     const now = new Date().toISOString();
     const row = {
-        org_id: args.orgId,
         customer_id: args.customerId,
         purpose: args.purpose,
         granted: args.granted,
@@ -156,7 +155,6 @@ export async function recordConsent(args: {
  * and the "Withdraw all marketing consent" button in the Preference Center.
  */
 export async function withdrawAllMarketing(args: {
-    orgId: string;
     customerId: string;
     source: ConsentSource;
     noticeVersion: string;
@@ -164,6 +162,9 @@ export async function withdrawAllMarketing(args: {
     ipHash?: string;
     userAgent?: string;
     evidenceBlob?: Record<string, unknown>;
+    /** Accepted but ignored — single internal org (see ORG_ID). Kept so the
+     *  out-of-scope /api/agent-tools callers compile unchanged. */
+    orgId?: string;
 }): Promise<ConsentRecord[]> {
     const written: ConsentRecord[] = [];
     for (const purpose of MARKETING_PURPOSES) {

@@ -51,10 +51,6 @@ const createSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     const sp = new URL(request.url).searchParams;
     const status = sp.get("status") as (LeadStatus | "all") | null;
     const source = sp.get("source") as (LeadSource | "all") | null;
@@ -66,7 +62,7 @@ export async function GET(request: NextRequest) {
     const offset = sp.get("offset") ? parseInt(sp.get("offset") ?? "0", 10) : undefined;
 
     try {
-        const result = await listLeads(orgId, {
+        const result = await listLeads({
             status: status && STATUSES.includes(status) ? status : "all",
             source: source && (SOURCES.includes(source as LeadSource) || source === "all")
                 ? source
@@ -89,10 +85,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-    const { orgId, userId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
+    const { userId } = getRequestContext(request.headers);
     const parsed = createSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
         return NextResponse.json(
@@ -102,7 +95,6 @@ export async function POST(request: NextRequest) {
     }
     try {
         const result = await createLead({
-            orgId,
             source: parsed.data.source,
             sourceDetails: parsed.data.sourceDetails,
             name: parsed.data.name,

@@ -42,24 +42,21 @@ export interface SegmentSampleContact {
 
 // ─── Read ─────────────────────────────────────────────────────────────────
 
-export async function listSegments(args: { orgId: string }): Promise<Segment[]> {
+export async function listSegments(): Promise<Segment[]> {
     const { data, error } = await lmsAdmin
         .from("lms_segments")
         .select("*")
-        .eq("org_id", args.orgId)
         .order("name");
     if (error) throw new Error(`[segments] list failed: ${error.message}`);
     return (data ?? []).map(mapRow);
 }
 
 export async function getSegment(args: {
-    orgId: string;
     segmentId: string;
 }): Promise<Segment | null> {
     const { data, error } = await lmsAdmin
         .from("lms_segments")
         .select("*")
-        .eq("org_id", args.orgId)
         .eq("id", args.segmentId)
         .maybeSingle();
     if (error) throw new Error(`[segments] get failed: ${error.message}`);
@@ -69,7 +66,6 @@ export async function getSegment(args: {
 // ─── Write ────────────────────────────────────────────────────────────────
 
 export async function createSegment(args: {
-    orgId: string;
     name: string;
     description?: string;
     filterDsl: FilterNode;
@@ -79,7 +75,6 @@ export async function createSegment(args: {
     const { data, error } = await lmsAdmin
         .from("lms_segments")
         .insert({
-            org_id: args.orgId,
             name: args.name,
             description: args.description ?? null,
             filter_dsl: args.filterDsl as unknown,
@@ -93,7 +88,6 @@ export async function createSegment(args: {
 }
 
 export async function updateSegment(args: {
-    orgId: string;
     segmentId: string;
     patch: Partial<{
         name: string;
@@ -111,7 +105,6 @@ export async function updateSegment(args: {
     const { data, error } = await lmsAdmin
         .from("lms_segments")
         .update(update)
-        .eq("org_id", args.orgId)
         .eq("id", args.segmentId)
         .select("*")
         .single();
@@ -120,13 +113,11 @@ export async function updateSegment(args: {
 }
 
 export async function deleteSegment(args: {
-    orgId: string;
     segmentId: string;
 }): Promise<void> {
     const { error } = await lmsAdmin
         .from("lms_segments")
         .delete()
-        .eq("org_id", args.orgId)
         .eq("id", args.segmentId);
     if (error) throw new Error(`[segments] delete failed: ${error.message}`);
 }
@@ -134,13 +125,11 @@ export async function deleteSegment(args: {
 // ─── Preview + Recompute ──────────────────────────────────────────────────
 
 export async function previewSegment(args: {
-    orgId: string;
     filter: FilterNode;
     sampleLimit?: number;
 }): Promise<SegmentPreview> {
     const limit = args.sampleLimit ?? 20;
     const evaluation = await evaluateSegment({
-        orgId: args.orgId,
         filter: args.filter,
         sampleLimit: limit,
     });
@@ -179,17 +168,14 @@ export async function previewSegment(args: {
  * diff-based add/remove to avoid churning the table.
  */
 export async function recomputeSegment(args: {
-    orgId: string;
     segmentId: string;
 }): Promise<{ count: number; computedAt: string }> {
     const segment = await getSegment({
-        orgId: args.orgId,
         segmentId: args.segmentId,
     });
     if (!segment) throw new Error(`Segment ${args.segmentId} not found`);
 
     const evaluation = await evaluateSegment({
-        orgId: args.orgId,
         filter: segment.filterDsl,
     });
     const computedAt = new Date().toISOString();
@@ -225,7 +211,6 @@ export async function recomputeSegment(args: {
             estimated_size: evaluation.count,
             last_computed_at: computedAt,
         })
-        .eq("org_id", args.orgId)
         .eq("id", args.segmentId);
 
     return { count: evaluation.count, computedAt };

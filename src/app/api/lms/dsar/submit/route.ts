@@ -33,10 +33,8 @@ const bodySchema = z
         contactEmail: z.string().email().optional(),
         details: z.string().max(2000).optional(),
         /**
-         * Org code (e.g. "swarg") for routing the request to the right
-         * tenant when this endpoint is hit publicly. Maps to org_id via
-         * the same tenant resolver Phase B will introduce. For day-1
-         * single tenant, fallback to env WACRM_ORG_ID.
+         * Accepted for forward-compat but currently ignored — LMS runs as a
+         * single internal org (see ORG_ID in src/lib/whatsapp/request.ts).
          */
         orgCode: z.string().optional(),
     })
@@ -55,20 +53,8 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    // Single-tenant resolution for now. When Phase B's tenant resolver lands,
-    // swap this for a tenant_code → wacrm_org_id lookup that takes
-    // parsed.data.orgCode (or derives from request host) into account.
-    const orgId = process.env.WACRM_ORG_ID;
-    if (!orgId) {
-        return NextResponse.json(
-            { error: "Service misconfigured — WACRM_ORG_ID not set" },
-            { status: 503 },
-        );
-    }
-
     try {
         const dsar = await submitDsar({
-            orgId,
             contactPhone: parsed.data.contactPhone,
             contactEmail: parsed.data.contactEmail,
             requestType: parsed.data.requestType,

@@ -3,17 +3,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { listInnerCircle } from "@/lib/lms/referrals/service";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 
-export async function GET(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
+export async function GET(_request: NextRequest) {
     try {
-        const members = await listInnerCircle({ orgId });
+        const members = await listInnerCircle();
         if (members.length === 0) {
             return NextResponse.json({ count: 0, members: [] });
         }

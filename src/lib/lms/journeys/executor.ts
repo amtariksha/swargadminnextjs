@@ -1,7 +1,7 @@
 /**
  * Journey executor — advances one journey_run by one or more steps.
  *
- * The scheduler (Vercel Cron, every minute) calls `tickAllDue(orgId)`
+ * The scheduler (Vercel Cron, every minute) calls `tickAllDue()`
  * which fetches all runs with next_action_at <= now() and processes
  * them. Operators / agents can also call `advanceRun(runId)` to nudge
  * a stuck run manually.
@@ -40,6 +40,7 @@ import {
 import { assignTag, unassignTag } from "@/lib/lms/tags/service";
 import { hasConsent } from "@/lib/lms/consent/service";
 import { routeSend, type Purpose } from "@/lib/whatsapp/router";
+import { ORG_ID } from "@/lib/whatsapp/request";
 
 interface JourneyRunRow {
     id: string;
@@ -55,7 +56,6 @@ interface JourneyRunRow {
 
 interface JourneyRow {
     id: string;
-    org_id: string;
     name: string;
     dsl: JourneyDsl;
     is_active: boolean;
@@ -68,7 +68,7 @@ const MAX_STEPS_PER_TICK = 10;
 
 // ─── Public entry points ──────────────────────────────────────────────────
 
-export async function tickAllDue(args: { orgId: string }): Promise<{
+export async function tickAllDue(): Promise<{
     processed: number;
     errors: number;
     durationMs: number;
@@ -88,7 +88,7 @@ export async function tickAllDue(args: { orgId: string }): Promise<{
     let errors = 0;
     for (const run of runs) {
         try {
-            await advanceRun({ orgId: args.orgId, runId: run.id });
+            await advanceRun({ runId: run.id });
             processed += 1;
         } catch (err) {
             errors += 1;
@@ -99,7 +99,6 @@ export async function tickAllDue(args: { orgId: string }): Promise<{
 }
 
 export async function advanceRun(args: {
-    orgId: string;
     runId: string;
 }): Promise<void> {
     const run = await fetchRun(args.runId);
@@ -131,7 +130,6 @@ export async function advanceRun(args: {
         // ── Step dispatch ──────────────────────────────────────────────
         if (step.type === "send_template") {
             await executeSendTemplate({
-                orgId: journey.org_id,
                 run,
                 step,
             });
@@ -160,7 +158,7 @@ export async function advanceRun(args: {
         }
 
         if (step.type === "tag") {
-            await executeTag({ orgId: journey.org_id, run, step });
+            await executeTag({ run, step });
             const next = nextStepAfter(journey.dsl, step.id);
             if (!next) {
                 await markExit(run.id, "completed");
@@ -173,7 +171,6 @@ export async function advanceRun(args: {
 
         if (step.type === "branch") {
             const truthy = await evaluateCondition({
-                orgId: journey.org_id,
                 customerId: run.customer_id,
                 cond: step.condition,
             });
@@ -184,7 +181,6 @@ export async function advanceRun(args: {
 
         if (step.type === "enroll_in") {
             await enrollInOther({
-                orgId: journey.org_id,
                 customerId: run.customer_id,
                 journeyName: step.journeyName,
             });
@@ -210,13 +206,11 @@ export async function advanceRun(args: {
 // ─── Step implementations ─────────────────────────────────────────────────
 
 async function executeSendTemplate(args: {
-    orgId: string;
     run: JourneyRunRow;
     step: Extract<JourneyStep, { type: "send_template" }>;
 }): Promise<void> {
     // 1. Consent check — silently skip if the customer hasn't granted.
     const granted = await hasConsent({
-        orgId: args.orgId,
         customerId: args.run.customer_id,
         purpose: args.step.requiresConsent,
     });
@@ -244,7 +238,7 @@ async function executeSendTemplate(args: {
     let routed;
     try {
         routed = await routeSend({
-            orgId: args.orgId,
+            orgId: ORG_ID,
             purpose: args.step.purpose as Purpose,
         });
     } catch (err) {
@@ -266,15 +260,13 @@ async function executeSendTemplate(args: {
 }
 
 async function executeTag(args: {
-    orgId: string;
     run: JourneyRunRow;
     step: Extract<JourneyStep, { type: "tag" }>;
 }): Promise<void> {
-    // Resolve tagId by (org_id, namespace, name).
+    // Resolve tagId by (namespace, name).
     const { data: tag, error } = await lmsAdmin
         .from("lms_tags")
         .select("id")
-        .eq("org_id", args.orgId)
         .eq("namespace", args.step.namespace)
         .eq("name", args.step.tagName)
         .maybeSingle();
@@ -305,7 +297,6 @@ async function executeTag(args: {
 }
 
 async function evaluateCondition(args: {
-    orgId: string;
     customerId: string;
     cond: BranchCondition;
 }): Promise<boolean> {
@@ -314,7 +305,6 @@ async function evaluateCondition(args: {
             const { data } = await lmsAdmin
                 .from("lms_rfm_scores")
                 .select("segment")
-                .eq("org_id", args.orgId)
                 .eq("customer_id", args.customerId)
                 .maybeSingle();
             return data ? args.cond.segments.includes(data.segment) : false;
@@ -323,7 +313,6 @@ async function evaluateCondition(args: {
             const { data } = await lmsAdmin
                 .from("v_lms_customer_tags_flat")
                 .select("customer_id")
-                .eq("org_id", args.orgId)
                 .eq("customer_id", args.customerId)
                 .eq("tag_name", args.cond.tag)
                 .eq("effective", true)
@@ -332,7 +321,6 @@ async function evaluateCondition(args: {
         }
         case "consent_granted": {
             return hasConsent({
-                orgId: args.orgId,
                 customerId: args.customerId,
                 purpose: args.cond.purpose,
             });
@@ -341,14 +329,12 @@ async function evaluateCondition(args: {
 }
 
 async function enrollInOther(args: {
-    orgId: string;
     customerId: string;
     journeyName: string;
 }): Promise<void> {
     const { data: target, error } = await lmsAdmin
         .from("lms_journeys")
         .select("id, dsl, is_active")
-        .eq("org_id", args.orgId)
         .eq("name", args.journeyName)
         .eq("is_active", true)
         .order("version", { ascending: false })
@@ -384,7 +370,7 @@ async function fetchRun(runId: string): Promise<JourneyRunRow | null> {
 async function fetchJourney(journeyId: string): Promise<JourneyRow | null> {
     const { data, error } = await lmsAdmin
         .from("lms_journeys")
-        .select("id, org_id, name, dsl, is_active, version")
+        .select("id, name, dsl, is_active, version")
         .eq("id", journeyId)
         .maybeSingle();
     if (error) throw new Error(`[journeys] fetchJourney: ${error.message}`);

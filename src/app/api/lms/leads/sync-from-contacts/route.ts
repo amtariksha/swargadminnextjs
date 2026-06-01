@@ -21,7 +21,6 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { lmsAdmin } from "@/lib/lms/supabase";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { createLead } from "@/lib/lms/leads/service";
@@ -37,18 +36,13 @@ interface SyncResult {
     durationMs: number;
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
     const startedAt = Date.now();
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
 
-    // ── Pull contacts for this org ────────────────────────────────────
+    // ── Pull all contacts ─────────────────────────────────────────────
     const { data: contacts, error: cErr } = await supabaseAdmin
         .from("contacts")
-        .select("id, name, phone, email, created_at")
-        .eq("org_id", orgId);
+        .select("id, name, phone, email, created_at");
     if (cErr) {
         return NextResponse.json(
             { error: `contacts fetch failed: ${cErr.message}` },
@@ -61,7 +55,6 @@ export async function POST(request: NextRequest) {
     const { data: existingLeads, error: lErr } = await lmsAdmin
         .from("lms_leads")
         .select("phone")
-        .eq("org_id", orgId)
         .not("phone", "is", null);
     if (lErr) {
         return NextResponse.json(
@@ -76,8 +69,7 @@ export async function POST(request: NextRequest) {
     // ── Pull conversation source per contact for CTWA attribution ─────
     const { data: convos, error: convErr } = await supabaseAdmin
         .from("conversations")
-        .select("contact_id, source, ctwa_clid")
-        .eq("org_id", orgId);
+        .select("contact_id, source, ctwa_clid");
     if (convErr) {
         console.warn("[leads/sync] conversation lookup failed (non-fatal):", convErr.message);
     }
@@ -107,7 +99,6 @@ export async function POST(request: NextRequest) {
         const ctwa = ctwaByContact.get(contact.id as string);
         try {
             const result = await createLead({
-                orgId,
                 source: "whatsapp",
                 phone,
                 name: (contact.name as string) ?? undefined,

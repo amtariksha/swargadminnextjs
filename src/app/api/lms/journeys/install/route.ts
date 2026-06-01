@@ -13,7 +13,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { findTemplate, JOURNEY_TEMPLATES } from "@/lib/lms/journeys/templates";
 import { getJourneyByName, upsertJourney } from "@/lib/lms/journeys/service";
 
@@ -23,10 +22,6 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     const parsed = bodySchema.safeParse(await request.json().catch(() => ({})));
     if (!parsed.success) {
         return NextResponse.json({ error: "Invalid body" }, { status: 400 });
@@ -43,7 +38,7 @@ export async function POST(request: NextRequest) {
             continue;
         }
         try {
-            const existing = await getJourneyByName({ orgId, name });
+            const existing = await getJourneyByName({ name });
             // Skip if existing version's DSL matches AND not overwriting.
             if (existing && !parsed.data.overwriteLatest) {
                 const sameDsl =
@@ -54,7 +49,6 @@ export async function POST(request: NextRequest) {
                 }
             }
             await upsertJourney({
-                orgId,
                 name,
                 triggerEvent: template.dsl.trigger,
                 dsl: template.dsl,

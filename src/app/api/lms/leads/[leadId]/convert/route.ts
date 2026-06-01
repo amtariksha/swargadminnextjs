@@ -14,7 +14,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { convertLead } from "@/lib/lms/leads/service";
 
 const bodySchema = z.object({
@@ -26,10 +25,6 @@ export async function POST(
     { params }: { params: Promise<{ leadId: string }> },
 ) {
     const { leadId } = await params;
-    const { orgId } = getRequestContext(request.headers);
-    if (!orgId) {
-        return NextResponse.json({ error: "Missing org context" }, { status: 400 });
-    }
     const parsed = bodySchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
         return NextResponse.json(
@@ -39,7 +34,6 @@ export async function POST(
     }
     try {
         const lead = await convertLead({
-            orgId,
             leadId,
             convertedCustomerId: parsed.data.customerId,
         });

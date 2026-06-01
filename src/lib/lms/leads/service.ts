@@ -25,7 +25,6 @@ import {
 // ─── Read ─────────────────────────────────────────────────────────────────
 
 export async function listLeads(
-    orgId: string,
     filters: LeadFilters = {},
 ): Promise<LeadListResponse> {
     const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
@@ -34,7 +33,6 @@ export async function listLeads(
     let q = lmsAdmin
         .from("lms_leads")
         .select("*", { count: "exact" })
-        .eq("org_id", orgId)
         .order("first_touch_at", { ascending: false })
         .range(offset, offset + limit - 1);
 
@@ -63,13 +61,11 @@ export async function listLeads(
 }
 
 export async function getLead(args: {
-    orgId: string;
     leadId: string;
 }): Promise<Lead | null> {
     const { data, error } = await lmsAdmin
         .from("lms_leads")
         .select("*")
-        .eq("org_id", args.orgId)
         .eq("id", args.leadId)
         .maybeSingle();
     if (error) throw new Error(`[leads] get failed: ${error.message}`);
@@ -79,7 +75,6 @@ export async function getLead(args: {
 // ─── Write ────────────────────────────────────────────────────────────────
 
 export async function createLead(args: {
-    orgId: string;
     source: LeadSource;
     sourceDetails?: Record<string, unknown>;
     name?: string;
@@ -91,16 +86,18 @@ export async function createLead(args: {
     tags?: string[];
     notes?: string;
     metadata?: Record<string, unknown>;
+    /** Accepted but ignored — single internal org (see ORG_ID). Kept so the
+     *  out-of-scope /api/agent-tools callers compile unchanged. */
+    orgId?: string;
 }): Promise<{ lead: Lead; deduped: boolean }> {
     const cleanPhone = args.phone ? normalisePhone(args.phone) : null;
 
-    // Idempotency check: if there's an OPEN lead for this phone in this org,
+    // Idempotency check: if there's an OPEN lead for this phone,
     // touch it instead of inserting a new row.
     if (cleanPhone) {
         const { data: existing, error: lookupErr } = await lmsAdmin
             .from("lms_leads")
             .select("*")
-            .eq("org_id", args.orgId)
             .eq("phone", cleanPhone)
             .not("status", "in", "(converted,lost,duplicate)")
             .order("first_touch_at", { ascending: false })
@@ -138,7 +135,6 @@ export async function createLead(args: {
     const { data, error } = await lmsAdmin
         .from("lms_leads")
         .insert({
-            org_id: args.orgId,
             source: args.source,
             source_details: args.sourceDetails ?? null,
             name: args.name ?? null,
@@ -159,7 +155,6 @@ export async function createLead(args: {
 }
 
 export async function updateLead(args: {
-    orgId: string;
     leadId: string;
     patch: Partial<
         Pick<
@@ -191,7 +186,6 @@ export async function updateLead(args: {
     const { data, error } = await lmsAdmin
         .from("lms_leads")
         .update(update)
-        .eq("org_id", args.orgId)
         .eq("id", args.leadId)
         .select("*")
         .single();
@@ -200,7 +194,6 @@ export async function updateLead(args: {
 }
 
 export async function convertLead(args: {
-    orgId: string;
     leadId: string;
     convertedCustomerId: string;
 }): Promise<Lead> {
@@ -213,7 +206,6 @@ export async function convertLead(args: {
             converted_at: now,
             last_activity_at: now,
         })
-        .eq("org_id", args.orgId)
         .eq("id", args.leadId)
         .select("*")
         .single();
@@ -222,13 +214,11 @@ export async function convertLead(args: {
 }
 
 export async function deleteLead(args: {
-    orgId: string;
     leadId: string;
 }): Promise<void> {
     const { error } = await lmsAdmin
         .from("lms_leads")
         .delete()
-        .eq("org_id", args.orgId)
         .eq("id", args.leadId);
     if (error) throw new Error(`[leads] delete failed: ${error.message}`);
 }
