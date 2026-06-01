@@ -318,7 +318,6 @@ export async function POST(request: NextRequest) {
                 media_url: mediaUrl,
                 source: isEchoMessage ? "mobile_app" : "customer",
                 created_at: timestamp,
-                org_id: orgId,
             });
 
             if (isEchoMessage) {

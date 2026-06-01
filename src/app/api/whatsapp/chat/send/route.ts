@@ -359,7 +359,6 @@ export async function POST(request: NextRequest) {
             request_id: providerMessageId,
             external_id: providerMessageId,
             source: "webapp",
-            org_id: orgId,
             failure_reason: finalStatus === "failed" ? failureReason : null,
             failed_at: finalStatus === "failed" ? new Date().toISOString() : null,
         })

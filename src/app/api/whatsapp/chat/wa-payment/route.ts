@@ -142,7 +142,6 @@ export async function POST(request: NextRequest) {
                 body: `💳 Payment request: ${itemsSummary} (Total: ₹${totalAmount.toFixed(2)})`,
                 status: response.ok ? "sent" : "failed",
                 source: "webapp",
-                org_id: orgId,
                 integrated_number: integratedNumber.replace(/^\+/, ""),
                 failure_reason: response.ok ? null : `MSG91 HTTP ${response.status}: ${responseText}`.slice(0, 1000),
                 failed_at: response.ok ? null : new Date().toISOString(),

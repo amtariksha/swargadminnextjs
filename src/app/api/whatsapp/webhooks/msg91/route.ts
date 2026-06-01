@@ -36,6 +36,7 @@ export async function POST(request: NextRequest) {
         const receiverNumber =
             body.to ||
             body.receiver ||
+            body.integratedNumber ||
             body.integrated_number ||
             "";
         let messageBody =
@@ -546,7 +547,6 @@ export async function POST(request: NextRequest) {
             template_name: msgTemplateName,
             status: isExternalOutbound ? "sent" : "delivered",
             source: messageSource,
-            org_id: orgId,
         };
 
         if (locationData) {
