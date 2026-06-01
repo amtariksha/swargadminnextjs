@@ -52,6 +52,12 @@ export default function DayOrdersPage() {
                 <div>
                     <div className="text-white">{o.customer_name}</div>
                     <div className="text-xs text-slate-500">{o.customer_phone}</div>
+                    {o.entry_type === 'morning_backup' && (
+                        <span className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[10px] font-medium"
+                            title="Recovered from an undelivered morning order — already paid, not a sales-exec order">
+                            Morning recovery
+                        </span>
+                    )}
                 </div>
             ),
         },
