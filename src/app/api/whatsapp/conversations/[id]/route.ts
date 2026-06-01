@@ -58,18 +58,9 @@ export async function GET(
         );
     }
 
-    // Fetch assigned user info if assigned
-    let assignedUser = undefined;
-    if (conv.assigned_to) {
-        const { data: user } = await supabaseAdmin
-            .from("users")
-            .select("id, name")
-            .eq("id", conv.assigned_to)
-            .single();
-        if (user) {
-            assignedUser = { id: user.id, name: user.name };
-        }
-    }
+    // Assignee is an admin-panel user (sourced via the backend REST API, a
+    // separate DB) — the display name is denormalized onto the conversation,
+    // so there's no local users-table lookup here.
 
     // Fetch messages for this conversation (org-scoped)
     let msgQuery = supabaseAdmin
@@ -97,7 +88,7 @@ export async function GET(
         status: conv.status,
         assignedTo: conv.assigned_to || undefined,
         assignedAt: conv.assigned_at || undefined,
-        assignedUser,
+        assignedName: conv.assigned_name || undefined,
         lastMessage: conv.last_message || "",
         lastMessageTime: conv.last_message_time,
         lastIncomingTimestamp:
@@ -124,9 +115,11 @@ export async function PATCH(
     if (body.status) updateData.status = body.status;
     if (body.unreadCount !== undefined) updateData.unread_count = body.unreadCount;
 
-    // Handle assignment
+    // Handle assignment — assigned_to is the admin-panel user id; assigned_name
+    // is the denormalized display name (cleared on unassign).
     if (body.assigned_to !== undefined) {
         updateData.assigned_to = body.assigned_to;
+        updateData.assigned_name = body.assigned_to ? (body.assigned_name ?? null) : null;
         updateData.assigned_at = body.assigned_to ? new Date().toISOString() : null;
     }
 
@@ -150,19 +143,6 @@ export async function PATCH(
         );
     }
 
-    // Fetch assigned user info
-    let assignedUser = undefined;
-    if (data.assigned_to) {
-        const { data: user } = await supabaseAdmin
-            .from("users")
-            .select("id, name")
-            .eq("id", data.assigned_to)
-            .single();
-        if (user) {
-            assignedUser = { id: user.id, name: user.name };
-        }
-    }
-
     const contact =
         data.contacts && typeof data.contacts === "object"
             ? mapContact(data.contacts as Record<string, unknown>)
@@ -176,7 +156,7 @@ export async function PATCH(
         status: data.status,
         assignedTo: data.assigned_to || undefined,
         assignedAt: data.assigned_at || undefined,
-        assignedUser,
+        assignedName: data.assigned_name || undefined,
         lastMessage: data.last_message || "",
         lastMessageTime: data.last_message_time,
         lastIncomingTimestamp:

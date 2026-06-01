@@ -50,6 +50,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const search = searchParams.get("search")?.toLowerCase();
+    const integratedNumber = searchParams.get("integratedNumber");
 
     let query = supabaseAdmin
         .from("conversations")
@@ -62,6 +63,11 @@ export async function GET(request: NextRequest) {
 
     if (status && status !== "all") {
         query = query.eq("status", status);
+    }
+
+    // Per-number inbox: each business number has its own inbox route.
+    if (integratedNumber) {
+        query = query.eq("integrated_number", integratedNumber);
     }
 
     if (search) {
@@ -96,12 +102,29 @@ export async function POST(request: NextRequest) {
 
     const effectiveOrgId = isSuperAdmin && body.orgId ? body.orgId : orgId;
 
+    // Resolve the business number this conversation belongs to. The per-number
+    // inbox passes it explicitly; if it's missing, fall back to the org's first
+    // active number rather than the old "919999999999" placeholder (which would
+    // make the conversation invisible to every per-number inbox filter).
+    let integratedNumber: string | null = body.integratedNumber || null;
+    if (!integratedNumber) {
+        const { data: firstNumber } = await supabaseAdmin
+            .from("integrated_numbers")
+            .select("number")
+            .eq("org_id", effectiveOrgId)
+            .eq("active", true)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+        integratedNumber = firstNumber?.number || null;
+    }
+
     const { data, error } = await supabaseAdmin
         .from("conversations")
         .insert({
             org_id: effectiveOrgId,
             contact_id: body.contactId,
-            integrated_number: body.integratedNumber || "919999999999",
+            integrated_number: integratedNumber,
             status: "open",
             last_message: "",
             last_message_time: new Date().toISOString(),

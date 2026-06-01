@@ -13,6 +13,13 @@ import {
     DialogTitle,
     DialogDescription,
 } from "@/components/whatsapp/ui/dialog";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/whatsapp/ui/select";
 import { useCreatePayment } from "@/lib/whatsapp/hooks";
 import { useAppStore } from "@/lib/whatsapp/store";
 
@@ -36,12 +43,14 @@ export function PaymentLinkDialog({
 }: PaymentLinkDialogProps) {
     const { mutate: createPayment, isPending } = useCreatePayment();
     const activeNumber = useAppStore((s) => s.activeNumber);
+    const numbers = useAppStore((s) => s.numbers);
 
     const [name, setName] = useState(initialName || "");
     const [phone, setPhone] = useState(initialPhone || "");
     const [amount, setAmount] = useState("");
     const [description, setDescription] = useState("");
     const [sendViaWA, setSendViaWA] = useState(true);
+    const [selectedNumber, setSelectedNumber] = useState(activeNumber?.number || "");
 
     // Reset form when dialog opens with new props
     useEffect(() => {
@@ -51,8 +60,9 @@ export function PaymentLinkDialog({
             setAmount("");
             setDescription("");
             setSendViaWA(true);
+            setSelectedNumber(activeNumber?.number || numbers[0]?.number || "");
         }
-    }, [open, initialName, initialPhone]);
+    }, [open, initialName, initialPhone, activeNumber, numbers]);
 
     const canSubmit =
         name.trim() && phone.trim() && amount && parseFloat(amount) > 0;
@@ -68,7 +78,7 @@ export function PaymentLinkDialog({
                 description: description.trim() || undefined,
                 contactId: contactId || undefined,
                 conversationId: conversationId || undefined,
-                integratedNumber: activeNumber?.number || undefined,
+                integratedNumber: selectedNumber || activeNumber?.number || numbers[0]?.number || undefined,
                 sendViaWhatsApp: sendViaWA,
             },
             {
@@ -98,6 +108,26 @@ export function PaymentLinkDialog({
                 </DialogHeader>
 
                 <div className="space-y-4 mt-2">
+                    {numbers.length > 1 && (
+                        <div>
+                            <Label className="text-sm text-slate-700 mb-1.5 block">
+                                Send from
+                            </Label>
+                            <Select value={selectedNumber} onValueChange={setSelectedNumber}>
+                                <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Select number" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {numbers.map((num) => (
+                                        <SelectItem key={num.id} value={num.number}>
+                                            {num.label} (+{num.number})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
                     <div>
                         <Label className="text-sm text-slate-700 mb-1.5 block">
                             Contact Name *

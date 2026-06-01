@@ -68,9 +68,10 @@ export interface Conversation {
   contact: Contact;
   integratedNumber: string; // which WA number this conversation belongs to
   status: ConversationStatus;
-  assignedTo?: string;
+  assignedTo?: string; // admin-panel user id (String(admin.id))
   assignedAt?: string;
-  assignedUser?: { id: string; name: string };
+  assignedName?: string; // denormalized assignee display name
+
   lastMessage?: string;
   lastMessageTime: string;
   lastIncomingTimestamp: string;

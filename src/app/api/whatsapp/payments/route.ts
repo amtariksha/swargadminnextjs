@@ -225,7 +225,29 @@ export async function POST(request: NextRequest) {
 
     if (sendViaWhatsApp && shortUrl) {
         const msgAuthKey = await getAppSetting("msg91_auth_key", process.env.MSG91_AUTH_KEY || "", orgId);
-        const sendFromNumber = integratedNumber || "919999999999";
+        // Resolve the sender number: explicit > the conversation's number > the
+        // org's first active number. Never fall back to the "919999999999"
+        // placeholder — it isn't a registered MSG91 number and guarantees failure.
+        let sendFromNumber: string | null = integratedNumber || null;
+        if (!sendFromNumber && resolvedConversationId) {
+            const { data: convRow } = await supabaseAdmin
+                .from("conversations")
+                .select("integrated_number")
+                .eq("id", resolvedConversationId)
+                .maybeSingle();
+            sendFromNumber = convRow?.integrated_number || null;
+        }
+        if (!sendFromNumber) {
+            const { data: firstNumber } = await supabaseAdmin
+                .from("integrated_numbers")
+                .select("number")
+                .eq("org_id", orgId)
+                .eq("active", true)
+                .order("created_at", { ascending: true })
+                .limit(1)
+                .maybeSingle();
+            sendFromNumber = firstNumber?.number || null;
+        }
         const cleanPhone = phone.replace(/^\+/, "");
         const messageText = `💰 Payment Link\n\nAmount: ₹${amount.toLocaleString("en-IN")}\n${description ? `For: ${description}\n` : ""}\nPay here: ${shortUrl}`;
 

@@ -35,11 +35,11 @@ import {
     useConversation,
     useUpdateConversationStatus,
     useAssignConversation,
-    useUsers,
     useVoiceCall,
     useCTWALogForConversation,
     useMarkAsRead,
 } from "@/lib/whatsapp/hooks";
+import { useAssignableUsers } from "@/lib/whatsapp/use-assignable-users";
 import { useAppStore } from "@/lib/whatsapp/store";
 import { useAuth } from "@/components/whatsapp/auth-provider";
 import { MessageComposer } from "./message-composer";
@@ -474,7 +474,7 @@ export function ChatWindow({ className }: { className?: string }) {
     const assignConversation = useAssignConversation();
     const voiceCall = useVoiceCall();
     const activeNumber = useAppStore((s) => s.activeNumber);
-    const { data: users } = useUsers();
+    const { users } = useAssignableUsers();
     const { user: currentUser } = useAuth();
     const scrollRef = useRef<HTMLDivElement>(null);
     const [showAssignMenu, setShowAssignMenu] = useState(false);
@@ -532,10 +532,11 @@ export function ChatWindow({ className }: { className?: string }) {
     const isAssignedToMe = conversation.assignedTo === currentUser?.id;
     const isAdmin = currentUser?.role === "admin";
     const canClose = isAssignedToMe || isAdmin;
-    const activeUsers = users?.filter((u) => u.isActive) || [];
+    // Assignable agents = admin-panel users with WhatsApp access.
+    const activeUsers = users || [];
 
-    const handleAssign = (userId: string | null) => {
-        assignConversation.mutate({ id: conversation.id, userId });
+    const handleAssign = (userId: string | null, userName?: string | null) => {
+        assignConversation.mutate({ id: conversation.id, userId, userName });
         setShowAssignMenu(false);
     };
 
@@ -591,13 +592,13 @@ export function ChatWindow({ className }: { className?: string }) {
 
                 <div className="flex items-center gap-2 flex-shrink-0">
                     {/* Assigned badge */}
-                    {conversation.assignedUser && (
+                    {conversation.assignedName && (
                         <Badge
                             variant="secondary"
                             className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200"
                         >
                             <UserPlus className="w-3 h-3 mr-1" />
-                            {conversation.assignedUser.name}
+                            {conversation.assignedName}
                         </Badge>
                     )}
 
@@ -625,7 +626,10 @@ export function ChatWindow({ className }: { className?: string }) {
                                 {/* Assign to me */}
                                 {!isAssignedToMe && currentUser && (
                                     <button
-                                        onClick={() => handleAssign(currentUser.id)}
+                                        onClick={() => handleAssign(
+                                            currentUser.id,
+                                            activeUsers.find((u) => u.id === currentUser.id)?.name || currentUser.name
+                                        )}
                                         className="w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 text-emerald-700 font-medium flex items-center gap-2"
                                     >
                                         <UserPlus className="w-3.5 h-3.5" />
@@ -650,13 +654,15 @@ export function ChatWindow({ className }: { className?: string }) {
                                     .map((u) => (
                                         <button
                                             key={u.id}
-                                            onClick={() => handleAssign(u.id)}
+                                            onClick={() => handleAssign(u.id, u.name)}
                                             className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 text-slate-700"
                                         >
                                             {u.name}
-                                            <span className="text-xs text-slate-400 ml-1">
-                                                ({u.role})
-                                            </span>
+                                            {u.email && (
+                                                <span className="text-xs text-slate-400 ml-1">
+                                                    ({u.email})
+                                                </span>
+                                            )}
                                         </button>
                                     ))}
                             </div>

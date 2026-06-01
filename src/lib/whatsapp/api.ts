@@ -35,11 +35,13 @@ export async function getNumbers(): Promise<WhatsAppNumber[]> {
 // ─── Conversations ─────────────────────────────────────────
 export async function getConversations(
     status?: string,
-    search?: string
+    search?: string,
+    integratedNumber?: string
 ): Promise<Conversation[]> {
     const params = new URLSearchParams();
     if (status && status !== "all") params.set("status", status);
     if (search) params.set("search", search);
+    if (integratedNumber) params.set("integratedNumber", integratedNumber);
     const res = await wfetch(`${BASE_URL}/api/whatsapp/conversations?${params.toString()}`);
     if (!res.ok) throw new Error("Failed to fetch conversations");
     return res.json();
@@ -66,12 +68,13 @@ export async function updateConversationStatus(
 
 export async function assignConversation(
     id: string,
-    userId: string | null
+    userId: string | null,
+    userName?: string | null
 ): Promise<Conversation> {
     const res = await wfetch(`${BASE_URL}/api/whatsapp/conversations/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assigned_to: userId }),
+        body: JSON.stringify({ assigned_to: userId, assigned_name: userName ?? null }),
     });
     if (!res.ok) throw new Error("Failed to assign conversation");
     return res.json();

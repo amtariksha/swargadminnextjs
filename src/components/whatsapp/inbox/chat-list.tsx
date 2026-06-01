@@ -12,11 +12,11 @@ import { useAppStore } from "@/lib/whatsapp/store";
 import type { Conversation } from "@/lib/whatsapp/types";
 import { SessionTimer } from "./session-timer";
 
-export function ChatList({ className }: { className?: string }) {
+export function ChatList({ className, integratedNumber }: { className?: string; integratedNumber?: string }) {
     const [status, setStatus] = useState("all");
     const [search, setSearch] = useState("");
     const { activeConversationId, setActiveConversation } = useAppStore();
-    const { data: conversations, isLoading } = useConversations(status, search);
+    const { data: conversations, isLoading } = useConversations(status, search, integratedNumber);
 
     return (
         <div className={cn("flex-col h-full border-r border-slate-200 bg-white", className)}>

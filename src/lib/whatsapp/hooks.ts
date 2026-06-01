@@ -27,10 +27,10 @@ export function useNumbers() {
 }
 
 // ─── Conversations ─────────────────────────────────────────
-export function useConversations(status?: string, search?: string) {
+export function useConversations(status?: string, search?: string, integratedNumber?: string) {
     return useQuery({
-        queryKey: ["conversations", status, search],
-        queryFn: () => api.getConversations(status, search),
+        queryKey: ["conversations", status, search, integratedNumber],
+        queryFn: () => api.getConversations(status, search, integratedNumber),
         refetchInterval: 10000,
     });
 }
@@ -156,8 +156,8 @@ export function useAssignConversation() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, userId }: { id: string; userId: string | null }) =>
-            api.assignConversation(id, userId),
+        mutationFn: ({ id, userId, userName }: { id: string; userId: string | null; userName?: string | null }) =>
+            api.assignConversation(id, userId, userName),
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ["conversations"] });
             queryClient.invalidateQueries({ queryKey: ["conversation"] });
