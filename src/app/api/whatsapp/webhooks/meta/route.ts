@@ -330,7 +330,10 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({ success: true }, { status: 200 });
     } catch (error) {
-        console.error("Meta Webhook Error:", error);
-        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+        // Always acknowledge with 200 after a signature-verified request. Returning 5xx here risks
+        // Meta disabling the webhook subscription after sustained failures (same auto-pause class of
+        // outage we hit on MSG91). The signature check above already rejects unauthenticated calls.
+        console.error("[Meta Webhook] Unhandled error (acknowledged to avoid webhook disablement):", error);
+        return NextResponse.json({ received: true, error_logged: true }, { status: 200 });
     }
 }

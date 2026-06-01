@@ -114,9 +114,10 @@ export async function POST(request: NextRequest) {
 
         if (!senderPhone && !isDeliveryReport) {
             console.log("[MSG91 Webhook] No sender phone found. Payload keys:", Object.keys(body));
+            // Ack 200 so MSG91 does not auto-pause the webhook on an unactionable payload.
             return NextResponse.json(
-                { error: "No sender phone found in payload" },
-                { status: 400 }
+                { received: true, skipped: "no_sender_phone" },
+                { status: 200 }
             );
         }
 
@@ -266,9 +267,10 @@ export async function POST(request: NextRequest) {
             console.log(`[MSG91 Webhook] External outbound message detected. Customer: ${actualCustomerPhone}, Business: ${actualBusinessPhone}`);
 
             if (!actualCustomerPhone) {
+                console.log("[MSG91 Webhook] No customer phone for external outbound; acknowledging.");
                 return NextResponse.json(
-                    { error: "No customer phone found for external outbound message" },
-                    { status: 400 }
+                    { received: true, skipped: "no_customer_phone" },
+                    { status: 200 }
                 );
             }
         }
@@ -314,7 +316,8 @@ export async function POST(request: NextRequest) {
 
             if (contactError) {
                 console.error("[MSG91 Webhook] Upsert contact error:", contactError);
-                return NextResponse.json({ error: "Failed to upsert contact" }, { status: 500 });
+                // Ack 200: a processing failure on our side must not auto-pause the MSG91 webhook.
+                return NextResponse.json({ received: true, skipped: "contact_upsert_failed" }, { status: 200 });
             }
             contact = newContact;
             console.log(`[MSG91 Webhook] Created contact: ${contact!.id}`);
@@ -376,7 +379,7 @@ export async function POST(request: NextRequest) {
 
             if (convError) {
                 console.error("[MSG91 Webhook] Create conversation error:", convError);
-                return NextResponse.json({ error: "Failed to create conversation" }, { status: 500 });
+                return NextResponse.json({ received: true, skipped: "conversation_create_failed" }, { status: 200 });
             }
             conversation = newConv;
             console.log(`[MSG91 Webhook] Created conversation: ${conversation!.id}`);
@@ -552,20 +555,29 @@ export async function POST(request: NextRequest) {
             insertPayload.body = JSON.stringify({ text: messageBody, contacts: contactData });
         }
 
-        const { error: msgError } = await supabaseAdmin.from("messages").insert(insertPayload);
+        let { error: msgError } = await supabaseAdmin.from("messages").insert(insertPayload);
 
+        // Fallback: an unexpected content_type (reaction/button/interactive/etc.) can violate a
+        // DB CHECK constraint and fail the insert. Retry once as plain text so the message is still
+        // captured rather than lost — and so we never 500 back to MSG91.
         if (msgError) {
-            console.error("[MSG91 Webhook] Insert message error:", msgError);
-            return NextResponse.json({ error: "Failed to insert message" }, { status: 500 });
+            console.error("[MSG91 Webhook] Insert message error (retrying as text):", msgError);
+            const retry = await supabaseAdmin
+                .from("messages")
+                .insert({ ...insertPayload, content_type: "text" });
+            msgError = retry.error;
+            if (msgError) {
+                console.error("[MSG91 Webhook] Insert message retry failed:", msgError);
+                return NextResponse.json({ received: true, skipped: "message_insert_failed" }, { status: 200 });
+            }
         }
 
         console.log(`[MSG91 Webhook] Message saved for conversation ${conversation!.id}`);
         return NextResponse.json({ success: true, conversationId: conversation!.id });
     } catch (err) {
-        console.error("[MSG91 Webhook] Error:", err);
-        return NextResponse.json(
-            { error: "Invalid payload" },
-            { status: 400 }
-        );
+        // Always acknowledge with 200. A non-2xx here — even on a malformed payload — risks MSG91
+        // auto-pausing the webhook and taking the entire inbound channel down. Log and move on.
+        console.error("[MSG91 Webhook] Unhandled error (acknowledged to avoid webhook auto-pause):", err);
+        return NextResponse.json({ received: true, error_logged: true }, { status: 200 });
     }
 }
