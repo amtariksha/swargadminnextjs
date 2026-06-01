@@ -282,7 +282,9 @@ export function useCreateOrder() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (data: Record<string, unknown>) => {
-            return POST<{ id: number }>('/add_order', data);
+            // is_admin_order exempts admin-placed orders from the 22:00 sale
+            // cutoff (backend addOrder) — staff can book past the freeze.
+            return POST<{ id: number }>('/add_order', { ...data, is_admin_order: true });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['orders'] });
