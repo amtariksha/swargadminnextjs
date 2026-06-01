@@ -1,26 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 // ─── GET /api/templates/local ───────────────────────────────
-export async function GET(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
-    const { searchParams } = request.nextUrl;
-
-    // Super admin can filter by a specific org via ?orgId=...
-    const targetOrgId = isSuperAdmin && searchParams.get("orgId")
-        ? searchParams.get("orgId")!
-        : orgId;
-
-    let query = supabaseAdmin
+export async function GET() {
+    const query = supabaseAdmin
         .from("templates_local")
         .select("*")
         .order("created_at", { ascending: false });
-
-    // Always scope to an org
-    if (targetOrgId) {
-        query = query.eq("org_id", targetOrgId);
-    }
 
     const { data, error } = await query;
 
@@ -51,15 +37,11 @@ export async function GET(request: NextRequest) {
 
 // ─── POST /api/templates/local ──────────────────────────────
 export async function POST(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const body = await request.json();
-
-    const effectiveOrgId = isSuperAdmin && body.orgId ? body.orgId : orgId;
 
     const { data, error } = await supabaseAdmin
         .from("templates_local")
         .insert({
-            org_id: effectiveOrgId,
             name: body.name,
             category: body.category || "MARKETING",
             language: body.language || "en",

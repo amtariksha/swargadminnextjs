@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { isPlaceholderName } from "@/lib/whatsapp/utils";
 
-const DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001";
-
 // ─── POST /api/webhooks/msg91 — Receive inbound messages ──
 export async function POST(request: NextRequest) {
     try {
@@ -135,7 +133,6 @@ export async function POST(request: NextRequest) {
         //   3. MSG91 media URL pattern contains a business number
         //   4. Body contains JSON with attachment_url from MSG91's CDN
         let isSenderBusinessNumber = false;
-        let resolvedOrgId = "";
         if (normalizedPhone && !isDeliveryReport) {
             // Check 1: Look up sender in integrated_numbers DB table
             // Try exact match first, then with/without leading country separators
@@ -148,14 +145,13 @@ export async function POST(request: NextRequest) {
             for (const phoneVariant of phonesToCheck) {
                 const { data: matchedNumber } = await supabaseAdmin
                     .from("integrated_numbers")
-                    .select("number, org_id")
+                    .select("number")
                     .eq("number", phoneVariant)
                     .eq("active", true)
                     .limit(1)
                     .maybeSingle();
                 if (matchedNumber) {
                     isSenderBusinessNumber = true;
-                    resolvedOrgId = matchedNumber.org_id || "";
                     break;
                 }
             }
@@ -172,14 +168,13 @@ export async function POST(request: NextRequest) {
                             const numberInUrl = urlMatch[1];
                             const { data: urlNumber } = await supabaseAdmin
                                 .from("integrated_numbers")
-                                .select("number, org_id")
+                                .select("number")
                                 .eq("number", numberInUrl)
                                 .eq("active", true)
                                 .limit(1)
                                 .maybeSingle();
                             if (urlNumber) {
                                 isSenderBusinessNumber = true;
-                                resolvedOrgId = urlNumber.org_id || "";
                                 console.log(`[MSG91 Webhook] Business number detected from media URL: ${numberInUrl}`);
                             }
                         }
@@ -260,12 +255,13 @@ export async function POST(request: NextRequest) {
         let messageDirection = "inbound";
 
         if (isExternalOutbound) {
-            // For external outbound, the 'sender' of the webhook payload is actually the business number
-            // and the 'receiver' is the customer number.
-            actualCustomerPhone = receiverNumber.replace(/^\+/, "");
-            actualBusinessPhone = normalizedPhone;
+            // MSG91 ALWAYS reports customerNumber = the customer and
+            // integratedNumber = our business number, regardless of direction.
+            // So do NOT swap customer/business — only flip the direction. (The
+            // old swap created contacts under our own number and conversations
+            // keyed on a customer number, orphaned from every inbox.)
             messageDirection = "outbound";
-            console.log(`[MSG91 Webhook] External outbound message detected. Customer: ${actualCustomerPhone}, Business: ${actualBusinessPhone}`);
+            console.log(`[MSG91 Webhook] Outbound message. Customer: ${actualCustomerPhone}, Business: ${actualBusinessPhone}`);
 
             if (!actualCustomerPhone) {
                 console.log("[MSG91 Webhook] No customer phone for external outbound; acknowledging.");
@@ -276,31 +272,12 @@ export async function POST(request: NextRequest) {
             }
         }
 
-
-        // ─── Resolve org_id from business phone ────────────
-        // If we didn't resolve org_id from sender detection (inbound case),
-        // look up the business phone in integrated_numbers.
-        if (!resolvedOrgId && actualBusinessPhone) {
-            const { data: numRow } = await supabaseAdmin
-                .from("integrated_numbers")
-                .select("org_id")
-                .eq("number", actualBusinessPhone.replace(/^\+/, ""))
-                .eq("active", true)
-                .limit(1)
-                .maybeSingle();
-            resolvedOrgId = numRow?.org_id || "";
-        }
-        const orgId = resolvedOrgId || DEFAULT_ORG_ID;
-        if (!resolvedOrgId) {
-            console.warn(`[MSG91 Webhook] Could not resolve org_id from business phone ${actualBusinessPhone}. Falling back to default org.`);
-        }
-
         // ─── 1. Upsert Contact ─────────────────────────────
+        // Single org — no org scoping (the column defaults to the single org).
         let { data: contact } = await supabaseAdmin
             .from("contacts")
             .select("id, name")
             .eq("phone", actualCustomerPhone)
-            .eq("org_id", orgId)
             .single();
 
         if (!contact) {
@@ -310,7 +287,6 @@ export async function POST(request: NextRequest) {
                 .insert({
                     name: contactDisplayName,
                     phone: actualCustomerPhone,
-                    org_id: orgId,
                 })
                 .select("id, name")
                 .single();
@@ -353,7 +329,6 @@ export async function POST(request: NextRequest) {
             .select("id")
             .eq("contact_id", contact!.id)
             .eq("integrated_number", actualBusinessPhone || "default")
-            .eq("org_id", orgId)
             .single();
 
         if (!conversation) {
@@ -365,7 +340,6 @@ export async function POST(request: NextRequest) {
                 last_message_time: new Date().toISOString(),
                 last_incoming_timestamp: isExternalOutbound ? undefined : new Date().toISOString(),
                 unread_count: isExternalOutbound ? 0 : 1,
-                org_id: orgId,
             };
             // Tag CTWA source on new conversations
             if (ctwaClid) {
@@ -439,7 +413,6 @@ export async function POST(request: NextRequest) {
                     body: referralBody,
                     media_type: referralMediaType,
                     media_url: referralMediaUrl,
-                    org_id: orgId,
                 });
             if (logError) {
                 console.error("[MSG91 Webhook] CTWA log insert error:", logError);

@@ -16,11 +16,10 @@ export async function GET(request: NextRequest) {
         );
     }
 
-    // Get the org's integrated number — needed for balance check
+    // Get the integrated number — needed for balance check
     const { data: numRow } = await supabaseAdmin
         .from("integrated_numbers")
         .select("number")
-        .eq("org_id", orgId)
         .eq("active", true)
         .order("created_at", { ascending: true })
         .limit(1)

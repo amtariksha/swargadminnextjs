@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 // ─── GET /api/ctwa/config ────────────────────────────────────
 // Returns the current CTWA configuration (Facebook connection status)
-export async function GET(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
-
-    let query = supabaseAdmin
+export async function GET() {
+    const query = supabaseAdmin
         .from("ctwa_config")
         .select("*");
-
-    if (!isSuperAdmin) {
-        query = query.eq("org_id", orgId);
-    }
 
     const { data, error } = await query.limit(1).maybeSingle();
 
@@ -44,17 +37,12 @@ export async function GET(request: NextRequest) {
 // ─── PUT /api/ctwa/config ────────────────────────────────────
 // Update CTWA configuration (ad account, CAPI settings)
 export async function PUT(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const body = await request.json();
 
     // Get existing config
-    let existQuery = supabaseAdmin
+    const existQuery = supabaseAdmin
         .from("ctwa_config")
         .select("id");
-
-    if (!isSuperAdmin) {
-        existQuery = existQuery.eq("org_id", orgId);
-    }
 
     const { data: existing } = await existQuery.limit(1).maybeSingle();
 

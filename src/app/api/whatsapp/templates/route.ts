@@ -35,11 +35,10 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Get the org's integrated number — prefer msg91 provider numbers for this endpoint
+        // Get the integrated number — prefer msg91 provider numbers for this endpoint
         const { data: numRow } = await supabaseAdmin
             .from("integrated_numbers")
             .select("number, provider")
-            .eq("org_id", orgId)
             .eq("active", true)
             .order("created_at", { ascending: true })
             .limit(10);

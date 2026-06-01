@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import { getCTWASettings } from "@/lib/whatsapp/ctwa-settings";
 
 // ─── POST /api/meta/onboard ─────────────────────────────────
@@ -9,7 +8,6 @@ import { getCTWASettings } from "@/lib/whatsapp/ctwa-settings";
 // and phone numbers, subscribes to webhooks, and registers the
 // phone (for coexistence mode).
 export async function POST(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
     const { code, configId } = await request.json();
 
     if (!code) {
@@ -107,7 +105,6 @@ export async function POST(request: NextRequest) {
                     .from("integrated_numbers")
                     .select("id")
                     .eq("meta_phone_number_id", phoneNumberId)
-                    .eq("org_id", orgId)
                     .maybeSingle();
 
                 if (existing) {
@@ -133,7 +130,6 @@ export async function POST(request: NextRequest) {
                             meta_phone_number_id: phoneNumberId,
                             meta_access_token: accessToken,
                             active: true,
-                            org_id: orgId,
                         });
                 }
 
@@ -146,7 +142,7 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        console.log(`[Meta Onboard] Successfully onboarded ${results.length} number(s) for org ${orgId}`);
+        console.log(`[Meta Onboard] Successfully onboarded ${results.length} number(s)`);
 
         return NextResponse.json({
             success: true,

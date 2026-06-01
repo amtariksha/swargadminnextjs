@@ -1,11 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getCTWASettings } from "@/lib/whatsapp/ctwa-settings";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 // ─── GET /api/ctwa/auth-url ──────────────────────────────────
 // Returns the Facebook OAuth authorization URL
-export async function GET(request: NextRequest) {
-    const { orgId } = getRequestContext(request.headers);
+export async function GET() {
     const { facebookAppId, facebookOauthRedirectUri, metaApiVersion } =
         await getCTWASettings();
 
@@ -22,9 +20,7 @@ export async function GET(request: NextRequest) {
         "business_management",
     ].join(",");
 
-    // Encode org_id in the state parameter so the callback can associate
-    // the CTWA config with the correct organization.
-    const state = JSON.stringify({ action: "ctwa_connect", orgId });
+    const state = JSON.stringify({ action: "ctwa_connect" });
 
     const url = `https://www.facebook.com/${metaApiVersion}/dialog/oauth?` +
         `client_id=${facebookAppId}` +

@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 // ─── GET /api/ctwa/logs ──────────────────────────────────────
 // Returns CTWA click/conversation logs with optional filters
 export async function GET(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const { searchParams } = request.nextUrl;
     const from = searchParams.get("from");
     const to = searchParams.get("to");
@@ -24,10 +22,6 @@ export async function GET(request: NextRequest) {
         `, { count: "exact" })
         .order("created_at", { ascending: false })
         .range(offset, offset + limit - 1);
-
-    if (!isSuperAdmin) {
-        query = query.eq("org_id", orgId);
-    }
 
     if (from) {
         query = query.gte("created_at", from);

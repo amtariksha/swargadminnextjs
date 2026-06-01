@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 interface ImportContact {
     phone: string;
@@ -12,7 +11,6 @@ interface ImportContact {
 // ─── POST /api/contacts/import ─────────────────────────────
 // Bulk import contacts from CSV data (parsed on client, sent as JSON)
 export async function POST(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const body = await request.json();
     const contacts: ImportContact[] = body.contacts;
 
@@ -30,13 +28,10 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    const effectiveOrgId = isSuperAdmin && body.orgId ? body.orgId : orgId;
-
-    // Get existing phones for this org to detect duplicates
+    // Get existing phones to detect duplicates
     const { data: existingContacts } = await supabaseAdmin
         .from("contacts")
-        .select("phone")
-        .eq("org_id", effectiveOrgId);
+        .select("phone");
 
     const existingPhones = new Set(
         (existingContacts || []).map((c) => c.phone)
@@ -73,7 +68,7 @@ export async function POST(request: NextRequest) {
         }
         seenPhones.add(phone);
 
-        // Skip if contact already exists in this org
+        // Skip if contact already exists
         if (existingPhones.has(phone)) {
             skipped++;
             continue;
@@ -90,7 +85,6 @@ export async function POST(request: NextRequest) {
         }
 
         const { error } = await supabaseAdmin.from("contacts").insert({
-            org_id: effectiveOrgId,
             name: (row.name || "").trim() || "Unknown",
             phone,
             email: (row.email || "").trim() || null,

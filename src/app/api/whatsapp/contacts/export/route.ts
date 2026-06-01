@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 export async function GET(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search");
 
@@ -11,10 +9,6 @@ export async function GET(request: NextRequest) {
         .from("contacts")
         .select("name, phone, email, tags, created_at")
         .order("created_at", { ascending: false });
-
-    if (!isSuperAdmin) {
-        query = query.eq("organization_id", orgId);
-    }
 
     if (search) {
         query = query.or(`name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`);

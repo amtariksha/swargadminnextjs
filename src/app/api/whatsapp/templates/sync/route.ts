@@ -31,11 +31,10 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        // Get the org's integrated number — prefer msg91 provider for this endpoint
+        // Get the integrated number — prefer msg91 provider for this endpoint
         const { data: numRows } = await supabaseAdmin
             .from("integrated_numbers")
             .select("number, provider")
-            .eq("org_id", orgId)
             .eq("active", true)
             .order("created_at", { ascending: true })
             .limit(10);
@@ -117,10 +116,9 @@ export async function POST(request: NextRequest) {
         // Match by msg91_template_id first, then by name (case-insensitive)
         const { data: localTemplates } = await supabaseAdmin
             .from("templates_local")
-            .select("id, name, status, category, msg91_template_id")
-            .eq("org_id", orgId);
+            .select("id, name, status, category, msg91_template_id");
 
-        console.log(`[Template Sync] Found ${(localTemplates || []).length} local templates for org ${orgId}`);
+        console.log(`[Template Sync] Found ${(localTemplates || []).length} local templates`);
 
         let updated = 0;
         const unmatched: string[] = [];

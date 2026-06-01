@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { sendConversionEvent } from "@/lib/whatsapp/capi";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 function mapContact(row: Record<string, unknown>) {
     return {
@@ -20,17 +19,12 @@ export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const { id } = await params;
 
-    let query = supabaseAdmin
+    const query = supabaseAdmin
         .from("contacts")
         .select("*")
         .eq("id", id);
-
-    if (!isSuperAdmin) {
-        query = query.eq("org_id", orgId);
-    }
 
     const { data, error } = await query.single();
 
@@ -46,18 +40,16 @@ export async function PATCH(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const { id } = await params;
     const body = await request.json();
 
     // Fetch current tags before update for CAPI diff
     let oldTags: string[] = [];
     if (body.tags) {
-        let tagQuery = supabaseAdmin
+        const tagQuery = supabaseAdmin
             .from("contacts")
             .select("tags")
             .eq("id", id);
-        if (!isSuperAdmin) tagQuery = tagQuery.eq("org_id", orgId);
         const { data: currentContact } = await tagQuery.single();
         oldTags = (currentContact?.tags as string[]) || [];
     }
@@ -68,14 +60,10 @@ export async function PATCH(
     if (body.email !== undefined) updateData.email = body.email;
     if (body.customFields !== undefined) updateData.custom_fields = body.customFields;
 
-    let updateQuery = supabaseAdmin
+    const updateQuery = supabaseAdmin
         .from("contacts")
         .update(updateData)
         .eq("id", id);
-
-    if (!isSuperAdmin) {
-        updateQuery = updateQuery.eq("org_id", orgId);
-    }
 
     const { data, error } = await updateQuery.select().single();
 
@@ -93,7 +81,7 @@ export async function PATCH(
 
         if (addedTags.length > 0) {
             // Fire and forget — don't block the response
-            triggerCAPIForTags(id, addedTags, orgId).catch((err) => {
+            triggerCAPIForTags(id, addedTags).catch((err) => {
                 console.error("[CAPI Trigger] Error:", err);
             });
         }
@@ -105,12 +93,11 @@ export async function PATCH(
 /**
  * Check if newly added tags match CAPI lead/purchase tags and send conversion events.
  */
-async function triggerCAPIForTags(contactId: string, addedTags: string[], orgId: string) {
-    // Fetch CAPI config for this org
+async function triggerCAPIForTags(contactId: string, addedTags: string[]) {
+    // Fetch CAPI config
     const { data: config } = await supabaseAdmin
         .from("ctwa_config")
         .select("capi_enabled, capi_lead_tag, capi_purchase_tag, dataset_id, access_token")
-        .eq("org_id", orgId)
         .limit(1)
         .maybeSingle();
 
@@ -118,12 +105,11 @@ async function triggerCAPIForTags(contactId: string, addedTags: string[], orgId:
         return; // CAPI not configured or not enabled
     }
 
-    // Find a CTWA conversation for this contact within the same org (need ctwa_clid)
+    // Find a CTWA conversation for this contact (need ctwa_clid)
     const { data: ctwaConv } = await supabaseAdmin
         .from("conversations")
         .select("ctwa_clid")
         .eq("contact_id", contactId)
-        .eq("org_id", orgId)
         .not("ctwa_clid", "is", null)
         .order("created_at", { ascending: false })
         .limit(1)

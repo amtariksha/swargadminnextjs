@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 // ─── PATCH /api/quick-replies/[id] ──────────────────────────
 export async function PATCH(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const { id } = await params;
     const body = await request.json();
 
@@ -16,14 +14,10 @@ export async function PATCH(
     if (body.body !== undefined) updateData.body = body.body;
     if (body.shortcut !== undefined) updateData.shortcut = body.shortcut;
 
-    let query = supabaseAdmin
+    const query = supabaseAdmin
         .from("quick_replies")
         .update(updateData)
         .eq("id", id);
-
-    if (!isSuperAdmin) {
-        query = query.eq("org_id", orgId);
-    }
 
     const { data, error } = await query.select().single();
 
@@ -42,20 +36,15 @@ export async function PATCH(
 
 // ─── DELETE /api/quick-replies/[id] ─────────────────────────
 export async function DELETE(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const { id } = await params;
 
-    let query = supabaseAdmin
+    const query = supabaseAdmin
         .from("quick_replies")
         .delete()
         .eq("id", id);
-
-    if (!isSuperAdmin) {
-        query = query.eq("org_id", orgId);
-    }
 
     const { error } = await query;
 

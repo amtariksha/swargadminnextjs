@@ -16,7 +16,6 @@ export async function POST(
         .from("payments")
         .select("*")
         .eq("id", id)
-        .eq("org_id", orgId)
         .single();
 
     if (error || !payment) {
@@ -76,8 +75,7 @@ export async function POST(
             await supabaseAdmin
                 .from("payments")
                 .update(updateData)
-                .eq("id", id)
-                .eq("org_id", orgId);
+                .eq("id", id);
         }
 
         return NextResponse.json({

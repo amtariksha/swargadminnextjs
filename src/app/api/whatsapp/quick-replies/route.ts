@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 // ─── GET /api/quick-replies ─────────────────────────────────
-export async function GET(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
-
-    let query = supabaseAdmin
+export async function GET() {
+    const query = supabaseAdmin
         .from("quick_replies")
         .select("*")
         .order("created_at", { ascending: false });
-
-    if (!isSuperAdmin) {
-        query = query.eq("org_id", orgId);
-    }
 
     const { data, error } = await query;
 
@@ -37,10 +30,7 @@ export async function GET(request: NextRequest) {
 
 // ─── POST /api/quick-replies ────────────────────────────────
 export async function POST(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const body = await request.json();
-
-    const effectiveOrgId = isSuperAdmin && body.orgId ? body.orgId : orgId;
 
     const { data, error } = await supabaseAdmin
         .from("quick_replies")
@@ -48,7 +38,6 @@ export async function POST(request: NextRequest) {
             title: body.title,
             body: body.body,
             shortcut: body.shortcut || null,
-            org_id: effectiveOrgId,
         })
         .select()
         .single();

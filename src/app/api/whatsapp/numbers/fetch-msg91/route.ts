@@ -6,9 +6,7 @@ import { getAppSetting } from "@/lib/whatsapp/settings";
 // ─── POST /api/numbers/fetch-msg91 ────────────────────────
 // Auto-detect WhatsApp numbers from MSG91 account and import them
 export async function POST(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
-    // For auto-detect, super_admin imports to their own org (can reassign later)
-    const targetOrgId = orgId;
+    const { orgId } = getRequestContext(request.headers);
     // Resolve auth key: app_settings → organizations table → env var
     let authKey = await getAppSetting("msg91_auth_key", "", orgId);
     if (!authKey) {
@@ -103,11 +101,10 @@ export async function POST(request: NextRequest) {
             return { phone, name };
         }).filter((n: { phone: string }) => n.phone.length > 0);
 
-        // Get existing numbers to avoid duplicates (scoped to org)
+        // Get existing numbers to avoid duplicates
         const { data: existingNumbers } = await supabaseAdmin
             .from("integrated_numbers")
-            .select("number")
-            .eq("org_id", orgId);
+            .select("number");
 
         const existingSet = new Set(
             (existingNumbers || []).map((n) => n.number)
@@ -121,7 +118,6 @@ export async function POST(request: NextRequest) {
             const { error } = await supabaseAdmin
                 .from("integrated_numbers")
                 .insert({
-                    org_id: orgId,
                     number: num.phone,
                     label: num.name || `MSG91 ${num.phone.slice(-4)}`,
                     provider: "msg91",

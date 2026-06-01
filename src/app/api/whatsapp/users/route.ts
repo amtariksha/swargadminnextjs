@@ -1,6 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 // ─── GET /api/whatsapp/users — read-only list of WACRM agents ─────────────
 //
@@ -13,17 +12,11 @@ import { getRequestContext } from "@/lib/whatsapp/request";
 // New agents should be onboarded by adding them as admin_users in the admin
 // panel; future work will mirror those entries into the Supabase `users`
 // table on first authenticated request so assignment can target them.
-export async function GET(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
-
-    let query = supabaseAdmin
+export async function GET() {
+    const query = supabaseAdmin
         .from("users")
         .select("id, name, email, role, org_id, is_active, created_at")
         .order("created_at", { ascending: true });
-
-    if (!isSuperAdmin) {
-        query = query.eq("org_id", orgId);
-    }
 
     const { data, error } = await query;
 

@@ -25,7 +25,6 @@ export async function DELETE(
     const { data: dbNumbers } = await supabaseAdmin
         .from("integrated_numbers")
         .select("number")
-        .eq("org_id", orgId)
         .eq("active", true)
         .limit(1)
         .maybeSingle();
@@ -38,7 +37,6 @@ export async function DELETE(
         .from("templates_local")
         .select("*")
         .eq("id", id)
-        .eq("org_id", orgId)
         .single();
 
     if (fetchError || !template) {
@@ -82,8 +80,7 @@ export async function DELETE(
     const { error: deleteError } = await supabaseAdmin
         .from("templates_local")
         .delete()
-        .eq("id", id)
-        .eq("org_id", orgId);
+        .eq("id", id);
 
     if (deleteError) {
         return NextResponse.json({ error: deleteError.message }, { status: 500 });

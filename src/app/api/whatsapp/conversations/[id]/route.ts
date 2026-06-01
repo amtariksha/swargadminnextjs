@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 function mapMessage(row: Record<string, unknown>) {
     return {
@@ -36,18 +35,13 @@ export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const { id } = await params;
 
     // Fetch conversation with contact and assigned user
-    let convQuery = supabaseAdmin
+    const convQuery = supabaseAdmin
         .from("conversations")
         .select("*, contacts(*)")
         .eq("id", id);
-
-    if (!isSuperAdmin) {
-        convQuery = convQuery.eq("org_id", orgId);
-    }
 
     const { data: conv, error: convError } = await convQuery.single();
 
@@ -62,16 +56,12 @@ export async function GET(
     // separate DB) — the display name is denormalized onto the conversation,
     // so there's no local users-table lookup here.
 
-    // Fetch messages for this conversation (org-scoped)
-    let msgQuery = supabaseAdmin
+    // Fetch messages for this conversation
+    const msgQuery = supabaseAdmin
         .from("messages")
         .select("*")
         .eq("conversation_id", id)
         .order("created_at", { ascending: true });
-
-    if (!isSuperAdmin) {
-        msgQuery = msgQuery.eq("org_id", orgId);
-    }
 
     const { data: messages } = await msgQuery;
 
@@ -107,7 +97,6 @@ export async function PATCH(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const { id } = await params;
     const body = await request.json();
 
@@ -123,14 +112,10 @@ export async function PATCH(
         updateData.assigned_at = body.assigned_to ? new Date().toISOString() : null;
     }
 
-    let updateQuery = supabaseAdmin
+    const updateQuery = supabaseAdmin
         .from("conversations")
         .update(updateData)
         .eq("id", id);
-
-    if (!isSuperAdmin) {
-        updateQuery = updateQuery.eq("org_id", orgId);
-    }
 
     const { data, error } = await updateQuery
         .select("*, contacts(*)")

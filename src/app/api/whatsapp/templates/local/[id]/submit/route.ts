@@ -53,7 +53,6 @@ export async function POST(
     const { data: dbNumbers } = await supabaseAdmin
         .from("integrated_numbers")
         .select("number")
-        .eq("org_id", orgId)
         .eq("active", true)
         .limit(1)
         .maybeSingle();
@@ -66,7 +65,6 @@ export async function POST(
         .from("templates_local")
         .select("*")
         .eq("id", id)
-        .eq("org_id", orgId)
         .single();
 
     if (fetchError || !template) {
@@ -258,8 +256,7 @@ export async function POST(
                 msg91_template_id: msg91TemplateId,
                 updated_at: new Date().toISOString(),
             })
-            .eq("id", id)
-            .eq("org_id", orgId);
+            .eq("id", id);
 
         if (updateError) {
             console.error("[Template Submit] DB update error:", updateError);

@@ -1,6 +1,20 @@
 /**
+ * The single internal organization id.
+ *
+ * WhatsApp + LMS operate as ONE org internally (the outer Swarg platform stays
+ * multi-tenant). Use this constant instead of threading an org through requests
+ * / filtering by it. Matches the historical `WACRM_ORG_ID` and the webhooks'
+ * former `DEFAULT_ORG_ID`. The org_id columns are retained (with a DB DEFAULT of
+ * this value — migration 008) and are dropped in a later coordinated pass.
+ */
+export const ORG_ID = "00000000-0000-0000-0000-000000000001";
+
+/**
  * Extract user context from request headers set by proxy.ts.
- * All authenticated API routes should call this to get org_id for scoping.
+ *
+ * NOTE: `orgId`/`isSuperAdmin` are retained for agent-tools and future platform
+ * tenancy, but WhatsApp + LMS no longer scope by them — they operate as a single
+ * org (see ORG_ID above).
  */
 export interface RequestContext {
     userId: string;

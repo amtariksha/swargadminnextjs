@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 function mapCampaign(row: Record<string, unknown>) {
     return {
@@ -24,20 +23,15 @@ function mapCampaign(row: Record<string, unknown>) {
 }
 
 export async function GET(
-    request: NextRequest,
+    _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const { id } = await params;
 
-    let query = supabaseAdmin
+    const query = supabaseAdmin
         .from("broadcast_campaigns")
         .select("*")
         .eq("id", id);
-
-    if (!isSuperAdmin) {
-        query = query.eq("organization_id", orgId);
-    }
 
     const { data, error } = await query.maybeSingle();
 

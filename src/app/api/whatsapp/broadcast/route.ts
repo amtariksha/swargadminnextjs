@@ -32,7 +32,6 @@ function mapCampaign(row: Record<string, unknown>) {
 
 // ─── GET /api/broadcast — List campaigns with summary ──────
 export async function GET(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search");
     const status = searchParams.get("status");
@@ -42,10 +41,6 @@ export async function GET(request: NextRequest) {
         .from("broadcast_campaigns")
         .select("*")
         .order("created_at", { ascending: false });
-
-    if (!isSuperAdmin) {
-        query = query.eq("organization_id", orgId);
-    }
 
     if (status && status !== "all") {
         query = query.eq("status", status);
@@ -121,7 +116,6 @@ export async function POST(request: NextRequest) {
             const { data: fallbackNum } = await supabaseAdmin
                 .from("integrated_numbers")
                 .select("number")
-                .eq("org_id", orgId)
                 .eq("active", true)
                 .order("created_at", { ascending: true })
                 .limit(1)
@@ -149,7 +143,6 @@ export async function POST(request: NextRequest) {
         const { data: campaign, error: insertErr } = await supabaseAdmin
             .from("broadcast_campaigns")
             .insert({
-                organization_id: orgId,
                 name: campaignName,
                 template_name: templateId,
                 template_language: templateLanguage || "en",

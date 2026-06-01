@@ -5,7 +5,7 @@ import { getAppSetting } from "@/lib/whatsapp/settings";
 
 // ─── POST /api/chat/send ──────────────────────────────────
 export async function POST(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
+    const { orgId } = getRequestContext(request.headers);
     const body = await request.json();
     const {
         to,
@@ -25,25 +25,20 @@ export async function POST(request: NextRequest) {
 
     // Try to find the specified number in DB
     if (sendFromNumber && sendFromNumber !== "default") {
-        let numQuery = supabaseAdmin
+        const numQuery = supabaseAdmin
             .from("integrated_numbers")
             .select("*")
             .eq("number", sendFromNumber);
-
-        if (!isSuperAdmin) {
-            numQuery = numQuery.eq("org_id", orgId);
-        }
 
         const { data } = await numQuery.maybeSingle();
         numConfig = data;
     }
 
-    // If number not found or was "default", fall back to org's first active number
+    // If number not found or was "default", fall back to first active number
     if (!numConfig) {
         const { data: fallbackNum } = await supabaseAdmin
             .from("integrated_numbers")
             .select("*")
-            .eq("org_id", orgId)
             .eq("active", true)
             .order("created_at", { ascending: true })
             .limit(1)
@@ -375,17 +370,13 @@ export async function POST(request: NextRequest) {
 
     // ─── Update conversation's last_message ──────────────────
     if (conversationId) {
-        let convUpdate = supabaseAdmin
+        const convUpdate = supabaseAdmin
             .from("conversations")
             .update({
                 last_message: messageBody,
                 last_message_time: new Date().toISOString(),
             })
             .eq("id", conversationId);
-
-        if (!isSuperAdmin) {
-            convUpdate = convUpdate.eq("org_id", orgId);
-        }
 
         await convUpdate;
     }

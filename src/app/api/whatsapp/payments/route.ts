@@ -28,7 +28,6 @@ function mapPayment(row: Record<string, unknown>) {
 
 // ─── GET /api/payments ─────────────────────────────────────
 export async function GET(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const from = searchParams.get("from");
@@ -40,10 +39,6 @@ export async function GET(request: NextRequest) {
         .from("payments")
         .select("*", { count: "exact" })
         .order("created_at", { ascending: false });
-
-    if (!isSuperAdmin) {
-        query = query.eq("org_id", orgId);
-    }
 
     if (status && status !== "all") {
         query = query.eq("payment_status", status);
@@ -109,7 +104,7 @@ export async function GET(request: NextRequest) {
 
 // ─── POST /api/payments ────────────────────────────────────
 export async function POST(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
+    const { orgId } = getRequestContext(request.headers);
     const body = await request.json();
     const {
         contactName,
@@ -187,7 +182,6 @@ export async function POST(request: NextRequest) {
             payment_status: "created",
             created_by: integratedNumber ? "Sales" : "Sales",
             integrated_number: integratedNumber || null,
-            org_id: isSuperAdmin && body.orgId ? body.orgId : orgId,
         })
         .select()
         .single();
@@ -241,7 +235,6 @@ export async function POST(request: NextRequest) {
             const { data: firstNumber } = await supabaseAdmin
                 .from("integrated_numbers")
                 .select("number")
-                .eq("org_id", orgId)
                 .eq("active", true)
                 .order("created_at", { ascending: true })
                 .limit(1)

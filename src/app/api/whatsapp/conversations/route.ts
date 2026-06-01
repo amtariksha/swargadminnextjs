@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 // ─── Supabase row → app Contact type mapper ───────────────
 function mapContact(row: Record<string, unknown>) {
@@ -46,7 +45,6 @@ function mapConversation(row: Record<string, unknown>) {
 
 // ─── GET /api/conversations ────────────────────────────────
 export async function GET(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const search = searchParams.get("search")?.toLowerCase();
@@ -56,10 +54,6 @@ export async function GET(request: NextRequest) {
         .from("conversations")
         .select("*, contacts(*)")
         .order("last_message_time", { ascending: false });
-
-    if (!isSuperAdmin) {
-        query = query.eq("org_id", orgId);
-    }
 
     if (status && status !== "all") {
         query = query.eq("status", status);
@@ -97,10 +91,7 @@ export async function GET(request: NextRequest) {
 
 // ─── POST /api/conversations ───────────────────────────────
 export async function POST(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     const body = await request.json();
-
-    const effectiveOrgId = isSuperAdmin && body.orgId ? body.orgId : orgId;
 
     // Resolve the business number this conversation belongs to. The per-number
     // inbox passes it explicitly; if it's missing, fall back to the org's first
@@ -111,7 +102,6 @@ export async function POST(request: NextRequest) {
         const { data: firstNumber } = await supabaseAdmin
             .from("integrated_numbers")
             .select("number")
-            .eq("org_id", effectiveOrgId)
             .eq("active", true)
             .order("created_at", { ascending: true })
             .limit(1)
@@ -122,7 +112,6 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabaseAdmin
         .from("conversations")
         .insert({
-            org_id: effectiveOrgId,
             contact_id: body.contactId,
             integrated_number: integratedNumber,
             status: "open",

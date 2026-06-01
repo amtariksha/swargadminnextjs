@@ -4,12 +4,11 @@ import { getRequestContext } from "@/lib/whatsapp/request";
 
 // ─── GET /api/reminders ─────────────────────────────────────
 export async function GET(request: NextRequest) {
-    const { orgId, userId } = getRequestContext(request.headers);
+    const { userId } = getRequestContext(request.headers);
 
     const { data, error } = await supabaseAdmin
         .from("reminders")
         .select("*, conversations(contact_id, contacts(name, phone))")
-        .eq("org_id", orgId)
         .eq("user_id", userId)
         .neq("status", "dismissed")
         .order("due_at", { ascending: true });
@@ -40,7 +39,7 @@ export async function GET(request: NextRequest) {
 
 // ─── POST /api/reminders ────────────────────────────────────
 export async function POST(request: NextRequest) {
-    const { orgId, userId } = getRequestContext(request.headers);
+    const { userId } = getRequestContext(request.headers);
     const body = await request.json();
 
     const { data, error } = await supabaseAdmin
@@ -50,7 +49,6 @@ export async function POST(request: NextRequest) {
             user_id: userId,
             due_at: body.remindAt,
             note: body.note || null,
-            org_id: orgId,
             status: "active",
         })
         .select()

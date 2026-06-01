@@ -51,7 +51,6 @@ export async function PUT(
     const { data: dbNumbers } = await supabaseAdmin
         .from("integrated_numbers")
         .select("number")
-        .eq("org_id", orgId)
         .eq("active", true)
         .limit(1)
         .maybeSingle();
@@ -64,7 +63,6 @@ export async function PUT(
         .from("templates_local")
         .select("*")
         .eq("id", id)
-        .eq("org_id", orgId)
         .single();
 
     if (fetchError || !template) {
@@ -207,8 +205,7 @@ export async function PUT(
         await supabaseAdmin
             .from("templates_local")
             .update(updateData)
-            .eq("id", id)
-            .eq("org_id", orgId);
+            .eq("id", id);
 
         return NextResponse.json({
             success: true,

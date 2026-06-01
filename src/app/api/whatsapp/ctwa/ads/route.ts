@@ -1,21 +1,14 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { getCTWASettings } from "@/lib/whatsapp/ctwa-settings";
-import { getRequestContext } from "@/lib/whatsapp/request";
 
 // ─── GET /api/ctwa/ads ───────────────────────────────────────
 // Returns synced CTWA ads/campaigns from DB
-export async function GET(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
-
-    let query = supabaseAdmin
+export async function GET() {
+    const query = supabaseAdmin
         .from("ctwa_ads")
         .select("*")
         .order("synced_at", { ascending: false });
-
-    if (!isSuperAdmin) {
-        query = query.eq("org_id", orgId);
-    }
 
     const { data, error } = await query;
 
@@ -46,17 +39,11 @@ export async function GET(request: NextRequest) {
 
 // ─── POST /api/ctwa/ads ──────────────────────────────────────
 // Sync campaigns from Meta Marketing API
-export async function POST(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
-
+export async function POST() {
     // Get CTWA config
-    let configQuery = supabaseAdmin
+    const configQuery = supabaseAdmin
         .from("ctwa_config")
         .select("*");
-
-    if (!isSuperAdmin) {
-        configQuery = configQuery.eq("org_id", orgId);
-    }
 
     const { data: config } = await configQuery.limit(1).maybeSingle();
 
@@ -121,7 +108,6 @@ export async function POST(request: NextRequest) {
             const { count: leadCount } = await supabaseAdmin
                 .from("ctwa_logs")
                 .select("id", { count: "exact", head: true })
-                .eq("org_id", orgId)
                 .eq("campaign_name", campaign.name);
 
             // Upsert campaign
@@ -129,7 +115,6 @@ export async function POST(request: NextRequest) {
                 .from("ctwa_ads")
                 .upsert(
                     {
-                        org_id: orgId,
                         ad_account_id: config.ad_account_id,
                         campaign_id: campaign.id,
                         campaign_name: campaign.name,

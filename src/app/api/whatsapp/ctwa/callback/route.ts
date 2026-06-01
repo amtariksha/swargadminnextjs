@@ -2,26 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { getCTWASettings } from "@/lib/whatsapp/ctwa-settings";
 
-const DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001";
-
 // ─── GET /api/ctwa/callback ──────────────────────────────────
 // Facebook OAuth redirect handler
-// org_id is resolved from the OAuth `state` parameter (encoded by /api/ctwa/auth-url).
 export async function GET(request: NextRequest) {
     const code = request.nextUrl.searchParams.get("code");
     const error = request.nextUrl.searchParams.get("error");
-    const stateParam = request.nextUrl.searchParams.get("state");
-
-    // Extract org_id from state
-    let orgId = DEFAULT_ORG_ID;
-    if (stateParam) {
-        try {
-            const stateData = JSON.parse(stateParam);
-            if (stateData.orgId) orgId = stateData.orgId;
-        } catch {
-            // Legacy state format ("ctwa_connect" string) — use default org
-        }
-    }
 
     if (error) {
         console.error("[CTWA Callback] OAuth error:", error);
@@ -103,9 +88,9 @@ export async function GET(request: NextRequest) {
             status: acc.account_status,
         }));
 
-        // Step 5: Upsert into ctwa_config (one config per org)
-        // First delete any existing config for this org
-        await supabaseAdmin.from("ctwa_config").delete().eq("org_id", orgId);
+        // Step 5: Upsert into ctwa_config
+        // First delete any existing config
+        await supabaseAdmin.from("ctwa_config").delete().neq("id", "00000000-0000-0000-0000-000000000000");
 
         // Then insert new config
         const firstAdAccount = adAccounts.length > 0 ? adAccounts[0] : null;
@@ -115,7 +100,6 @@ export async function GET(request: NextRequest) {
             access_token: accessToken,
             ad_account_id: firstAdAccount?.id || null,
             ad_account_name: firstAdAccount?.name || null,
-            org_id: orgId,
         });
 
         if (insertError) {

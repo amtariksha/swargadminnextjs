@@ -3,8 +3,6 @@ import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import crypto from 'crypto';
 import { isPlaceholderName } from "@/lib/whatsapp/utils";
 
-const DEFAULT_ORG_ID = "00000000-0000-0000-0000-000000000001";
-
 // ─── GET /api/webhooks/meta ─────────────────────────────────
 // Handles webhook verification from Meta Developer Portal
 export async function GET(request: NextRequest) {
@@ -74,24 +72,17 @@ export async function POST(request: NextRequest) {
         const integratedNumberId = value.metadata?.phone_number_id;
         const integratedNumberDisplay = value.metadata?.display_phone_number?.replace(/[^0-9]/g, "") || "";
 
-        // Resolve org_id and number from the phone_number_id
-        let orgId = DEFAULT_ORG_ID;
+        // Resolve the business number from the phone_number_id. Single org — no
+        // org scoping (org_id columns default to the single org).
         let businessPhoneNumber = integratedNumberDisplay;
         if (integratedNumberId) {
             const { data: numRow } = await supabaseAdmin
                 .from("integrated_numbers")
-                .select("org_id, number")
+                .select("number")
                 .eq("meta_phone_number_id", integratedNumberId)
                 .limit(1)
                 .maybeSingle();
-            if (numRow?.org_id) orgId = numRow.org_id;
             if (numRow?.number) businessPhoneNumber = numRow.number;
-
-            if (!numRow) {
-                console.warn(`[Meta Webhook] phone_number_id ${integratedNumberId} not found in integrated_numbers. Falling back to default org.`);
-            }
-        } else {
-            console.warn("[Meta Webhook] No phone_number_id in webhook payload. Falling back to default org.");
         }
 
         // 2. Handle Status Updates (sent, delivered, read)
@@ -205,7 +196,6 @@ export async function POST(request: NextRequest) {
                 .from("contacts")
                 .select("id")
                 .eq("phone", customerPhone)
-                .eq("org_id", orgId)
                 .single();
 
             if (existingContact) {
@@ -232,7 +222,6 @@ export async function POST(request: NextRequest) {
                     .insert({
                         phone: customerPhone,
                         name: contactName || customerPhone,
-                        org_id: orgId,
                     })
                     .select("id")
                     .single();
@@ -251,7 +240,6 @@ export async function POST(request: NextRequest) {
                 .select("id")
                 .eq("contact_id", contactId)
                 .eq("integrated_number", integratedNum)
-                .eq("org_id", orgId)
                 .single();
 
             if (existingConv) {
@@ -294,7 +282,6 @@ export async function POST(request: NextRequest) {
                         last_message_time: timestamp,
                         last_incoming_timestamp: isEchoMessage ? undefined : timestamp,
                         unread_count: isEchoMessage ? 0 : 1,
-                        org_id: orgId,
                     })
                     .select("id")
                     .single();

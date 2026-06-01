@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
-import { getRequestContext } from "@/lib/whatsapp/request";
 import type { WhatsAppNumber } from "@/lib/whatsapp/types";
 
 /**
@@ -8,17 +7,11 @@ import type { WhatsAppNumber } from "@/lib/whatsapp/types";
  * Fetch configured numbers from the database.
  */
 export async function GET(request: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(request.headers);
     try {
-        let query = supabaseAdmin
+        const query = supabaseAdmin
             .from("integrated_numbers")
             .select("*")
             .order("created_at", { ascending: true });
-
-        // Super admins see all numbers; regular users see only their org
-        if (!isSuperAdmin) {
-            query = query.eq("org_id", orgId);
-        }
 
         const { data: dbNumbers, error } = await query;
 
@@ -55,10 +48,9 @@ export async function GET(request: NextRequest) {
  * Add a new integrated number.
  */
 export async function POST(req: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(req.headers);
     try {
         const body = await req.json();
-        const { number, label, provider, metaWabaId, metaPhoneNumberId, metaAccessToken, orgId: targetOrgId } = body;
+        const { number, label, provider, metaWabaId, metaPhoneNumberId, metaAccessToken } = body;
 
         if (!number) {
             return NextResponse.json({ error: "Phone number is required" }, { status: 400 });
@@ -66,13 +58,9 @@ export async function POST(req: NextRequest) {
 
         const cleanNumber = number.replace(/^\+/, "");
 
-        // Super admins can specify the target org; regular users always use their own org
-        const effectiveOrgId = isSuperAdmin && targetOrgId ? targetOrgId : orgId;
-
         const { data, error } = await supabaseAdmin
             .from("integrated_numbers")
             .insert([{
-                org_id: effectiveOrgId,
                 number: cleanNumber,
                 label,
                 provider: provider || "msg91",
@@ -100,10 +88,9 @@ export async function POST(req: NextRequest) {
  * Update an integrated number.
  */
 export async function PATCH(req: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(req.headers);
     try {
         const body = await req.json();
-        const { id, label, provider, metaWabaId, metaPhoneNumberId, metaAccessToken, orgId: newOrgId } = body;
+        const { id, label, provider, metaWabaId, metaPhoneNumberId, metaAccessToken } = body;
 
         if (!id) {
             return NextResponse.json({ error: "Number ID is required" }, { status: 400 });
@@ -117,20 +104,10 @@ export async function PATCH(req: NextRequest) {
             meta_access_token: metaAccessToken,
         };
 
-        // Super admins can reassign a number to a different org
-        if (isSuperAdmin && newOrgId) {
-            updateData.org_id = newOrgId;
-        }
-
-        let query = supabaseAdmin
+        const query = supabaseAdmin
             .from("integrated_numbers")
             .update(updateData)
             .eq("id", id);
-
-        // Regular users can only update their own org's numbers
-        if (!isSuperAdmin) {
-            query = query.eq("org_id", orgId);
-        }
 
         const { data, error } = await query.select().single();
 
@@ -151,7 +128,6 @@ export async function PATCH(req: NextRequest) {
  * Delete an integrated number.
  */
 export async function DELETE(req: NextRequest) {
-    const { orgId, isSuperAdmin } = getRequestContext(req.headers);
     try {
         const { searchParams } = new URL(req.url);
         const id = searchParams.get("id");
@@ -160,15 +136,10 @@ export async function DELETE(req: NextRequest) {
             return NextResponse.json({ error: "Number ID is required" }, { status: 400 });
         }
 
-        let query = supabaseAdmin
+        const query = supabaseAdmin
             .from("integrated_numbers")
             .delete()
             .eq("id", id);
-
-        // Regular users can only delete their own org's numbers
-        if (!isSuperAdmin) {
-            query = query.eq("org_id", orgId);
-        }
 
         const { error, count } = await query.select().then(res => ({
             error: res.error,
