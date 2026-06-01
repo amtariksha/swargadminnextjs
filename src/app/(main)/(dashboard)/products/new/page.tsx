@@ -1,19 +1,22 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useSubcategories, useCreateProduct, useUploadProductImage, usePackagingTypes } from '@/hooks/useData';
+import { useSubcategories, useCreateProduct, useUploadProductImage, usePackagingTypes, useFeatureFlag } from '@/hooks/useData';
 import { useIntermediates } from '@/hooks/useProduction';
 import FormField, { inputClassName, selectClassName, textareaClassName } from '@/components/FormField';
 import ImageUpload from '@/components/ImageUpload';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 const productSchema = z.object({
     title: z.string().min(1, 'Title is required'),
+    // Variations (migration 032). Optional — backend auto-derives from
+    // title when blank; admin can override.
+    slug: z.string().optional(),
     qty_text: z.string().min(1, 'Quantity text is required (e.g., 1L, 500g)'),
     price: z.number().min(0, 'Price must be positive'),
     mrp: z.number().min(0, 'MRP must be positive'),
@@ -36,6 +39,11 @@ const productSchema = z.object({
     // Feature 17 — back order: sell at zero stock with a tentative date.
     allow_back_order: z.boolean().optional(),
     back_order_next_available: z.string().optional(),
+    // Variations (migration 030). Parity with the edit screen — mark a
+    // product Variable at create time and flow into the variant editor.
+    product_type: z.enum(['simple', 'variable']).optional(),
+    stock_managed_at: z.enum(['variant', 'parent']).optional(),
+    cost_price: z.number().min(0).optional(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -46,6 +54,11 @@ export default function AddProductPage() {
     const createProduct = useCreateProduct();
     const uploadImage = useUploadProductImage();
     const [imageFile, setImageFile] = useState<File | null>(null);
+    // Additional/slider images (image_type=2). Collected here and uploaded
+    // post-create once we have the product id — parity with the edit screen,
+    // which manages up to 5 slider images.
+    const [sliderFiles, setSliderFiles] = useState<File[]>([]);
+    const sliderInputRef = useRef<HTMLInputElement>(null);
 
     // Feature 16 — manufactured (packed) product linkage. Managed outside
     // react-hook-form so an empty number input never trips Zod's NaN check.
@@ -57,12 +70,26 @@ export default function AddProductPage() {
     // Feature 07 — returnable packaging linkage.
     const { data: packagingTypes = [] } = usePackagingTypes(true);
 
+    // Variations (migration 030). Gates the type toggle so non-variation
+    // tenants never see it — same flag the edit screen and sidebar use.
+    const variationsEnabled = useFeatureFlag('enable_variations', false);
+
     const { register, handleSubmit, watch, formState: { errors } } = useForm<ProductFormData>({
         resolver: zodResolver(productSchema),
-        defaultValues: { tax: 0, stock_qty: 100, preferences: 0, subscription: 1, is_active: 1, price: 0, mrp: 0, is_returnable_packaging: false, packaging_type_id: '', delivery_window: 1, web_visible: 1, allow_back_order: false, back_order_next_available: '' },
+        defaultValues: { tax: 0, stock_qty: 100, preferences: 0, subscription: 1, is_active: 1, price: 0, mrp: 0, is_returnable_packaging: false, packaging_type_id: '', delivery_window: 1, web_visible: 1, allow_back_order: false, back_order_next_available: '', product_type: 'simple', stock_managed_at: 'variant' },
     });
     const isReturnablePackaging = !!watch('is_returnable_packaging');
     const allowBackOrder = !!watch('allow_back_order');
+    const productType = watch('product_type') || 'simple';
+    const isVariable = productType === 'variable';
+
+    const handleSliderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        const oversize = files.find((f) => f.size > 2 * 1024 * 1024);
+        if (oversize) { toast.error('Each image must be under 2MB'); return; }
+        setSliderFiles((prev) => [...prev, ...files].slice(0, 5));
+        if (sliderInputRef.current) sliderInputRef.current.value = '';
+    };
 
     const onSubmit = async (data: ProductFormData) => {
         if (isManufactured && (!sourceIntermediateId || !packVolume)) {
@@ -85,6 +112,7 @@ export default function AddProductPage() {
             }
         }
         try {
+            const variable = data.product_type === 'variable';
             const payload = {
                 ...data,
                 source_intermediate_id: isManufactured && sourceIntermediateId ? Number(sourceIntermediateId) : null,
@@ -93,6 +121,12 @@ export default function AddProductPage() {
                 packaging_type_id: data.is_returnable_packaging && data.packaging_type_id ? Number(data.packaging_type_id) : null,
                 allow_back_order: backOrder ? 1 : 0,
                 back_order_next_available: backOrder ? data.back_order_next_available : null,
+                // Variations (migration 030). When non-variable, force the
+                // simple-product defaults so a stale stock_managed_at can't
+                // leak through.
+                product_type: variable ? 'variable' : 'simple',
+                stock_managed_at: variable ? (data.stock_managed_at || 'variant') : 'variant',
+                cost_price: data.cost_price != null && data.cost_price !== 0 ? data.cost_price : null,
             };
             const result = await createProduct.mutateAsync(payload as unknown as Record<string, unknown>);
             // Backend returns id at top level: { response: 200, id: 123 }
@@ -108,8 +142,29 @@ export default function AddProductPage() {
                 await uploadImage.mutateAsync(formData);
             }
 
-            toast.success('Product created successfully');
-            router.push('/products');
+            // Upload any additional/slider images (image_type=2) now that the
+            // product id exists. Sequential to keep ordering deterministic.
+            if (productId && sliderFiles.length > 0) {
+                for (const f of sliderFiles) {
+                    const fd = new FormData();
+                    fd.append('image', f);
+                    fd.append('id', String(productId));
+                    fd.append('image_type', '2');
+                    await uploadImage.mutateAsync(fd);
+                }
+            }
+
+            // Variations: a Variable product has no purchasable units yet —
+            // route the operator straight into the variant editor to add
+            // attributes + generate variants. Simple products go back to the
+            // list as before.
+            if (variable && productId) {
+                toast.success('Product created — now add its variations');
+                router.push(`/products/${productId}/variations`);
+            } else {
+                toast.success('Product created successfully');
+                router.push('/products');
+            }
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to create product');
         }
@@ -131,6 +186,12 @@ export default function AddProductPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <FormField label="Product Title" error={errors.title} required>
                         <input {...register('title')} className={inputClassName} placeholder="Product name" />
+                    </FormField>
+                    {/* Variations (migration 032). URL-safe identifier used in
+                        /product/{slug} storefront routes. Auto-derived from
+                        title at save time when left blank. */}
+                    <FormField label="Slug — URL identifier" error={errors.slug}>
+                        <input {...register('slug')} className={inputClassName} placeholder="auto-generated from title if blank" />
                     </FormField>
                     <FormField label="Quantity Text" error={errors.qty_text} required>
                         <input {...register('qty_text')} className={inputClassName} placeholder="e.g., 1L, 500g, 250ml" />
@@ -190,6 +251,43 @@ export default function AddProductPage() {
                         </select>
                     </FormField>
                 </div>
+
+                {/* Variations (migration 030) — mark this product Variable at
+                    create time, then flow into the variant editor on save.
+                    Hidden when the tenant flag is off. */}
+                {variationsEnabled && (
+                <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4 space-y-3">
+                    <div>
+                        <h4 className="text-sm font-semibold text-white">Product type</h4>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                            {isVariable
+                                ? 'On save you’ll be taken to the Variations editor to add attributes and generate variants. The price / stock fields above become the fallback default.'
+                                : 'Simple product — one SKU; the fields above are the source of truth.'}
+                        </p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <FormField label="Type">
+                            <select {...register('product_type')} className={selectClassName}>
+                                <option value="simple">Simple</option>
+                                <option value="variable">Variable</option>
+                            </select>
+                        </FormField>
+                        {isVariable && (
+                            <FormField label="Stock managed at">
+                                <select {...register('stock_managed_at')} className={selectClassName}>
+                                    <option value="variant">Per-variant stock</option>
+                                    <option value="parent">Shared parent pool</option>
+                                </select>
+                            </FormField>
+                        )}
+                        <FormField label="Cost price (₹) — for margin reports">
+                            <input {...register('cost_price', { valueAsNumber: true })}
+                                type="number" step="0.01" min={0} placeholder="Optional"
+                                className={inputClassName} />
+                        </FormField>
+                    </div>
+                </div>
+                )}
 
                 {/* Feature 16 — manufactured (packed) product linkage */}
                 <div className="border-t border-slate-800/50 pt-4 space-y-4">
@@ -264,6 +362,40 @@ export default function AddProductPage() {
                 <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1.5">Product Image</label>
                     <ImageUpload onUpload={setImageFile} maxSize={2} />
+                </div>
+
+                {/* Additional / slider images (image_type=2). Parity with the
+                    edit screen — collected here and uploaded right after the
+                    product is created (the upload endpoint needs the id). */}
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                        Additional Images ({sliderFiles.length}/5)
+                    </label>
+                    {sliderFiles.length > 0 && (
+                        <div className="grid grid-cols-3 md:grid-cols-5 gap-3 mb-3">
+                            {sliderFiles.map((f, i) => (
+                                <div key={`${f.name}-${i}`} className="relative group">
+                                    <img src={URL.createObjectURL(f)} alt={`Additional ${i + 1}`}
+                                        className="w-full h-20 rounded-xl object-cover" />
+                                    <button type="button"
+                                        onClick={() => setSliderFiles((prev) => prev.filter((_, idx) => idx !== i))}
+                                        className="absolute top-1 right-1 p-1 bg-red-600 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <X className="w-3 h-3 text-white" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {sliderFiles.length < 5 && (
+                        <>
+                            <input ref={sliderInputRef} type="file" accept=".png,.jpg,.jpeg" multiple
+                                onChange={handleSliderSelect} className="hidden" />
+                            <button type="button" onClick={() => sliderInputRef.current?.click()}
+                                className="flex items-center gap-2 px-4 py-2 w-full justify-center bg-slate-800/50 border border-dashed border-slate-700/50 rounded-xl text-sm text-slate-400 hover:text-white hover:border-purple-500/50">
+                                <Upload className="w-4 h-4" /> Add Image
+                            </button>
+                        </>
+                    )}
                 </div>
 
                 <div className="flex gap-3 pt-4 border-t border-slate-800/50">
