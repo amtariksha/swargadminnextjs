@@ -280,6 +280,15 @@ export async function POST(request: NextRequest) {
             .eq("phone", actualCustomerPhone)
             .single();
 
+        // Append-to-existing-only for outbound: a bulk outbound notification
+        // (e.g. the swarg_credit_debit wallet template) to someone we've never
+        // chatted with must NOT spawn a new contact/thread — that floods the
+        // inbox. Real inbound still creates contacts + conversations below.
+        if (!contact && isExternalOutbound) {
+            console.log("[MSG91 Webhook] Outbound to unknown contact — not recording (append-to-existing-only).");
+            return NextResponse.json({ received: true, skipped: "outbound_no_existing_contact" }, { status: 200 });
+        }
+
         if (!contact) {
             const contactDisplayName = senderName || actualCustomerPhone;
             const { data: newContact, error: contactError } = await supabaseAdmin
@@ -330,6 +339,14 @@ export async function POST(request: NextRequest) {
             .eq("contact_id", contact!.id)
             .eq("integrated_number", actualBusinessPhone || "default")
             .single();
+
+        // Append-to-existing-only for outbound: don't open a new thread for an
+        // outbound notification to a contact that has no conversation on this
+        // number yet. Inbound falls through and creates the conversation.
+        if (!conversation && isExternalOutbound) {
+            console.log("[MSG91 Webhook] Outbound with no existing conversation — not recording (append-to-existing-only).");
+            return NextResponse.json({ received: true, skipped: "outbound_no_existing_conversation" }, { status: 200 });
+        }
 
         if (!conversation) {
             const convInsert: Record<string, unknown> = {
