@@ -7,7 +7,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, RefreshCw, CheckCircle2, XCircle } from 'lucide-react';
-import { formatApiDate } from '@/lib/dateUtils';
 import {
     useAutomationRuns,
     useAutomationRunsSummary,
@@ -74,13 +73,45 @@ function renderSummary(run: AutomationRun): string {
     }
 }
 
+// IST renderer for this page's timestamps.
+//
+// automation_run.started_at / finished_at (and the summary's last_run_at, which
+// is MAX(started_at)) are TIMESTAMP *without* time zone columns, written from
+// Date.toISOString() with the Postgres session in UTC. The pg pool returns oid
+// 1114 as the raw naive string, so the value reaching us is a UTC wall-clock
+// like "2026-05-29 18:30:00". The shared formatApiDate() parses naive strings
+// as browser-local, which renders that UTC wall-clock as-is — 5h30m behind real
+// IST (midnight IST shows as the previous day 18:30).
+//
+// Fix here: parse the naive value as UTC, then render in Asia/Kolkata via Intl
+// (deterministic regardless of the viewer's own browser timezone). Scoped to
+// this page only — dateUtils and other pages are intentionally left untouched.
+const istTimeFormat = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+});
+
 function fmtTs(value: string | null | undefined): string {
     if (!value) return '—';
-    try {
-        return formatApiDate(value, 'dd MMM, HH:mm:ss');
-    } catch {
-        return String(value).slice(0, 19);
-    }
+    const s = String(value).trim();
+    // Naive "YYYY-MM-DD HH:mm:ss" with no zone marker → the stored value is a
+    // UTC wall-clock, so anchor it to UTC. Anything carrying a T+Z/offset is
+    // already an unambiguous instant — let the native parser handle it.
+    const naive = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+    const hasZone = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(s);
+    const instant = naive && !hasZone
+        ? new Date(Date.UTC(+naive[1], +naive[2] - 1, +naive[3], +naive[4], +naive[5], +naive[6]))
+        : new Date(s);
+    if (Number.isNaN(instant.getTime())) return s.slice(0, 19);
+    const parts = Object.fromEntries(
+        istTimeFormat.formatToParts(instant).map((p) => [p.type, p.value]),
+    );
+    return `${parts.day} ${parts.month}, ${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
 export default function AutomationRunsPage() {
