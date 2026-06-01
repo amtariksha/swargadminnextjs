@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useDaytimeOrders, DaytimeOrder } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
+import DateWithTodayButton from '@/components/DateWithTodayButton';
 import { Sun, Plus, BarChart3 } from 'lucide-react';
 
 const ORDER_STATUS_STYLE: Record<string, string> = {
@@ -56,12 +57,24 @@ export default function DayOrdersPage() {
         },
         {
             key: 'items',
-            header: 'Items',
-            render: (o) => (
-                <span className="text-slate-300">
-                    {o.items?.length || 0} item{(o.items?.length || 0) === 1 ? '' : 's'}
-                </span>
-            ),
+            header: 'Products',
+            render: (o) => {
+                const items = o.items || [];
+                if (!items.length) return <span className="text-slate-500">—</span>;
+                return (
+                    <div className="space-y-0.5">
+                        {items.slice(0, 3).map((it) => (
+                            <div key={it.id} className="text-xs text-slate-300">
+                                <span className="text-slate-500">{it.qty}×</span>{' '}
+                                {it.product_title || it.base_product_title || `Product #${it.product_id}`}
+                            </div>
+                        ))}
+                        {items.length > 3 && (
+                            <div className="text-xs text-slate-500">+{items.length - 3} more</div>
+                        )}
+                    </div>
+                );
+            },
         },
         { key: 'delivery_date', header: 'Delivery', width: '120px' },
         {
@@ -107,9 +120,8 @@ export default function DayOrdersPage() {
                 </div>
             </div>
 
-            <div className="flex flex-wrap gap-3">
-                <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-                    className="px-3 py-2 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white text-sm" />
+            <div className="flex flex-wrap items-center gap-3">
+                <DateWithTodayButton value={date} onChange={setDate} />
                 <select value={orderStatus} onChange={(e) => setOrderStatus(e.target.value)}
                     className="px-3 py-2 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white text-sm">
                     <option value="">All order statuses</option>

@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import { format, addDays } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
+import { ApiError } from '@/lib/api-error';
 import { useDrivers } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import DriverGroupTable from '@/components/DriverGroupTable';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import {
     type DeliveryItem,
     type DriverGroup,
@@ -174,6 +176,9 @@ export default function DeliveryListPage() {
     const [expandedCol, setExpandedCol] = useState<string | null>('edit_qty');
     // "Check deliveries" pre-flight (Feature 05-E): a dry-run for tomorrow.
     const [checkState, setCheckState] = useState<CheckState | null>(null);
+    // Feature 10 — the row pending confirmation for "send to day-time network".
+    const [dayNetItem, setDayNetItem] = useState<DeliveryItem | null>(null);
+    const [dayNetSubmitting, setDayNetSubmitting] = useState(false);
 
     const { data: drivers = [] } = useDrivers();
 
@@ -302,13 +307,27 @@ export default function DeliveryListPage() {
 
     // Feature 10 — push an undelivered morning delivery into the day-time
     // shared pool. Read-only on the morning tables; the morning `delivery`
-    // row stays status=2.
+    // row stays status=2. Always refetch on settle so the row flips to
+    // "In Day Pool" (in_day_pool) and can't be double-submitted into a 409.
     const handleSendToDayNetwork = async (item: DeliveryItem) => {
+        setDayNetSubmitting(true);
         try {
             await POST('/daytime/from_morning', { order_id: item.order_id });
             toast.success(`Order #${item.order_id} sent to the day-time network`);
+            setDayNetItem(null);
+            refetch();
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Could not send to day network');
+            // The first send may have already succeeded (e.g. a double-click);
+            // treat "already in pool" as a soft success, not a scary error.
+            if (error instanceof ApiError && (error.code === 'already_in_day_pool' || error.status === 409)) {
+                toast.info(`Order #${item.order_id} is already in the day-time pool`);
+                setDayNetItem(null);
+                refetch();
+            } else {
+                toast.error(error instanceof Error ? error.message : 'Could not send to day network');
+            }
+        } finally {
+            setDayNetSubmitting(false);
         }
     };
 
@@ -520,16 +539,28 @@ export default function DeliveryListPage() {
                     </button>
                 </div>
             ) },
-        { key: 'day_net', header: 'Day Net', width: '110px',
+        { key: 'day_net', header: 'Day Net', width: '120px',
             // Feature 10 — only not-delivered (status 2) rows can be recovered
-            // via the day-time network.
-            render: (item) => item.status === 2
-                ? <button onClick={(e) => { e.stopPropagation(); handleSendToDayNetwork(item); }}
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 text-xs font-medium"
-                    title="Send this undelivered order to the day-time network">
-                    <Sun className="w-3 h-3" /> Day Net
-                  </button>
-                : <span className="text-slate-600 text-xs">—</span> },
+            // via the day-time network. Rows already in the pool show a static
+            // "In Day Pool" badge so they can't be re-submitted (→ 409).
+            render: (item) => {
+                if (item.status !== 2) return <span className="text-slate-600 text-xs">—</span>;
+                if (item.in_day_pool) {
+                    return (
+                        <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 text-xs font-medium"
+                            title="Already sent to the day-time pool — a day driver can claim it">
+                            <Sun className="w-3 h-3" /> In Day Pool
+                        </span>
+                    );
+                }
+                return (
+                    <button onClick={(e) => { e.stopPropagation(); setDayNetItem(item); }}
+                        className="flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 text-xs font-medium"
+                        title="Send this undelivered order to the day-time network">
+                        <Sun className="w-3 h-3" /> Day Net
+                    </button>
+                );
+            } },
         { key: 'delivered_date', header: 'Del Date', width: colW('delivered_date', '110px', '160px') },
         { key: 'mark_delivered_time_stamp', header: 'Del Time', width: colW('mark_delivered_time_stamp', '100px', '150px'), render: (item) => <span className="text-sm">{formatTime(item.mark_delivered_time_stamp)}</span> },
         { key: 'address', header: 'Address', width: colW('address', '220px', '400px'),
@@ -804,6 +835,19 @@ export default function DeliveryListPage() {
             {checkState && (
                 <CheckDeliveriesModal state={checkState} onClose={() => setCheckState(null)} />
             )}
+
+            {/* Feature 10 — confirm before pushing a morning order into the day pool */}
+            <ConfirmDialog
+                isOpen={dayNetItem !== null}
+                title="Send to day-time network"
+                message={dayNetItem
+                    ? `Send order #${dayNetItem.order_id} (${dayNetItem.name}) to the day-time delivery pool? A day driver will be able to claim and deliver it. The morning delivery record stays unchanged.`
+                    : ''}
+                confirmText="Send to Day Net"
+                isLoading={dayNetSubmitting}
+                onConfirm={() => { if (dayNetItem) handleSendToDayNetwork(dayNetItem); }}
+                onCancel={() => setDayNetItem(null)}
+            />
 
             {/* Edit Qty Modal */}
             {editQtyModal && (

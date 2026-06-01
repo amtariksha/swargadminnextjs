@@ -12,6 +12,9 @@ export interface DeliveryItem {
     id: number;
     pre_delivery_id: number;
     order_id: number;
+    /** True when this morning order is already in the day-time pool (Feature 10)
+     *  — drives the "In Day Pool" state on the Day Net button. */
+    in_day_pool?: boolean;
     user_id: number;
     product_id: number;
     name: string;
