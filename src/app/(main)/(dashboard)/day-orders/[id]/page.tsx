@@ -3,11 +3,11 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useDaytimeOrder } from '@/hooks/useData';
+import { useDaytimeOrder, useDrivers } from '@/hooks/useData';
 import DaytimeOrderForm from '@/components/DaytimeOrderForm';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { POST, ApiError } from '@/lib/api';
-import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PAID_STATES = ['paid', 'cash', 'wallet_deducted'];
@@ -20,6 +20,11 @@ export default function DaytimeOrderDetailPage() {
     const [busy, setBusy] = useState<string | null>(null);
     const [confirmCancel, setConfirmCancel] = useState(false);
     const [confirmPay, setConfirmPay] = useState<'cash' | 'wallet' | null>(null);
+    const [confirmDelivered, setConfirmDelivered] = useState(false);
+    const [deliveredBy, setDeliveredBy] = useState<number | ''>('');
+    // Day drivers (role 6) — who can be recorded as having delivered the order.
+    const { data: drivers = [] } = useDrivers();
+    const dayDrivers = drivers.filter((d) => d.role_id === 6);
 
     const refresh = () => {
         queryClient.invalidateQueries({ queryKey: ['daytime-order', id] });
@@ -58,6 +63,12 @@ export default function DaytimeOrderDetailPage() {
     const cancelOrder = () =>
         runAction('cancel', () => POST(`/daytime/orders/${id}/cancel`), 'Order cancelled')
             .then(() => setConfirmCancel(false));
+
+    const markDelivered = () =>
+        runAction('delivered',
+            () => POST(`/daytime/orders/${id}/mark_delivered`, { delivery_user_id: deliveredBy }),
+            'Marked delivered')
+            .then(() => setConfirmDelivered(false));
 
     if (isLoading) {
         return <div className="space-y-4"><div className="h-8 w-40 bg-slate-800/50 rounded animate-pulse" />
@@ -123,6 +134,25 @@ export default function DaytimeOrderDetailPage() {
                         </button>
                     </div>
                 )}
+                {order.order_status !== 'cancelled' && order.order_status !== 'delivered' && (
+                    <div className="border-t border-slate-800/50 pt-3 space-y-2">
+                        <p className="text-xs font-semibold text-slate-300">Mark delivered (admin)</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <select value={deliveredBy}
+                                onChange={(e) => setDeliveredBy(e.target.value ? Number(e.target.value) : '')}
+                                className="px-3 py-2 text-sm bg-slate-900/50 border border-slate-700/50 rounded-xl text-white">
+                                <option value="">Select delivery person…</option>
+                                {dayDrivers.map((d) => (
+                                    <option key={d.user_id} value={d.user_id}>{d.name}</option>
+                                ))}
+                            </select>
+                            <button onClick={() => setConfirmDelivered(true)} disabled={busy !== null || deliveredBy === ''}
+                                className="flex items-center gap-2 px-4 py-2 text-sm bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl hover:bg-emerald-500/30 disabled:opacity-50">
+                                <CheckCircle2 className="w-4 h-4" /> {busy === 'delivered' ? 'Saving…' : 'Mark delivered'}
+                            </button>
+                        </div>
+                    </div>
+                )}
                 {order.delivery && (
                     <p className="text-xs text-slate-500">
                         Delivery: {order.delivery.status}
@@ -168,6 +198,16 @@ export default function DaytimeOrderDetailPage() {
                 onCancel={() => setConfirmCancel(false)}
                 variant="danger"
                 confirmText="Cancel order"
+            />
+
+            <ConfirmDialog
+                isOpen={confirmDelivered}
+                title="Mark order delivered"
+                message={`Mark order #${order.order_no} as delivered by ${dayDrivers.find((d) => d.user_id === deliveredBy)?.name || 'the selected driver'}?`}
+                onConfirm={markDelivered}
+                onCancel={() => setConfirmDelivered(false)}
+                confirmText="Mark delivered"
+                isLoading={busy === 'delivered'}
             />
 
             <ConfirmDialog
