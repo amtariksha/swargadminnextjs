@@ -75,11 +75,11 @@ export default function PurchaseReportPage() {
         </div>
         <div>
           <label className="block text-xs text-slate-400 mb-1">From</label>
-          <input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} className={inputCls} />
+          <input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} className={`${inputCls} sm:max-w-[13rem]`} />
         </div>
         <div>
           <label className="block text-xs text-slate-400 mb-1">To</label>
-          <input type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} className={inputCls} />
+          <input type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} className={`${inputCls} sm:max-w-[13rem]`} />
         </div>
       </div>
 

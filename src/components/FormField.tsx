@@ -35,11 +35,21 @@ export default function FormField({ label, error, required, children, className 
 }
 
 // Reusable input class for consistency.
-// The trailing [&::-webkit-calendar-picker-indicator] utilities invert the
-// native date/time picker glyph so it's visible on the dark theme (it ships
-// near-black by default → invisible). No effect on non-date/time inputs.
+// Date/time picker glyph visibility is handled globally in globals.css
+// (::-webkit-calendar-picker-indicator), so it doesn't need per-input utilities.
 export const inputClassName =
-    'w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-colors text-sm [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:opacity-70 [&::-webkit-calendar-picker-indicator]:cursor-pointer';
+    'w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-colors text-sm';
+
+// Native date/time fields otherwise fill a whole grid cell (~half the page).
+// Cap on sm+ so they're content-sized and paired fields (e.g. Delivery Date /
+// Delivery Time) align. Full-width below sm for mobile. Exported as standalone
+// tokens too, so inputs that carry a page-local class can append the same cap.
+export const dateFieldMaxWidth = 'sm:max-w-[13rem]'; // ~208px — date & time
+export const datetimeFieldMaxWidth = 'sm:max-w-[15rem]'; // ~240px — datetime-local
+
+export const dateInputClassName = `${inputClassName} ${dateFieldMaxWidth}`;
+export const timeInputClassName = `${inputClassName} ${dateFieldMaxWidth}`;
+export const datetimeInputClassName = `${inputClassName} ${datetimeFieldMaxWidth}`;
 
 export const selectClassName =
     'w-full px-3 py-2.5 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-colors text-sm';

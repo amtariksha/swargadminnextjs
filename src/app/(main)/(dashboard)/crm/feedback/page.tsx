@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
-import { selectClassName, inputClassName } from '@/components/FormField';
+import { selectClassName, inputClassName, dateInputClassName } from '@/components/FormField';
 import { ChevronDown, ChevronRight, Plus, Search } from 'lucide-react';
 import { useFeedbackList, useUsers, type CustomerFeedback, type FeedbackListFilters } from '@/hooks/useData';
 import {
@@ -148,11 +148,11 @@ export default function AllFeedbackPage() {
                 </div>
                 <div>
                     <label className="block text-xs text-slate-400 mb-1">From date</label>
-                    <input type="date" value={filters.from_date ?? ''} onChange={(e) => setFilter('from_date', e.target.value)} className={inputClassName} />
+                    <input type="date" value={filters.from_date ?? ''} onChange={(e) => setFilter('from_date', e.target.value)} className={dateInputClassName} />
                 </div>
                 <div>
                     <label className="block text-xs text-slate-400 mb-1">To date</label>
-                    <input type="date" value={filters.to_date ?? ''} onChange={(e) => setFilter('to_date', e.target.value)} className={inputClassName} />
+                    <input type="date" value={filters.to_date ?? ''} onChange={(e) => setFilter('to_date', e.target.value)} className={dateInputClassName} />
                 </div>
             </div>
 

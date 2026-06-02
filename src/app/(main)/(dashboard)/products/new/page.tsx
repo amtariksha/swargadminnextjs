@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useSubcategories, useCreateProduct, useUploadProductImage, usePackagingTypes, useFeatureFlag } from '@/hooks/useData';
 import { useIntermediates } from '@/hooks/useProduction';
-import FormField, { inputClassName, selectClassName, textareaClassName } from '@/components/FormField';
+import FormField, { inputClassName, selectClassName, textareaClassName, dateInputClassName } from '@/components/FormField';
 import ImageUpload from '@/components/ImageUpload';
 import { ArrowLeft, Save, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -342,7 +342,7 @@ export default function AddProductPage() {
                     </label>
                     {allowBackOrder && (
                         <FormField label="Tentative Next-Available Date" error={errors.back_order_next_available} required>
-                            <input {...register('back_order_next_available')} type="date" className={inputClassName} />
+                            <input {...register('back_order_next_available')} type="date" className={dateInputClassName} />
                         </FormField>
                     )}
                 </div>

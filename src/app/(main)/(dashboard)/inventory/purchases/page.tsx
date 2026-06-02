@@ -156,7 +156,7 @@ export default function PurchasesPage() {
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Purchase Date *</label>
               <input type="date" value={form.purchase_date} required
-                onChange={(e) => setForm({ ...form, purchase_date: e.target.value })} className={inputCls} />
+                onChange={(e) => setForm({ ...form, purchase_date: e.target.value })} className={`${inputCls} sm:max-w-[13rem]`} />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Invoice No</label>

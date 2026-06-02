@@ -18,7 +18,7 @@ import type { Variant } from '@/lib/types/variations';
 import CustomerPicker, { CustomerValue } from '@/components/CustomerPicker';
 import AddressMapPicker from '@/components/AddressMapPicker';
 import { isMapsConfigured, type PickedPlace } from '@/lib/maps';
-import FormField, { inputClassName, selectClassName, textareaClassName } from '@/components/FormField';
+import FormField, { inputClassName, selectClassName, textareaClassName, dateInputClassName, timeInputClassName } from '@/components/FormField';
 import { POST, PUT, ApiError } from '@/lib/api';
 import { MapPin, Plus, Trash2, Save } from 'lucide-react';
 import { toast } from 'sonner';
@@ -308,7 +308,7 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
                 </FormField>
                 <FormField label="Delivery Date" required>
                     <input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)}
-                        className={inputClassName} />
+                        className={dateInputClassName} />
                 </FormField>
                 <FormField label="Entry Type">
                     <select value={entryType} onChange={(e) => setEntryType(e.target.value)}
@@ -325,7 +325,7 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
                 </FormField>
                 <FormField label="Desired Delivery Time">
                     <input type="time" value={desiredTime} onChange={(e) => setDesiredTime(e.target.value)}
-                        className={inputClassName} />
+                        className={timeInputClassName} />
                 </FormField>
                 <FormField label="Priority">
                     <select value={priority} onChange={(e) => setPriority(Number(e.target.value))}

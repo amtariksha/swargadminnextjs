@@ -9,7 +9,7 @@ import { useUsers, useProducts, useUserAddresses, useAddTransaction, useDrivers 
 import { useCreateOrder, useAssignOrder } from '@/hooks/useOrders';
 import { useVariants } from '@/hooks/useVariations';
 import type { Variant } from '@/lib/types/variations';
-import FormField, { inputClassName, selectClassName } from '@/components/FormField';
+import FormField, { inputClassName, selectClassName, dateInputClassName } from '@/components/FormField';
 import { ArrowLeft, Save, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -504,7 +504,7 @@ export default function CreateOrderPage() {
                         </FormField>
                         <FormField label="Start From" error={errors.start_date} required>
                             <input {...register('start_date')} type="date" min={getTomorrowDate()}
-                                className={`${inputClassName} cursor-pointer [&::-webkit-calendar-picker-indicator]:cursor-pointer`}
+                                className={`${dateInputClassName} cursor-pointer [&::-webkit-calendar-picker-indicator]:cursor-pointer`}
                                 onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
                         </FormField>
                     </div>

@@ -219,7 +219,7 @@ export default function ProductionRunsPage() {
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Production Date *</label>
               <input type="date" value={form.production_date} required
-                onChange={(e) => setForm({ ...form, production_date: e.target.value })} className={inputCls} />
+                onChange={(e) => setForm({ ...form, production_date: e.target.value })} className={`${inputCls} sm:max-w-[13rem]`} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

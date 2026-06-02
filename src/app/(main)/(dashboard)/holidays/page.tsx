@@ -143,7 +143,7 @@ export default function HolidaysPage() {
                                         type="date"
                                         value={formData.date}
                                         onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                                        className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white"
+                                        className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white sm:max-w-[13rem]"
                                         required
                                     />
                                 </div>
@@ -153,7 +153,7 @@ export default function HolidaysPage() {
                                         type="date"
                                         value={formData.end_date}
                                         onChange={(e) => setFormData({ ...formData, end_date: e.target.value })}
-                                        className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white"
+                                        className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white sm:max-w-[13rem]"
                                     />
                                 </div>
                             </div>

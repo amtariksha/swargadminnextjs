@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import Modal from '@/components/Modal';
-import { inputClassName, selectClassName } from '@/components/FormField';
+import { inputClassName, selectClassName, dateInputClassName } from '@/components/FormField';
 import {
     useRefundReasons,
     useRefundOrderContext,
@@ -148,7 +148,7 @@ export default function RefundModal({ transaction, onClose, onSuccess }: RefundM
                 <div>
                     <label className="block text-sm text-slate-300 mb-1">Delivery Date</label>
                     <input type="date" value={deliveryDate}
-                        onChange={(e) => setDeliveryDate(e.target.value)} className={inputClassName} />
+                        onChange={(e) => setDeliveryDate(e.target.value)} className={dateInputClassName} />
                 </div>
 
                 <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
