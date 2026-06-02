@@ -30,7 +30,6 @@
  */
 
 import { lmsAdmin } from "@/lib/lms/supabase";
-import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import {
     type JourneyDsl,
     type JourneyStep,
@@ -39,8 +38,7 @@ import {
 } from "@/lib/lms/journeys/dsl";
 import { assignTag, unassignTag } from "@/lib/lms/tags/service";
 import { hasConsent } from "@/lib/lms/consent/service";
-import { routeSend, type Purpose } from "@/lib/whatsapp/router";
-import { ORG_ID } from "@/lib/whatsapp/request";
+import { dispatchTemplateSend } from "@/lib/lms/send/dispatch";
 
 interface JourneyRunRow {
     id: string;
@@ -129,10 +127,12 @@ export async function advanceRun(args: {
 
         // ── Step dispatch ──────────────────────────────────────────────
         if (step.type === "send_template") {
-            await executeSendTemplate({
-                run,
-                step,
-            });
+            const sendResult = await executeSendTemplate({ run, step });
+            if (sendResult.deferUntil) {
+                // Quiet hours — stay on this step and retry after the window.
+                await updateRunState(run.id, step.id, sendResult.deferUntil);
+                return;
+            }
             const next = nextStepAfter(journey.dsl, step.id);
             if (!next) {
                 await markExit(run.id, "completed");
@@ -208,55 +208,31 @@ export async function advanceRun(args: {
 async function executeSendTemplate(args: {
     run: JourneyRunRow;
     step: Extract<JourneyStep, { type: "send_template" }>;
-}): Promise<void> {
-    // 1. Consent check — silently skip if the customer hasn't granted.
-    const granted = await hasConsent({
+}): Promise<{ deferUntil?: string }> {
+    // The shared dispatch pipeline owns consent + frequency cap + quiet hours +
+    // 2-number routing + the actual MSG91 send + the ledger row. A failed or
+    // skipped send is non-fatal: the journey advances rather than stalling on
+    // a transient provider error or a single customer's missing consent.
+    const result = await dispatchTemplateSend({
         customerId: args.run.customer_id,
-        purpose: args.step.requiresConsent,
+        templateName: args.step.templateName,
+        templateLanguage: args.step.templateLanguage,
+        purpose: args.step.purpose,
+        params: args.step.params,
+        requiresConsent: args.step.requiresConsent,
+        journeyRunId: args.run.id,
     });
-    if (!granted) {
+
+    if (result.status === "deferred_quiet_hours" && result.deferUntil) {
+        return { deferUntil: result.deferUntil };
+    }
+    if (result.status !== "sent") {
         console.log(
-            `[journey] skip send_template ${args.step.id} for ${args.run.customer_id} — no consent for ${args.step.requiresConsent}`,
+            `[journey] ${args.step.id} for ${args.run.customer_id}: ${result.status}` +
+                (result.reason ? ` (${result.reason})` : ""),
         );
-        return;
     }
-
-    // 2. Look up the customer's phone (we use contacts.phone as canonical).
-    const { data: contact, error } = await supabaseAdmin
-        .from("contacts")
-        .select("phone, name")
-        .eq("id", args.run.customer_id)
-        .maybeSingle();
-    if (error || !contact?.phone) {
-        console.warn(
-            `[journey] no contact / phone for customer ${args.run.customer_id}; skipping send`,
-        );
-        return;
-    }
-
-    // 3. Resolve routing decision + write audit.
-    let routed;
-    try {
-        routed = await routeSend({
-            orgId: ORG_ID,
-            purpose: args.step.purpose as Purpose,
-        });
-    } catch (err) {
-        console.error(
-            `[journey] routing failed for step ${args.step.id}:`,
-            err instanceof Error ? err.message : err,
-        );
-        return;
-    }
-
-    // 4. Actually dispatch. For now we just log — full template-send wiring
-    //    happens in C8 when Agent Force's Compliance Guard joins the chain.
-    //    Wiring through /api/whatsapp/chat/send is one fetch() away once the
-    //    routing-aware client lands.
-    console.log(
-        `[journey] would send template "${args.step.templateName}" via Number ${routed.number} to ${contact.phone}`,
-        { params: args.step.params, purpose: args.step.purpose },
-    );
+    return {};
 }
 
 async function executeTag(args: {

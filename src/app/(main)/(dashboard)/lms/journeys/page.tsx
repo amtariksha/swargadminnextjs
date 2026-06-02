@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
     Workflow,
     Loader2,
@@ -20,6 +21,7 @@ import {
     Download,
     AlertTriangle,
     CheckCircle2,
+    Plus,
 } from "lucide-react";
 import { wfetch } from "@/lib/whatsapp/wfetch";
 import type { Journey } from "@/lib/lms/journeys/service";
@@ -112,18 +114,27 @@ export default function JourneysPage() {
                         </p>
                     </div>
                 </div>
-                <button
-                    onClick={onInstallAll}
-                    disabled={installing}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-purple-700 disabled:opacity-50"
-                >
-                    {installing ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                        <Download className="h-4 w-4" />
-                    )}
-                    Install all templates
-                </button>
+                <div className="flex items-center gap-2">
+                    <Link
+                        href="/lms/journeys/new"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-purple-700"
+                    >
+                        <Plus className="h-4 w-4" />
+                        New journey
+                    </Link>
+                    <button
+                        onClick={onInstallAll}
+                        disabled={installing}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                    >
+                        {installing ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                            <Download className="h-4 w-4" />
+                        )}
+                        Install templates
+                    </button>
+                </div>
             </div>
 
             {installMsg && (

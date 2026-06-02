@@ -30,6 +30,10 @@ import {
 import { computeHealth, type HealthSignals } from "@/lib/lms/rfm/health";
 
 const BACKEND_LOOKBACK_DAYS = 180;
+// Frequency + Monetary window. Tuned to 30 days for Swarg's daily-dairy
+// subscription base — a 90-day window labels almost everyone "frequent" and
+// fails to separate genuinely active customers from those quietly lapsing.
+const FREQUENCY_WINDOW_DAYS = 30;
 const BATCH_UPSERT_SIZE = 200;
 
 export interface RfmRunResult {
@@ -198,7 +202,7 @@ async function fetchOrderAggregates(args: {
     const orders = json.data ?? [];
 
     const cutoff90 = Date.now() - args.lookbackDays * 24 * 60 * 60 * 1000;
-    const cutoff90d = Date.now() - 90 * 24 * 60 * 60 * 1000;
+    const cutoffFreqWindow = Date.now() - FREQUENCY_WINDOW_DAYS * 24 * 60 * 60 * 1000;
     const out = new Map<string, OrderAggregate>();
 
     for (const order of orders) {
@@ -219,7 +223,7 @@ async function fetchOrderAggregates(args: {
         if (!agg.lastOrderAt || createdAt > agg.lastOrderAt) agg.lastOrderAt = createdAt;
         if (!agg.firstOrderAt || createdAt < agg.firstOrderAt) agg.firstOrderAt = createdAt;
         agg.count180d += 1;
-        if (createdAt.getTime() >= cutoff90d) {
+        if (createdAt.getTime() >= cutoffFreqWindow) {
             agg.count90d += 1;
             agg.sum90d += amount;
         }

@@ -156,6 +156,95 @@ export async function enrollCustomer(args: {
     return mapRunRow(data);
 }
 
+/**
+ * Enrol a customer into every ACTIVE journey wired to a given trigger.
+ * Event sources (e.g. the backend delivery-completion webhook firing
+ * `first_delivery_completed`) call this so they never hardcode journey UUIDs.
+ * Idempotent via enrollCustomer's per-(journey, customer) dedupe.
+ */
+export async function enrollByTrigger(args: {
+    customerId: string;
+    trigger: JourneyTrigger;
+}): Promise<JourneyRun[]> {
+    const { data, error } = await lmsAdmin
+        .from("lms_journeys")
+        .select("id")
+        .eq("trigger_event", args.trigger)
+        .eq("is_active", true);
+    if (error) throw new Error(`[journeys] enrollByTrigger fetch: ${error.message}`);
+
+    const runs: JourneyRun[] = [];
+    for (const row of data ?? []) {
+        try {
+            runs.push(
+                await enrollCustomer({
+                    journeyId: row.id as string,
+                    customerId: args.customerId,
+                }),
+            );
+        } catch (err) {
+            console.warn(
+                `[journeys] enrollByTrigger: journey ${row.id as string} skipped:`,
+                err instanceof Error ? err.message : err,
+            );
+        }
+    }
+    return runs;
+}
+
+export async function getJourneyById(journeyId: string): Promise<Journey | null> {
+    const { data, error } = await lmsAdmin
+        .from("lms_journeys")
+        .select("*")
+        .eq("id", journeyId)
+        .maybeSingle();
+    if (error) throw new Error(`[journeys] getById: ${error.message}`);
+    return data ? mapJourneyRow(data) : null;
+}
+
+/**
+ * Edit an existing journey in place (operator-authored journeys). DSL is
+ * re-validated. This overwrites the current row rather than versioning —
+ * simplest semantics for the builder; the executor re-reads the DSL each tick.
+ */
+export async function updateJourney(args: {
+    journeyId: string;
+    name?: string;
+    triggerEvent?: JourneyTrigger;
+    dsl?: JourneyDsl;
+}): Promise<Journey> {
+    const update: Record<string, unknown> = {};
+    if (args.name !== undefined) update.name = args.name;
+    if (args.triggerEvent !== undefined) update.trigger_event = args.triggerEvent;
+    if (args.dsl !== undefined) {
+        validateJourneyDsl(args.dsl);
+        update.dsl = args.dsl;
+    }
+    if (Object.keys(update).length === 0) {
+        const cur = await getJourneyById(args.journeyId);
+        if (!cur) throw new Error("Journey not found");
+        return cur;
+    }
+    const { data, error } = await lmsAdmin
+        .from("lms_journeys")
+        .update(update)
+        .eq("id", args.journeyId)
+        .select("*")
+        .single();
+    if (error) throw new Error(`[journeys] update: ${error.message}`);
+    return mapJourneyRow(data);
+}
+
+export async function deleteJourney(journeyId: string): Promise<void> {
+    // lms_journey_runs reference the journey; the executor exits cleanly on a
+    // missing journey, so deleting strands any in-flight runs harmlessly.
+    const { error } = await lmsAdmin
+        .from("lms_journeys")
+        .delete()
+        .eq("id", journeyId);
+    if (error) throw new Error(`[journeys] delete: ${error.message}`);
+}
+
 export async function getRun(runId: string): Promise<JourneyRun | null> {
     const { data, error } = await lmsAdmin
         .from("lms_journey_runs")

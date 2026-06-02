@@ -150,9 +150,41 @@ const REPLENISHMENT_GHEE_JOURNEY: JourneyTemplate = {
     },
 };
 
+// ─── Replenishment factory (Paneer / Curd / Milk) ────────────────────────────
+// Same three-touch ladder as Ghee, parameterised per SKU. Operators can also
+// author bespoke per-SKU flows in the /lms/journeys builder. Auto-enrolment
+// (the RFM job firing `sku_replenish_due` from each SKU's expected re-order
+// date) still needs the confirmed days-between-orders per SKU before it fires
+// automatically; until then these run on `manual` / API enrolment.
+
+function makeReplenishment(sku: string): JourneyTemplate {
+    const Sku = sku.charAt(0).toUpperCase() + sku.slice(1);
+    return {
+        name: `replenishment_${sku}`,
+        description:
+            `Per-SKU restock nudge for ${Sku}. Three-touch ladder: reminder (D−3), ` +
+            `offer (D0), last-call (D+7).`,
+        dsl: {
+            trigger: "sku_replenish_due",
+            steps: [
+                { id: "remind_d-3", type: "send_template", templateName: `repl_${sku}_reminder_d-3`, purpose: "mkt_replenishment", requiresConsent: "marketing_whatsapp" },
+                { id: "wait_3d", type: "wait", days: 3 },
+                { id: "offer_d0", type: "send_template", templateName: `repl_${sku}_offer_d0`, purpose: "mkt_replenishment", requiresConsent: "marketing_whatsapp" },
+                { id: "wait_7d", type: "wait", days: 7 },
+                { id: "lastcall_d+7", type: "send_template", templateName: `repl_${sku}_lastcall_d+7`, purpose: "mkt_replenishment", requiresConsent: "marketing_whatsapp" },
+                { id: "tag_attempted", type: "tag", action: "add", tagName: `replenishment_attempted_${sku}`, namespace: "behaviour", expiresInDays: 60 },
+                { id: "done", type: "exit", reason: "completed" },
+            ],
+        },
+    };
+}
+
 export const JOURNEY_TEMPLATES: JourneyTemplate[] = [
     WELCOME_JOURNEY,
     REPLENISHMENT_GHEE_JOURNEY,
+    makeReplenishment("paneer"),
+    makeReplenishment("curd"),
+    makeReplenishment("milk"),
 ];
 
 export function findTemplate(name: string): JourneyTemplate | null {
