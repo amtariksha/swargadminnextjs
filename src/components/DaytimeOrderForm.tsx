@@ -5,7 +5,7 @@
  * Shared by /day-orders/new and /day-orders/[id]. Money shown here is a
  * preview; the backend re-computes total_amount authoritatively from items.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     useDaytimeProducts,
     useUserAddresses,
@@ -48,6 +48,71 @@ function variantLabel(v: Variant): string {
     return (text || v.qty_text || v.slug) + price;
 }
 
+/** Local (browser-tz) today as YYYY-MM-DD — the default delivery date. */
+const todayLocal = () => new Date().toLocaleDateString('en-CA');
+
+/** A variable product's base qty_text is its placeholder size; the chosen
+ *  variant carries the real size, so don't show the base size for those. */
+const productLabel = (p: DaytimeProduct) =>
+    `${p.title}${p.product_type !== 'variable' && p.qty_text ? ` (${p.qty_text})` : ''}`;
+
+/**
+ * Type-to-search product picker — replaces a long <select> so a sales exec can
+ * filter by name when there are many products.
+ */
+function ProductPicker({ products, value, onSelect }: {
+    products: DaytimeProduct[];
+    value: number | '';
+    onSelect: (productId: number) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const ref = useRef<HTMLDivElement>(null);
+    const selected = products.find((p) => p.id === value);
+    const filtered = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        return q ? products.filter((p) => p.title.toLowerCase().includes(q)) : products;
+    }, [products, query]);
+
+    useEffect(() => {
+        const onDoc = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener('mousedown', onDoc);
+        return () => document.removeEventListener('mousedown', onDoc);
+    }, []);
+
+    return (
+        <div className="relative col-span-4" ref={ref}>
+            <input
+                type="text"
+                value={open ? query : (selected ? productLabel(selected) : '')}
+                placeholder="Search product…"
+                onFocus={() => { setOpen(true); setQuery(''); }}
+                onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+                className={selectClassName}
+            />
+            {open && (
+                <div className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-slate-700/50 bg-slate-900 shadow-xl">
+                    {filtered.length === 0 && (
+                        <div className="px-3 py-2 text-sm text-slate-500">No product matches</div>
+                    )}
+                    {filtered.map((p) => (
+                        <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => { onSelect(p.id); setOpen(false); setQuery(''); }}
+                            className="block w-full px-3 py-2 text-left text-sm text-white hover:bg-slate-800"
+                        >
+                            {productLabel(p)}
+                        </button>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 interface LineItemRowProps {
     item: ItemRow;
     idx: number;
@@ -80,26 +145,25 @@ function LineItemRow({ item, idx, products, onProductChange, onChange, onRemove 
             return;
         }
         const variant = variants.find((v) => v.id === variantId);
+        // Default the row price to the variant's price; fall back to the base
+        // product price when a variant carries no explicit price. Always sets a
+        // value so picking a variant visibly updates the unit price.
+        const price = variant?.regular_price ?? product?.price;
         onChange(idx, {
             variant_id: variantId,
-            unit_price: variant?.regular_price != null ? String(variant.regular_price) : item.unit_price,
+            ...(price != null ? { unit_price: String(price) } : {}),
         });
     };
 
     return (
         <div className="space-y-2 border-b border-slate-800/30 pb-2 last:border-0">
             <div className="grid grid-cols-12 gap-2 items-center">
-                <select
+                <ProductPicker
+                    products={products}
                     value={item.product_id}
-                    onChange={(e) => onProductChange(idx, Number(e.target.value))}
-                    className={`${selectClassName} col-span-4`}
-                >
-                    <option value="">Select product</option>
-                    {products.map((p) => (
-                        <option key={p.id} value={p.id}>{p.title}{p.qty_text ? ` (${p.qty_text})` : ''}</option>
-                    ))}
-                </select>
-                <input type="number" min="0" step="0.01" value={item.qty}
+                    onSelect={(pid) => onProductChange(idx, pid)}
+                />
+                <input type="number" min="1" step="1" value={item.qty}
                     onChange={(e) => onChange(idx, { qty: e.target.value })}
                     placeholder="Qty" className={`${inputClassName} col-span-2`} />
                 <input type="number" min="0" step="0.01" value={item.unit_price}
@@ -165,7 +229,7 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
             ? { userId: initial.user_id, name: initial.customer_name, phone: initial.customer_phone, isNew: false }
             : null,
     );
-    const [deliveryDate, setDeliveryDate] = useState(initial?.delivery_date || '');
+    const [deliveryDate, setDeliveryDate] = useState(initial?.delivery_date || todayLocal());
     const [desiredTime, setDesiredTime] = useState(initial?.desired_delivery_time || '');
     const [priority, setPriority] = useState<number>(initial?.priority ?? 0);
     const [deliveryAddress, setDeliveryAddress] = useState(initial?.delivery_address || '');
@@ -253,7 +317,8 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
             .map((it) => ({
                 product_id: Number(it.product_id),
                 variant_id: it.variant_id === '' ? undefined : Number(it.variant_id),
-                qty: Number(it.qty),
+                // Day-order quantities are whole units.
+                qty: Math.max(1, Math.round(Number(it.qty) || 1)),
                 unit_price: it.unit_price === '' ? undefined : Number(it.unit_price),
                 is_bulk_rate: it.is_bulk_rate,
             }));
