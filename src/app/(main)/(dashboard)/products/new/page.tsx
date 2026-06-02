@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useSubcategories, useCreateProduct, useUploadProductImage, usePackagingTypes, useFeatureFlag } from '@/hooks/useData';
 import { useIntermediates } from '@/hooks/useProduction';
-import FormField, { inputClassName, selectClassName, textareaClassName, dateInputClassName } from '@/components/FormField';
+import FormField, { inputClassName, selectClassName, textareaClassName, dateInputClassName, numericInputClassName, shortSelectClassName } from '@/components/FormField';
 import ImageUpload from '@/components/ImageUpload';
 import { ArrowLeft, Save, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -197,17 +197,17 @@ export default function AddProductPage() {
                         <input {...register('qty_text')} className={inputClassName} placeholder="e.g., 1L, 500g, 250ml" />
                     </FormField>
                     <FormField label="Price (₹)" error={errors.price} required>
-                        <input {...register('price', { valueAsNumber: true })} type="number" step="0.01" className={inputClassName} placeholder="Selling price" />
+                        <input {...register('price', { valueAsNumber: true })} type="number" step="0.01" className={numericInputClassName} placeholder="Selling price" />
                     </FormField>
                     <FormField label="MRP (₹)" error={errors.mrp} required>
-                        <input {...register('mrp', { valueAsNumber: true })} type="number" step="0.01" className={inputClassName} placeholder="Maximum retail price" />
+                        <input {...register('mrp', { valueAsNumber: true })} type="number" step="0.01" className={numericInputClassName} placeholder="Maximum retail price" />
                     </FormField>
                     <FormField label="Tax (%)" error={errors.tax}>
-                        <input {...register('tax', { valueAsNumber: true })} type="number" className={inputClassName} placeholder="Tax percentage" />
+                        <input {...register('tax', { valueAsNumber: true })} type="number" className={numericInputClassName} placeholder="Tax percentage" />
                     </FormField>
                     <FormField label={isManufactured ? 'Stock Quantity (derived — read-only)' : 'Stock Quantity'} error={errors.stock_qty}>
                         <input {...register('stock_qty', { valueAsNumber: true })} type="number" readOnly={isManufactured}
-                            className={inputClassName} placeholder="Available stock" />
+                            className={numericInputClassName} placeholder="Available stock" />
                     </FormField>
                     <FormField label="Subcategory" error={errors.sub_cat_id} required>
                         <select {...register('sub_cat_id', { valueAsNumber: true })} className={selectClassName}>
@@ -218,22 +218,22 @@ export default function AddProductPage() {
                         </select>
                     </FormField>
                     <FormField label="Preferences (display order)" error={errors.preferences}>
-                        <input {...register('preferences', { valueAsNumber: true })} type="number" min={0} className={inputClassName} placeholder="0" />
+                        <input {...register('preferences', { valueAsNumber: true })} type="number" min={0} className={numericInputClassName} placeholder="0" />
                     </FormField>
                     <FormField label="Subscription">
-                        <select {...register('subscription', { valueAsNumber: true })} className={selectClassName}>
+                        <select {...register('subscription', { valueAsNumber: true })} className={shortSelectClassName}>
                             <option value={1}>Enabled</option>
                             <option value={0}>Disabled</option>
                         </select>
                     </FormField>
                     <FormField label="Active">
-                        <select {...register('is_active', { valueAsNumber: true })} className={selectClassName}>
+                        <select {...register('is_active', { valueAsNumber: true })} className={shortSelectClassName}>
                             <option value={1}>Active</option>
                             <option value={0}>Inactive</option>
                         </select>
                     </FormField>
                     <FormField label="Delivery Window" error={errors.delivery_window}>
-                        <select {...register('delivery_window', { valueAsNumber: true })} className={selectClassName}>
+                        <select {...register('delivery_window', { valueAsNumber: true })} className={shortSelectClassName}>
                             <option value={1}>Morning only</option>
                             <option value={2}>Day-time only</option>
                             <option value={3}>Both</option>
@@ -245,7 +245,7 @@ export default function AddProductPage() {
                         error={errors.web_visible}
                         hint="Controls visibility on the marketing site only. Does not affect the customer app."
                     >
-                        <select {...register('web_visible', { valueAsNumber: true })} className={selectClassName}>
+                        <select {...register('web_visible', { valueAsNumber: true })} className={shortSelectClassName}>
                             <option value={1}>Visible on website</option>
                             <option value={0}>Hidden from website</option>
                         </select>
@@ -267,14 +267,14 @@ export default function AddProductPage() {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <FormField label="Type">
-                            <select {...register('product_type')} className={selectClassName}>
+                            <select {...register('product_type')} className={shortSelectClassName}>
                                 <option value="simple">Simple</option>
                                 <option value="variable">Variable</option>
                             </select>
                         </FormField>
                         {isVariable && (
                             <FormField label="Stock managed at">
-                                <select {...register('stock_managed_at')} className={selectClassName}>
+                                <select {...register('stock_managed_at')} className={shortSelectClassName}>
                                     <option value="variant">Per-variant stock</option>
                                     <option value="parent">Shared parent pool</option>
                                 </select>
@@ -283,7 +283,7 @@ export default function AddProductPage() {
                         <FormField label="Cost price (₹) — for margin reports">
                             <input {...register('cost_price', { valueAsNumber: true })}
                                 type="number" step="0.01" min={0} placeholder="Optional"
-                                className={inputClassName} />
+                                className={numericInputClassName} />
                         </FormField>
                     </div>
                 </div>
@@ -309,7 +309,7 @@ export default function AddProductPage() {
                             </FormField>
                             <FormField label="Pack Volume (intermediate qty per unit)" required>
                                 <input type="number" step="0.001" min="0" value={packVolume}
-                                    onChange={(e) => setPackVolume(e.target.value)} className={inputClassName}
+                                    onChange={(e) => setPackVolume(e.target.value)} className={numericInputClassName}
                                     placeholder="e.g., 200, 500" />
                             </FormField>
                         </div>
