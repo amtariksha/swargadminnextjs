@@ -26,15 +26,21 @@ import { upsertUnifiedCustomer } from "@/lib/lms/unified/service";
 
 export const maxDuration = 300;
 
+// Lenient by design: this is a TRUSTED internal feed (the backend cron), not
+// user input. The backend `users` table has plenty of junk in optional columns
+// (non-email strings in `email`, formatted/odd phones), and zod array parsing
+// is all-or-nothing — one strict-field failure would reject the whole nightly
+// batch. So validate only what we actually depend on (a usable phone + a
+// numeric id) and pass the rest through as opaque strings.
 const schema = z.object({
     customers: z
         .array(
             z.object({
-                phone: z.string().min(6).max(20),
-                backendUserId: z.number().int().positive(),
-                hasOrder: z.boolean(),
-                name: z.string().max(200).optional(),
-                email: z.string().email().optional(),
+                phone: z.string().min(1).max(64),
+                backendUserId: z.coerce.number().int().positive(),
+                hasOrder: z.coerce.boolean(),
+                name: z.string().optional(),
+                email: z.string().optional(),
             }),
         )
         .max(5000),
