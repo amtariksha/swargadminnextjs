@@ -210,6 +210,7 @@ const navItems: NavItem[] = [
             { name: 'User Holidays', href: '/holidays', icon: <Calendar className="w-4 h-4" /> },
             { name: 'Calendar', href: '/calendar', icon: <Calendar className="w-4 h-4" /> },
             { name: 'Low Wallet', href: '/notifications/low-wallet', icon: <Wallet className="w-4 h-4" /> },
+            { name: 'Notification Log', href: '/notifications/log', icon: <Bell className="w-4 h-4" /> },
         ],
     },
     // --- Admin --- (divider after 16)
