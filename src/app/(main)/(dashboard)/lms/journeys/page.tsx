@@ -266,17 +266,16 @@ export default function JourneysPage() {
                     How journey ticks happen
                 </p>
                 <p>
-                    The scheduler runs every minute via Vercel Cron at{" "}
+                    The backend cron scheduler (swargnodejsbackend, runs free on the VPS) calls{" "}
                     <code className="rounded bg-slate-200/50 px-1 py-0.5 text-xs dark:bg-slate-700">
-                        /api/cron/journeys-tick
-                    </code>
-                    . It picks up runs whose{" "}
+                        /api/agent-tools/lms/journeys-tick
+                    </code>{" "}
+                    every minute. It picks up runs whose{" "}
                     <code className="rounded bg-slate-200/50 px-1 py-0.5 text-xs dark:bg-slate-700">
                         next_action_at &lt;= now()
                     </code>
                     , walks the next step, then either schedules the following step or exits.
-                    Set <code className="rounded bg-slate-200/50 px-1 py-0.5 text-xs dark:bg-slate-700">CRON_SECRET</code>{" "}
-                    in Vercel env to enable.
+                    Toggle it at Settings → Automation (&ldquo;LMS Journeys Tick Enabled&rdquo;).
                 </p>
             </div>
         </div>

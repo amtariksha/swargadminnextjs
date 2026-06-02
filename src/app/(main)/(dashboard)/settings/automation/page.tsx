@@ -74,6 +74,26 @@ const CRON_JOBS: CronJob[] = [
             'Daily snapshots roll on a 7-day window; a separate monthly archive on the 1st is retained indefinitely. ' +
             "Files land in backup/YYYYMMDD_<tenant>.sql.gz (and backup/monthly/...).",
     },
+    {
+        key: 'lms-journeys-tick',
+        name: 'LMS Journeys Tick',
+        flagTitle: 'LMS Journeys Tick Enabled',
+        timeTitle: null,
+        everyMinute: true,
+        description:
+            'Advances marketing/lifecycle journey runs that are due (sends the next step). ' +
+            'Runs every minute via the backend scheduler → admin panel. Requires migration 054_lms_tick_flags.sql.',
+    },
+    {
+        key: 'lms-campaigns-tick',
+        name: 'LMS Campaigns Tick',
+        flagTitle: 'LMS Campaigns Tick Enabled',
+        timeTitle: null,
+        everyMinute: true,
+        description:
+            'Fires scheduled marketing campaigns whose send time has arrived. ' +
+            'Runs every 5 minutes via the backend scheduler → admin panel. Requires migration 054_lms_tick_flags.sql.',
+    },
 ];
 
 // Values that mean "off". Everything else (incl. unknown) means "on" —
