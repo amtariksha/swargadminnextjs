@@ -9,7 +9,7 @@ import { useUsers, useProducts, useUserAddresses, useAddTransaction, useDrivers 
 import { useCreateOrder, useAssignOrder } from '@/hooks/useOrders';
 import { useVariants } from '@/hooks/useVariations';
 import type { Variant } from '@/lib/types/variations';
-import FormField, { inputClassName, selectClassName, dateInputClassName } from '@/components/FormField';
+import FormField, { inputClassName, selectClassName, dateInputClassName, numericInputClassName, shortSelectClassName, numericFieldMaxWidth } from '@/components/FormField';
 import { ArrowLeft, Save, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -323,7 +323,7 @@ export default function CreateOrderPage() {
         toast.error(first?.message || 'Please check the highlighted fields and try again.');
     };
 
-    const disabledFieldClass = `${inputClassName} !text-slate-500 !bg-slate-800/30 cursor-not-allowed`;
+    const disabledFieldClass = `${inputClassName} !text-slate-500 !bg-slate-800/30 cursor-not-allowed ${numericFieldMaxWidth}`;
 
     return (
         <div className="space-y-6">
@@ -500,7 +500,7 @@ export default function CreateOrderPage() {
                             <input value={orderAmount.toFixed(2)} disabled className={disabledFieldClass} />
                         </FormField>
                         <FormField label="Quantity" error={errors.qty} required>
-                            <input {...register('qty', { valueAsNumber: true })} type="number" min={1} className={inputClassName} />
+                            <input {...register('qty', { valueAsNumber: true })} type="number" min={1} className={numericInputClassName} />
                         </FormField>
                         <FormField label="Start From" error={errors.start_date} required>
                             <input {...register('start_date')} type="date" min={getTomorrowDate()}
@@ -514,7 +514,7 @@ export default function CreateOrderPage() {
                 {selectedProduct && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <FormField label="Subscription Type" error={errors.subscription_type} required>
-                            <select {...register('subscription_type', { valueAsNumber: true })} className={selectClassName}
+                            <select {...register('subscription_type', { valueAsNumber: true })} className={shortSelectClassName}
                                 disabled={!isSubscriptionProduct}>
                                 <option value={1}>One Time Order</option>
                                 {isSubscriptionProduct && (
@@ -613,7 +613,7 @@ export default function CreateOrderPage() {
                 {selectedProduct && (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <FormField label="Status">
-                            <select {...register('status', { valueAsNumber: true })} className={selectClassName}>
+                            <select {...register('status', { valueAsNumber: true })} className={shortSelectClassName}>
                                 <option value={1}>Confirmed</option>
                                 <option value={0}>Pending</option>
                             </select>
@@ -623,7 +623,7 @@ export default function CreateOrderPage() {
                         {isSubscriptionOrder && (
                             <>
                                 <FormField label="Order Status">
-                                    <select {...register('order_status', { valueAsNumber: true })} className={selectClassName}>
+                                    <select {...register('order_status', { valueAsNumber: true })} className={shortSelectClassName}>
                                         <option value={0}>Active</option>
                                         <option value={1}>Stop</option>
                                     </select>

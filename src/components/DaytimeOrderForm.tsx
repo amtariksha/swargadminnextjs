@@ -18,7 +18,7 @@ import type { Variant } from '@/lib/types/variations';
 import CustomerPicker, { CustomerValue } from '@/components/CustomerPicker';
 import AddressMapPicker from '@/components/AddressMapPicker';
 import { isMapsConfigured, type PickedPlace } from '@/lib/maps';
-import FormField, { inputClassName, selectClassName, textareaClassName, dateInputClassName, timeInputClassName } from '@/components/FormField';
+import FormField, { inputClassName, selectClassName, textareaClassName, dateInputClassName, timeInputClassName, numericInputClassName, shortSelectClassName } from '@/components/FormField';
 import { POST, PUT, ApiError } from '@/lib/api';
 import { MapPin, Plus, Trash2, Save } from 'lucide-react';
 import { toast } from 'sonner';
@@ -377,7 +377,7 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
                 </FormField>
                 <FormField label="Entry Type">
                     <select value={entryType} onChange={(e) => setEntryType(e.target.value)}
-                        className={selectClassName}>
+                        className={shortSelectClassName}>
                         <option value="">Select source</option>
                         {DAY_ORDER_ENTRY_TYPES.map((t) => (
                             <option key={t.value} value={t.value}>{t.label}</option>
@@ -394,7 +394,7 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
                 </FormField>
                 <FormField label="Priority">
                     <select value={priority} onChange={(e) => setPriority(Number(e.target.value))}
-                        className={selectClassName}>
+                        className={shortSelectClassName}>
                         <option value={0}>Normal</option>
                         <option value={1}>High (red-flash for drivers)</option>
                     </select>
@@ -473,7 +473,7 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <FormField label="Discount (₹)">
                     <input type="number" min="0" step="0.01" value={discountFlat}
-                        onChange={(e) => setDiscountFlat(e.target.value)} className={inputClassName} placeholder="0" />
+                        onChange={(e) => setDiscountFlat(e.target.value)} className={numericInputClassName} placeholder="0" />
                 </FormField>
                 <FormField label="Discount Reason">
                     <input value={discountReason} onChange={(e) => setDiscountReason(e.target.value)}
@@ -481,7 +481,7 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
                 </FormField>
                 <FormField label="Shipping (₹)">
                     <input type="number" min="0" step="0.01" value={shipping}
-                        onChange={(e) => setShipping(e.target.value)} className={inputClassName} placeholder="0" />
+                        onChange={(e) => setShipping(e.target.value)} className={numericInputClassName} placeholder="0" />
                 </FormField>
             </div>
 
