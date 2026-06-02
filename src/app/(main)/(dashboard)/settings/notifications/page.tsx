@@ -77,7 +77,9 @@ const TEMPLATE_FIELDS: { title: string; description: string; placeholder: string
     },
     {
         title: 'Daytime Payment Template',
-        description: 'Day-network payment confirmation message.',
+        description: 'Day-order payment link. Approved template must have 5 variables: '
+            + '{{1}} customer name · {{2}} order # · {{3}} items (qty × product) · '
+            + '{{4}} amount · {{5}} payment link.',
         placeholder: 'e.g. app_daytime_payment',
     },
     {
