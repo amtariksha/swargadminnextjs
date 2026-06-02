@@ -377,12 +377,12 @@ export default function PerformanceReportPage() {
                         <div>
                             <label className="block text-xs text-slate-400 mb-1">Before Time</label>
                             <input type="time" value={settings.timeBefore} onChange={(e) => updateSetting('timeBefore', e.target.value)}
-                                className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white" />
+                                className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white sm:max-w-[13rem]" />
                         </div>
                         <div>
                             <label className="block text-xs text-slate-400 mb-1">After Time</label>
                             <input type="time" value={settings.timeAfter} onChange={(e) => updateSetting('timeAfter', e.target.value)}
-                                className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white" />
+                                className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white sm:max-w-[13rem]" />
                         </div>
                         <div>
                             <label className="block text-xs text-slate-400 mb-1">Qty Threshold (Low)</label>

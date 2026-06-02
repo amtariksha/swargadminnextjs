@@ -117,7 +117,7 @@ export default function WriteoffsPage() {
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Date *</label>
               <input type="date" value={form.writeoff_date} required
-                onChange={(e) => setForm({ ...form, writeoff_date: e.target.value })} className={inputCls} />
+                onChange={(e) => setForm({ ...form, writeoff_date: e.target.value })} className={`${inputCls} sm:max-w-[13rem]`} />
             </div>
           </div>
           <div>

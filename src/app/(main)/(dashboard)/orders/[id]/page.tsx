@@ -12,7 +12,7 @@ import {
     useUpdateOrder, useAssignOrder, useDeleteOrderAssignment,
     OrderTransaction, SubOrderDelivery,
 } from '@/hooks/useOrders';
-import FormField, { inputClassName, selectClassName } from '@/components/FormField';
+import FormField, { inputClassName, selectClassName, dateInputClassName } from '@/components/FormField';
 import DataTable, { Column } from '@/components/DataTable';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { ArrowLeft, Save, Truck, X, CheckCircle } from 'lucide-react';
@@ -272,7 +272,7 @@ export default function OrderDetailPage() {
                             disabled className={`${inputClassName} !text-slate-500`} />
                     </FormField>
                     <FormField label="Start Date" error={errors.start_date}>
-                        <input {...register('start_date')} type="date" className={inputClassName} />
+                        <input {...register('start_date')} type="date" className={dateInputClassName} />
                     </FormField>
                     <FormField label="Status" error={errors.status}>
                         <select {...register('status', { valueAsNumber: true })} className={selectClassName}>

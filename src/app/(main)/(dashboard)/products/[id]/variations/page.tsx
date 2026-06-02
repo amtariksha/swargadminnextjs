@@ -832,7 +832,7 @@ function BulkEditModal({
                         <input type="datetime-local"
                             value={form.sale_starts_at}
                             onChange={(e) => setForm({ ...form, sale_starts_at: e.target.value })}
-                            className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white" />
+                            className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white sm:max-w-[15rem]" />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -842,7 +842,7 @@ function BulkEditModal({
                         <input type="datetime-local"
                             value={form.sale_ends_at}
                             onChange={(e) => setForm({ ...form, sale_ends_at: e.target.value })}
-                            className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white" />
+                            className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white sm:max-w-[15rem]" />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-300 mb-2">Stock quantity</label>

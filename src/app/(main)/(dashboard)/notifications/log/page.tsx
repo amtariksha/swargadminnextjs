@@ -130,11 +130,11 @@ export default function NotificationLogPage() {
                 </div>
                 <div>
                     <label className="block text-xs text-slate-400 mb-1">From</label>
-                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={inputClass} />
+                    <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={`${inputClass} sm:max-w-[13rem]`} />
                 </div>
                 <div>
                     <label className="block text-xs text-slate-400 mb-1">To</label>
-                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={inputClass} />
+                    <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={`${inputClass} sm:max-w-[13rem]`} />
                 </div>
                 <div>
                     <label className="block text-xs text-slate-400 mb-1">Channel</label>

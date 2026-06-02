@@ -114,7 +114,7 @@ export default function VendorPaymentsPage() {
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Payment Date *</label>
               <input type="date" value={form.payment_date} required
-                onChange={(e) => setForm({ ...form, payment_date: e.target.value })} className={inputCls} />
+                onChange={(e) => setForm({ ...form, payment_date: e.target.value })} className={`${inputCls} sm:max-w-[13rem]`} />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">Amount *</label>

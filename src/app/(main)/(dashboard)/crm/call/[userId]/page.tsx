@@ -11,7 +11,7 @@ import {
     useCustomerContext, useCallScript, useFeedbackEntry,
     useCreateFeedback, useUpdateFeedback,
 } from '@/hooks/useData';
-import { inputClassName, selectClassName, textareaClassName } from '@/components/FormField';
+import { inputClassName, selectClassName, textareaClassName, dateInputClassName } from '@/components/FormField';
 import {
     FEEDBACK_STATUS_OPTIONS, RING_BELL_OPTIONS, DROP_PLACE_OPTIONS, CALL_TYPE_OPTIONS,
 } from '@/lib/crm';
@@ -402,7 +402,7 @@ export default function GuidedCallPage() {
                                     type="date"
                                     value={form.calling_date}
                                     onChange={(e) => setField('calling_date', e.target.value)}
-                                    className={inputClassName}
+                                    className={dateInputClassName}
                                 />
                             </div>
                             {form.status === 'call_later' && (
@@ -414,7 +414,7 @@ export default function GuidedCallPage() {
                                         type="date"
                                         value={form.followup_date}
                                         onChange={(e) => setField('followup_date', e.target.value)}
-                                        className={inputClassName}
+                                        className={dateInputClassName}
                                     />
                                 </div>
                             )}

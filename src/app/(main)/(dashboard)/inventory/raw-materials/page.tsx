@@ -206,7 +206,7 @@ export default function RawMaterialsPage() {
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">Date *</label>
             <input type="date" value={adjForm.movement_date} required
-              onChange={(e) => setAdjForm({ ...adjForm, movement_date: e.target.value })} className={inputCls} />
+              onChange={(e) => setAdjForm({ ...adjForm, movement_date: e.target.value })} className={`${inputCls} sm:max-w-[13rem]`} />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">Reason / Notes</label>

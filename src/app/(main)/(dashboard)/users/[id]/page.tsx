@@ -17,7 +17,7 @@ import RefundModal from '@/components/RefundModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import AddressMapPicker from '@/components/AddressMapPicker';
 import { isMapsConfigured, type PickedPlace } from '@/lib/maps';
-import { inputClassName, selectClassName } from '@/components/FormField';
+import { inputClassName, selectClassName, dateInputClassName } from '@/components/FormField';
 import ActivityWindowStrip from '@/components/crm/ActivityWindowStrip';
 import { STATUS_BADGE_CLASS, statusLabel, callTypeLabel } from '@/lib/crm';
 import {
@@ -527,8 +527,8 @@ export default function UserDetailPage() {
             {/* Holiday Modal */}
             <Modal isOpen={showHolidayModal} onClose={() => setShowHolidayModal(false)} title="Add Holiday">
                 <div className="space-y-4">
-                    <div><label className="block text-sm text-slate-300 mb-1">Start Date</label><input type="date" value={holidayStartDate} onChange={(e) => setHolidayStartDate(e.target.value)} className={inputClassName} /></div>
-                    <div><label className="block text-sm text-slate-300 mb-1">End Date (optional)</label><input type="date" value={holidayEndDate} onChange={(e) => setHolidayEndDate(e.target.value)} min={holidayStartDate} className={inputClassName} /></div>
+                    <div><label className="block text-sm text-slate-300 mb-1">Start Date</label><input type="date" value={holidayStartDate} onChange={(e) => setHolidayStartDate(e.target.value)} className={dateInputClassName} /></div>
+                    <div><label className="block text-sm text-slate-300 mb-1">End Date (optional)</label><input type="date" value={holidayEndDate} onChange={(e) => setHolidayEndDate(e.target.value)} min={holidayStartDate} className={dateInputClassName} /></div>
                     <div className="flex gap-3">
                         <button onClick={() => setShowHolidayModal(false)} className="flex-1 px-4 py-2.5 text-sm text-slate-300 bg-slate-800/50 rounded-xl">Cancel</button>
                         <button onClick={handleAddHoliday} disabled={addHolidayMutation.isPending || !holidayStartDate} className="flex-1 px-4 py-2.5 text-sm text-white bg-purple-600 rounded-xl disabled:opacity-50">{addHolidayMutation.isPending ? 'Adding...' : 'Add Holiday'}</button>
