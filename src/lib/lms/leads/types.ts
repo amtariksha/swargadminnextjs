@@ -36,6 +36,8 @@ export interface Lead {
     phone?: string | null;
     email?: string | null;
     pincode?: string | null;
+    /** public.contacts.id (Supabase) — set when the lead came from WhatsApp. */
+    contactId?: string | null;
     language: string;
     status: LeadStatus;
     ownerUserId?: string | null;

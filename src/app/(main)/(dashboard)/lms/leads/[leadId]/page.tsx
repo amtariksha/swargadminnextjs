@@ -24,6 +24,7 @@ import {
     Trash2,
     AlertTriangle,
     Check,
+    Link2,
 } from "lucide-react";
 import { wfetch } from "@/lib/whatsapp/wfetch";
 import type { Lead, LeadStatus } from "@/lib/lms/leads/types";
@@ -47,6 +48,8 @@ export default function LeadDetailPage() {
     const [saving, setSaving] = useState(false);
     const [savedNote, setSavedNote] = useState(false);
     const [notesDraft, setNotesDraft] = useState("");
+    const [linkUserId, setLinkUserId] = useState("");
+    const [linking, setLinking] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -97,6 +100,37 @@ export default function LeadDetailPage() {
         await patch({ notes: notesDraft });
         setSavedNote(true);
         setTimeout(() => setSavedNote(false), 2000);
+    };
+
+    const onLinkExisting = async () => {
+        const existingUserId = Number(linkUserId.trim());
+        if (!existingUserId || existingUserId <= 0) {
+            alert("Enter the existing customer's backend user ID.");
+            return;
+        }
+        if (
+            !confirm(
+                `Link ${lead?.phone ?? "this number"} as an alternate phone on customer #${existingUserId} and mark this lead a duplicate?`,
+            )
+        ) {
+            return;
+        }
+        setLinking(true);
+        try {
+            const res = await wfetch(`/api/lms/leads/${leadId}/link-existing`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ existingUserId }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+            setLead(data.lead);
+            setLinkUserId("");
+        } catch (err) {
+            alert(`Link failed: ${err instanceof Error ? err.message : "error"}`);
+        } finally {
+            setLinking(false);
+        }
     };
 
     const onDelete = async () => {
@@ -273,6 +307,37 @@ export default function LeadDetailPage() {
                                 ))}
                         </div>
                     </div>
+
+                    {/* Link to existing customer — alternate-number merge. */}
+                    {lead.status !== "duplicate" && lead.status !== "converted" && (
+                        <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+                            <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                                <Link2 className="h-3.5 w-3.5 text-amber-500" />
+                                Link to existing customer
+                            </h3>
+                            <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+                                If {lead.phone ?? "this number"} is an existing customer&apos;s alternate
+                                number, link it so future messages &amp; orders resolve to that
+                                customer. Marks this lead a duplicate.
+                            </p>
+                            <div className="flex gap-2">
+                                <input
+                                    type="number"
+                                    value={linkUserId}
+                                    onChange={(e) => setLinkUserId(e.target.value)}
+                                    placeholder="Customer ID"
+                                    className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-amber-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                                />
+                                <button
+                                    onClick={onLinkExisting}
+                                    disabled={linking || !linkUserId.trim()}
+                                    className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+                                >
+                                    {linking ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Link"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
 
                     {lead.sourceDetails && Object.keys(lead.sourceDetails).length > 0 && (
                         <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">

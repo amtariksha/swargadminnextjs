@@ -15,6 +15,10 @@
 
 import { lmsAdmin } from "@/lib/lms/supabase";
 import {
+    resolveContactIdByPhone,
+    upsertUnifiedCustomer,
+} from "@/lib/lms/unified/service";
+import {
     type Lead,
     type LeadFilters,
     type LeadListResponse,
@@ -81,6 +85,8 @@ export async function createLead(args: {
     phone?: string;
     email?: string;
     pincode?: string;
+    /** public.contacts.id (Supabase) — set for WhatsApp-sourced leads. */
+    contactId?: string;
     language?: string;
     ownerUserId?: string;
     tags?: string[];
@@ -121,6 +127,7 @@ export async function createLead(args: {
                     name: found.name ?? args.name ?? null,
                     email: found.email ?? args.email ?? null,
                     pincode: found.pincode ?? args.pincode ?? null,
+                    contact_id: found.contact_id ?? args.contactId ?? null,
                 })
                 .eq("id", found.id)
                 .select("*")
@@ -141,6 +148,7 @@ export async function createLead(args: {
             phone: cleanPhone,
             email: args.email ?? null,
             pincode: args.pincode ?? null,
+            contact_id: args.contactId ?? null,
             language: args.language ?? "en",
             status: "new" satisfies LeadStatus,
             owner_user_id: args.ownerUserId ?? null,
@@ -223,6 +231,104 @@ export async function deleteLead(args: {
     if (error) throw new Error(`[leads] delete failed: ${error.message}`);
 }
 
+/**
+ * Convert the open lead for a phone, given the backend user it was promoted
+ * into. Idempotent + safe when no lead exists (a customer can order without
+ * ever messaging on WhatsApp): in that case we still record the unified link
+ * and report converted=false.
+ *
+ * Flow: resolve contact_id (cheap) → upsert lms_unified_customers (the
+ * phone ↔ backend_user_id bridge) → flip the open lead to 'converted',
+ * stamping converted_customer_id with the canonical LMS customer id
+ * (contact_id when known, else the unified customer_id).
+ */
+export async function convertLeadByPhone(args: {
+    phone: string;
+    backendUserId: number;
+    contactId?: string | null;
+    name?: string | null;
+    email?: string | null;
+}): Promise<{ converted: boolean; leadId: string | null; customerId: string }> {
+    const cleanPhone = normalisePhone(args.phone);
+    if (!cleanPhone) throw new Error("[leads] convertByPhone requires a phone");
+
+    const contactId =
+        args.contactId ?? (await resolveContactIdByPhone(cleanPhone));
+
+    const unified = await upsertUnifiedCustomer({
+        phone: cleanPhone,
+        backendUserId: args.backendUserId,
+        contactId,
+        name: args.name,
+        email: args.email,
+    });
+
+    const { data: open, error: lookupErr } = await lmsAdmin
+        .from("lms_leads")
+        .select("id")
+        .eq("phone", cleanPhone)
+        .not("status", "in", "(converted,lost,duplicate)")
+        .order("first_touch_at", { ascending: false })
+        .limit(1);
+    if (lookupErr) {
+        throw new Error(`[leads] convertByPhone lookup failed: ${lookupErr.message}`);
+    }
+    if (!open || open.length === 0) {
+        return { converted: false, leadId: null, customerId: unified.customerId };
+    }
+
+    const leadId = open[0].id as string;
+    await convertLead({
+        leadId,
+        convertedCustomerId: contactId ?? unified.customerId,
+    });
+    return { converted: true, leadId, customerId: unified.customerId };
+}
+
+/**
+ * Retention sweep: open leads (new/contacted/qualified) untouched for >`days`
+ * become 'lost' with source_details.lost_reason='expired_30d'. Bounded per
+ * run so a backlog can't blow the request budget; the nightly cron drains it
+ * across runs. Returns the number expired.
+ */
+export async function expireStaleLeads(args: {
+    days?: number;
+    limit?: number;
+} = {}): Promise<{ expired: number }> {
+    const days = args.days ?? 30;
+    const cap = Math.min(Math.max(args.limit ?? 500, 1), 2000);
+    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+
+    const { data: stale, error: selErr } = await lmsAdmin
+        .from("lms_leads")
+        .select("id, source_details")
+        .in("status", ["new", "contacted", "qualified"])
+        .or(`last_activity_at.lt.${cutoff},and(last_activity_at.is.null,first_touch_at.lt.${cutoff})`)
+        .order("first_touch_at", { ascending: true })
+        .limit(cap);
+    if (selErr) throw new Error(`[leads] expire select failed: ${selErr.message}`);
+
+    const rows = stale ?? [];
+    let expired = 0;
+    const now = new Date().toISOString();
+    for (const row of rows) {
+        const merged = {
+            ...((row.source_details as Record<string, unknown> | null) ?? {}),
+            lost_reason: "expired_30d",
+        };
+        const { error: updErr } = await lmsAdmin
+            .from("lms_leads")
+            .update({ status: "lost", source_details: merged, last_activity_at: now })
+            .eq("id", row.id);
+        if (updErr) {
+            console.warn(`[leads] expire update failed for ${row.id}:`, updErr.message);
+            continue;
+        }
+        expired += 1;
+    }
+    return { expired };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function normalisePhone(input: string): string {
@@ -240,6 +346,7 @@ function mapRow(row: Record<string, unknown>): Lead {
         phone: (row.phone as string | null) ?? null,
         email: (row.email as string | null) ?? null,
         pincode: (row.pincode as string | null) ?? null,
+        contactId: (row.contact_id as string | null) ?? null,
         language: (row.language as string) ?? "en",
         status: row.status as LeadStatus,
         ownerUserId: (row.owner_user_id as string | null) ?? null,

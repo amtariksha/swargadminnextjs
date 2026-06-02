@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import crypto from 'crypto';
 import { isPlaceholderName } from "@/lib/whatsapp/utils";
+import { maybeCreateWhatsAppLead } from "@/lib/lms/leads/whatsapp-intake";
 
 // ─── GET /api/webhooks/meta ─────────────────────────────────
 // Handles webhook verification from Meta Developer Portal
@@ -230,6 +231,17 @@ export async function POST(request: NextRequest) {
                     throw new Error("Failed to create contact");
                 }
                 contactId = newContact.id;
+            }
+
+            // ─── LMS: register a WhatsApp lead for new senders ──────────
+            // Inbound only (skip our own echoes). Supabase-only + never
+            // throws, so it can't delay or break the 200 ack.
+            if (!isEchoMessage && customerPhone) {
+                await maybeCreateWhatsAppLead({
+                    phone: customerPhone,
+                    name: contactName || senderName,
+                    contactId,
+                });
             }
 
             // ─── Find or create conversation ────────────────────

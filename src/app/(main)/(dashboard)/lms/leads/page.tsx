@@ -43,6 +43,20 @@ const STATUS_OPTIONS: Array<{ value: LeadStatus | "all"; label: string; cls: str
     { value: "duplicate", label: "Duplicate", cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" },
 ];
 
+const OPEN_STATUSES: ReadonlyArray<LeadStatus> = ["new", "contacted", "qualified"];
+const RETENTION_DAYS = 30;
+
+/** Days until a still-open lead expires to 'lost' (30 days from last activity). */
+function expiryLabel(lead: Lead): string {
+    if (!OPEN_STATUSES.includes(lead.status)) return "—";
+    const anchor = lead.lastActivityAt ?? lead.firstTouchAt;
+    if (!anchor) return "—";
+    const expiresAt = new Date(anchor).getTime() + RETENTION_DAYS * 86_400_000;
+    const days = Math.ceil((expiresAt - Date.now()) / 86_400_000);
+    if (days <= 0) return "due";
+    return `${days}d`;
+}
+
 const SOURCE_LABELS: Record<LeadSource | "all", string> = {
     all: "All sources",
     whatsapp: "WhatsApp",
@@ -115,7 +129,7 @@ export default function LeadsPage() {
             const body = await res.json();
             if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
             setSyncResult(
-                `Synced ${body.contactsScanned} contacts · ${body.leadsCreated} new leads, ${body.leadsDeduped} already existed, ${body.errors} errors.`,
+                `Synced ${body.contactsScanned} contacts · ${body.leadsCreated} new leads, ${body.leadsDeduped} already existed, ${body.knownCustomersSkipped ?? 0} known customers skipped, ${body.errors} errors.`,
             );
             await load();
         } catch (err) {
@@ -245,6 +259,7 @@ export default function LeadsPage() {
                                 <th className="px-4 py-3">Contact</th>
                                 <th className="px-4 py-3">Source</th>
                                 <th className="px-4 py-3">Status</th>
+                                <th className="px-4 py-3">Expires</th>
                                 <th className="px-4 py-3">First touch</th>
                             </tr>
                         </thead>
@@ -294,6 +309,19 @@ export default function LeadsPage() {
                                             >
                                                 {status?.label ?? l.status}
                                             </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
+                                            {(() => {
+                                                const label = expiryLabel(l);
+                                                if (label === "—") return <span className="text-slate-400">—</span>;
+                                                const days = label === "due" ? 0 : parseInt(label, 10);
+                                                const urgent = days <= 7;
+                                                return (
+                                                    <span className={urgent ? "font-semibold text-amber-600 dark:text-amber-400" : ""}>
+                                                        {label}
+                                                    </span>
+                                                );
+                                            })()}
                                         </td>
                                         <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
                                             {new Date(l.firstTouchAt).toLocaleString()}

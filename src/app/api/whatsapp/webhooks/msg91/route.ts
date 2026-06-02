@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { isPlaceholderName } from "@/lib/whatsapp/utils";
+import { maybeCreateWhatsAppLead } from "@/lib/lms/leads/whatsapp-intake";
 
 // ─── POST /api/webhooks/msg91 — Receive inbound messages ──
 export async function POST(request: NextRequest) {
@@ -330,6 +331,18 @@ export async function POST(request: NextRequest) {
 
         if (ctwaClid) {
             console.log(`[MSG91 Webhook] CTWA referral detected. ctwa_clid: ${ctwaClid}, source_id: ${referralSourceId}`);
+        }
+
+        // ─── LMS: register a WhatsApp lead for new inbound senders ──────
+        // Supabase-only + never throws, so it can't delay or break the 200 ack
+        // (a slow ack makes MSG91 auto-pause the number).
+        if (!isExternalOutbound && actualCustomerPhone && contact) {
+            await maybeCreateWhatsAppLead({
+                phone: actualCustomerPhone,
+                name: senderName || contact.name,
+                contactId: contact.id,
+                ctwaClid,
+            });
         }
 
         // ─── 2. Upsert Conversation ────────────────────────
