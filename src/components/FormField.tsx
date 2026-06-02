@@ -34,6 +34,19 @@ export default function FormField({ label, error, required, children, className 
     );
 }
 
+// Groups related fields under an optional heading and lays them out in a
+// flex-wrap row so fixed-width field blocks pack tightly and reflow responsively.
+export function FormSection({ title, children, className = '' }: { title?: string; children: ReactNode; className?: string }) {
+    return (
+        <section className={`space-y-3 ${className}`}>
+            {title && (
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">{title}</h4>
+            )}
+            <div className="flex flex-wrap gap-4">{children}</div>
+        </section>
+    );
+}
+
 // Reusable input class for consistency.
 // Date/time picker glyph visibility is handled globally in globals.css
 // (::-webkit-calendar-picker-indicator), so it doesn't need per-input utilities.
@@ -67,3 +80,13 @@ export const shortFieldMaxWidth = 'sm:max-w-[16rem]'; // ~256px — fixed short-
 
 export const numericInputClassName = `${inputClassName} ${numericFieldMaxWidth}`;
 export const shortSelectClassName = `${selectClassName} ${shortFieldMaxWidth}`;
+
+// Field-block widths for flex-wrap FormSection rows. Applied to the FormField
+// wrapper (its outer div); the input/select inside stays w-full and fills the
+// block. Full-width below sm so fields stack on mobile; fixed width on sm+ so
+// they pack tightly left-to-right instead of stretching across the row.
+export const fieldNumber = 'w-full sm:w-36'; // 9rem  — numeric inputs
+export const fieldDate = 'w-full sm:w-44'; // 11rem — date / time
+export const fieldSelect = 'w-full sm:w-52'; // 13rem — short fixed-enum selects
+export const fieldText = 'w-full sm:w-72'; // 18rem — text & data-driven selects
+export const fieldWide = 'w-full sm:w-96'; // 24rem — long text (title, offer)
