@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useSubcategories, useCreateProduct, useUploadProductImage, usePackagingTypes, useFeatureFlag } from '@/hooks/useData';
 import { useIntermediates } from '@/hooks/useProduction';
-import FormField, { inputClassName, selectClassName, textareaClassName, dateInputClassName, numericInputClassName, shortSelectClassName } from '@/components/FormField';
+import FormField, { FormSection, inputClassName, selectClassName, textareaClassName, dateInputClassName, fieldNumber, fieldDate, fieldSelect, fieldText, fieldWide } from '@/components/FormField';
 import ImageUpload from '@/components/ImageUpload';
 import { ArrowLeft, Save, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -182,34 +182,21 @@ export default function AddProductPage() {
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit)} className="glass rounded-xl p-6 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField label="Product Title" error={errors.title} required>
+            <form onSubmit={handleSubmit(onSubmit)} className="glass rounded-xl p-6 space-y-6 max-w-5xl">
+                <FormSection title="Basics">
+                    <FormField label="Product Title" error={errors.title} required className={fieldWide}>
                         <input {...register('title')} className={inputClassName} placeholder="Product name" />
                     </FormField>
                     {/* Variations (migration 032). URL-safe identifier used in
                         /product/{slug} storefront routes. Auto-derived from
                         title at save time when left blank. */}
-                    <FormField label="Slug — URL identifier" error={errors.slug}>
+                    <FormField label="Slug — URL identifier" error={errors.slug} className={fieldText}>
                         <input {...register('slug')} className={inputClassName} placeholder="auto-generated from title if blank" />
                     </FormField>
-                    <FormField label="Quantity Text" error={errors.qty_text} required>
+                    <FormField label="Quantity Text" error={errors.qty_text} required className={fieldText}>
                         <input {...register('qty_text')} className={inputClassName} placeholder="e.g., 1L, 500g, 250ml" />
                     </FormField>
-                    <FormField label="Price (₹)" error={errors.price} required>
-                        <input {...register('price', { valueAsNumber: true })} type="number" step="0.01" className={numericInputClassName} placeholder="Selling price" />
-                    </FormField>
-                    <FormField label="MRP (₹)" error={errors.mrp} required>
-                        <input {...register('mrp', { valueAsNumber: true })} type="number" step="0.01" className={numericInputClassName} placeholder="Maximum retail price" />
-                    </FormField>
-                    <FormField label="Tax (%)" error={errors.tax}>
-                        <input {...register('tax', { valueAsNumber: true })} type="number" className={numericInputClassName} placeholder="Tax percentage" />
-                    </FormField>
-                    <FormField label={isManufactured ? 'Stock Quantity (derived — read-only)' : 'Stock Quantity'} error={errors.stock_qty}>
-                        <input {...register('stock_qty', { valueAsNumber: true })} type="number" readOnly={isManufactured}
-                            className={numericInputClassName} placeholder="Available stock" />
-                    </FormField>
-                    <FormField label="Subcategory" error={errors.sub_cat_id} required>
+                    <FormField label="Subcategory" error={errors.sub_cat_id} required className={fieldText}>
                         <select {...register('sub_cat_id', { valueAsNumber: true })} className={selectClassName}>
                             <option value="">Select subcategory</option>
                             {subcategories.map((sc) => (
@@ -217,23 +204,42 @@ export default function AddProductPage() {
                             ))}
                         </select>
                     </FormField>
-                    <FormField label="Preferences (display order)" error={errors.preferences}>
-                        <input {...register('preferences', { valueAsNumber: true })} type="number" min={0} className={numericInputClassName} placeholder="0" />
+                </FormSection>
+
+                <FormSection title="Pricing">
+                    <FormField label="Price (₹)" error={errors.price} required className={fieldNumber}>
+                        <input {...register('price', { valueAsNumber: true })} type="number" step="0.01" className={inputClassName} placeholder="Selling price" />
                     </FormField>
-                    <FormField label="Subscription">
-                        <select {...register('subscription', { valueAsNumber: true })} className={shortSelectClassName}>
+                    <FormField label="MRP (₹)" error={errors.mrp} required className={fieldNumber}>
+                        <input {...register('mrp', { valueAsNumber: true })} type="number" step="0.01" className={inputClassName} placeholder="Maximum retail price" />
+                    </FormField>
+                    <FormField label="Tax (%)" error={errors.tax} className={fieldNumber}>
+                        <input {...register('tax', { valueAsNumber: true })} type="number" className={inputClassName} placeholder="Tax percentage" />
+                    </FormField>
+                </FormSection>
+
+                <FormSection title="Inventory & visibility">
+                    <FormField label={isManufactured ? 'Stock Quantity (derived — read-only)' : 'Stock Quantity'} error={errors.stock_qty} className={fieldNumber}>
+                        <input {...register('stock_qty', { valueAsNumber: true })} type="number" readOnly={isManufactured}
+                            className={inputClassName} placeholder="Available stock" />
+                    </FormField>
+                    <FormField label="Preferences (display order)" error={errors.preferences} className={fieldNumber}>
+                        <input {...register('preferences', { valueAsNumber: true })} type="number" min={0} className={inputClassName} placeholder="0" />
+                    </FormField>
+                    <FormField label="Subscription" className={fieldSelect}>
+                        <select {...register('subscription', { valueAsNumber: true })} className={selectClassName}>
                             <option value={1}>Enabled</option>
                             <option value={0}>Disabled</option>
                         </select>
                     </FormField>
-                    <FormField label="Active">
-                        <select {...register('is_active', { valueAsNumber: true })} className={shortSelectClassName}>
+                    <FormField label="Active" className={fieldSelect}>
+                        <select {...register('is_active', { valueAsNumber: true })} className={selectClassName}>
                             <option value={1}>Active</option>
                             <option value={0}>Inactive</option>
                         </select>
                     </FormField>
-                    <FormField label="Delivery Window" error={errors.delivery_window}>
-                        <select {...register('delivery_window', { valueAsNumber: true })} className={shortSelectClassName}>
+                    <FormField label="Delivery Window" error={errors.delivery_window} className={fieldSelect}>
+                        <select {...register('delivery_window', { valueAsNumber: true })} className={selectClassName}>
                             <option value={1}>Morning only</option>
                             <option value={2}>Day-time only</option>
                             <option value={3}>Both</option>
@@ -244,13 +250,14 @@ export default function AddProductPage() {
                         label="Show on new.swargfood.com"
                         error={errors.web_visible}
                         hint="Controls visibility on the marketing site only. Does not affect the customer app."
+                        className={fieldText}
                     >
-                        <select {...register('web_visible', { valueAsNumber: true })} className={shortSelectClassName}>
+                        <select {...register('web_visible', { valueAsNumber: true })} className={selectClassName}>
                             <option value={1}>Visible on website</option>
                             <option value={0}>Hidden from website</option>
                         </select>
                     </FormField>
-                </div>
+                </FormSection>
 
                 {/* Variations (migration 030) — mark this product Variable at
                     create time, then flow into the variant editor on save.
@@ -265,25 +272,25 @@ export default function AddProductPage() {
                                 : 'Simple product — one SKU; the fields above are the source of truth.'}
                         </p>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <FormField label="Type">
-                            <select {...register('product_type')} className={shortSelectClassName}>
+                    <div className="flex flex-wrap gap-4">
+                        <FormField label="Type" className={fieldSelect}>
+                            <select {...register('product_type')} className={selectClassName}>
                                 <option value="simple">Simple</option>
                                 <option value="variable">Variable</option>
                             </select>
                         </FormField>
                         {isVariable && (
-                            <FormField label="Stock managed at">
-                                <select {...register('stock_managed_at')} className={shortSelectClassName}>
+                            <FormField label="Stock managed at" className={fieldSelect}>
+                                <select {...register('stock_managed_at')} className={selectClassName}>
                                     <option value="variant">Per-variant stock</option>
                                     <option value="parent">Shared parent pool</option>
                                 </select>
                             </FormField>
                         )}
-                        <FormField label="Cost price (₹) — for margin reports">
+                        <FormField label="Cost price (₹) — for margin reports" className={fieldText}>
                             <input {...register('cost_price', { valueAsNumber: true })}
                                 type="number" step="0.01" min={0} placeholder="Optional"
-                                className={numericInputClassName} />
+                                className={inputClassName} />
                         </FormField>
                     </div>
                 </div>
@@ -297,8 +304,8 @@ export default function AddProductPage() {
                         Manufactured product — stock is derived live from a bulk intermediate
                     </label>
                     {isManufactured && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <FormField label="Source Intermediate" required>
+                        <div className="flex flex-wrap gap-4">
+                            <FormField label="Source Intermediate" required className={fieldText}>
                                 <select value={sourceIntermediateId} onChange={(e) => setSourceIntermediateId(e.target.value)}
                                     className={selectClassName}>
                                     <option value="">Select intermediate</option>
@@ -307,9 +314,9 @@ export default function AddProductPage() {
                                     ))}
                                 </select>
                             </FormField>
-                            <FormField label="Pack Volume (intermediate qty per unit)" required>
+                            <FormField label="Pack Volume (intermediate qty per unit)" required className={fieldText}>
                                 <input type="number" step="0.001" min="0" value={packVolume}
-                                    onChange={(e) => setPackVolume(e.target.value)} className={numericInputClassName}
+                                    onChange={(e) => setPackVolume(e.target.value)} className={inputClassName}
                                     placeholder="e.g., 200, 500" />
                             </FormField>
                         </div>
@@ -341,7 +348,7 @@ export default function AddProductPage() {
                         Allow back order — stays orderable at zero stock with a tentative delivery date
                     </label>
                     {allowBackOrder && (
-                        <FormField label="Tentative Next-Available Date" error={errors.back_order_next_available} required>
+                        <FormField label="Tentative Next-Available Date" error={errors.back_order_next_available} required className={fieldDate}>
                             <input {...register('back_order_next_available')} type="date" className={dateInputClassName} />
                         </FormField>
                     )}
