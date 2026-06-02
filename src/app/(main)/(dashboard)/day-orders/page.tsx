@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useDaytimeOrders, DaytimeOrder } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import DateWithTodayButton from '@/components/DateWithTodayButton';
-import { Sun, Plus, BarChart3 } from 'lucide-react';
+import { Sun, Plus, BarChart3, Link2 } from 'lucide-react';
 
 const ORDER_STATUS_STYLE: Record<string, string> = {
     pending: 'bg-amber-500/20 text-amber-300',
@@ -115,6 +115,10 @@ export default function DayOrdersPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    <Link href="/day-orders/payments"
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-800/60 text-slate-200 rounded-xl font-medium hover:bg-slate-800">
+                        <Link2 className="w-5 h-5" /> Payment Links
+                    </Link>
                     <Link href="/day-orders/reports"
                         className="flex items-center gap-2 px-4 py-2 bg-slate-800/60 text-slate-200 rounded-xl font-medium hover:bg-slate-800">
                         <BarChart3 className="w-5 h-5" /> Reports
