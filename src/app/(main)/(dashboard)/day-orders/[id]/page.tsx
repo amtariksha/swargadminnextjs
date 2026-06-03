@@ -101,8 +101,12 @@ export default function DaytimeOrderDetailPage() {
     }
 
     const isPaid = PAID_STATES.includes(order.payment_status);
-    const isClosed = ['cancelled', 'delivered'].includes(order.order_status);
-    const editable = !isClosed && !isPaid;
+    const isCancelled = order.order_status === 'cancelled';
+    const isDelivered = order.order_status === 'delivered';
+    // Line items are only editable on an open, unpaid order. A delivered order's
+    // items are frozen — but its PAYMENT is not: a delivered-but-unpaid order
+    // must still be collectable (cash / wallet / link / reminder).
+    const editable = !isCancelled && !isDelivered && !isPaid;
 
     return (
         <div className="space-y-6">
@@ -132,9 +136,13 @@ export default function DaytimeOrderDetailPage() {
                 )}
                 {isPaid ? (
                     <p className="text-emerald-300 text-sm">Settled via {order.payment_mode || order.payment_status}.</p>
-                ) : isClosed ? (
-                    <p className="text-slate-400 text-sm">This order is {order.order_status}.</p>
+                ) : isCancelled ? (
+                    <p className="text-slate-400 text-sm">This order is cancelled.</p>
                 ) : (
+                    <div className="space-y-3">
+                        {isDelivered && (
+                            <p className="text-xs text-amber-300/90">Delivered but unpaid — collect the outstanding payment below.</p>
+                        )}
                     <div className="flex flex-wrap gap-2">
                         <button onClick={generateLink} disabled={busy !== null}
                             className="flex items-center gap-2 px-4 py-2 text-sm bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl disabled:opacity-50">
@@ -153,10 +161,13 @@ export default function DaytimeOrderDetailPage() {
                             className="flex items-center gap-2 px-4 py-2 text-sm bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl hover:bg-amber-500/30 disabled:opacity-50">
                             <MessageCircle className="w-4 h-4" /> {busy === 'reminder' ? 'Sending…' : 'Send reminder'}
                         </button>
-                        <button onClick={() => setConfirmCancel(true)} disabled={busy !== null}
-                            className="flex items-center gap-2 px-4 py-2 text-sm bg-red-500/20 text-red-300 border border-red-500/30 rounded-xl hover:bg-red-500/30 disabled:opacity-50">
-                            <XCircle className="w-4 h-4" /> Cancel order
-                        </button>
+                        {!isDelivered && (
+                            <button onClick={() => setConfirmCancel(true)} disabled={busy !== null}
+                                className="flex items-center gap-2 px-4 py-2 text-sm bg-red-500/20 text-red-300 border border-red-500/30 rounded-xl hover:bg-red-500/30 disabled:opacity-50">
+                                <XCircle className="w-4 h-4" /> Cancel order
+                            </button>
+                        )}
+                    </div>
                     </div>
                 )}
                 {order.order_status !== 'cancelled' && order.order_status !== 'delivered' && (
