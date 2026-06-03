@@ -19,6 +19,8 @@ export interface AdminUser {
         /** Page permission keys for this role (matches AVAILABLE_PERMISSIONS in /roles). */
         permissions?: string[];
     }[];
+    /** Per-user delivery-app capability override (unioned with the role's caps). */
+    delivery_permissions?: string[];
 }
 
 // Role interface
@@ -122,6 +124,7 @@ export function useUpdateAdminUser() {
             name?: string;
             email?: string;
             phone?: string;
+            delivery_permissions?: string[];
         }) => {
             const response = await POST('/update_user', data);
             return response;

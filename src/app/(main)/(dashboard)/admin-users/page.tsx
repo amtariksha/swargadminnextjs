@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useAdminUsers, useRoles, useCreateAdminUser, useUpdateAdminUser, useUpdateAdminUserRole, useDeleteAdminUser, useResetAdminPassword, AdminUser } from '@/hooks/useAdminUsers';
+import { DELIVERY_PERMISSIONS } from '@/lib/deliveryPermissions';
 import DataTable, { Column } from '@/components/DataTable';
-import { Plus, UserCog, Shield, Trash2, X, Loader2, KeyRound } from 'lucide-react';
+import { Plus, UserCog, Shield, Trash2, X, Loader2, KeyRound, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminUsersPage() {
@@ -34,6 +35,8 @@ export default function AdminUsersPage() {
     // The role the user held when the edit modal opened — used to detect a
     // role change on save (role updates go through a separate, gated endpoint).
     const [initialRoleId, setInitialRoleId] = useState(2);
+    // Per-user delivery-app capability override (unioned with the role's caps).
+    const [formDeliveryCaps, setFormDeliveryCaps] = useState<string[]>([]);
 
     const openAddModal = () => {
         setIsAddMode(true);
@@ -44,6 +47,7 @@ export default function AdminUsersPage() {
         setFormPassword('');
         setFormRoleId(2);
         setInitialRoleId(2);
+        setFormDeliveryCaps([]);
         setShowModal(true);
     };
 
@@ -57,7 +61,14 @@ export default function AdminUsersPage() {
         const currentRoleId = user.role?.[0]?.role_id || 2;
         setFormRoleId(currentRoleId);
         setInitialRoleId(currentRoleId);
+        setFormDeliveryCaps(user.delivery_permissions || []);
         setShowModal(true);
+    };
+
+    const toggleDeliveryCap = (key: string) => {
+        setFormDeliveryCaps((prev) =>
+            prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+        );
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -83,6 +94,7 @@ export default function AdminUsersPage() {
                     name: formName,
                     email: formEmail,
                     phone: formPhone,
+                    delivery_permissions: formDeliveryCaps,
                 });
                 if (result.response === 201 || result.response === 400) {
                     toast.error((result as { message?: string }).message || 'Failed to update user');
@@ -396,6 +408,33 @@ export default function AdminUsersPage() {
                                     </p>
                                 )}
                             </div>
+                            {!isAddMode && (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Delivery App Capabilities</label>
+                                    <p className="text-xs text-slate-500 mb-2">
+                                        Per-user override for the delivery app, added on top of the role&apos;s capabilities.
+                                        The driver must log out and back in to pick up changes.
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {DELIVERY_PERMISSIONS.map((perm) => (
+                                            <button
+                                                key={perm.key}
+                                                type="button"
+                                                onClick={() => toggleDeliveryCap(perm.key)}
+                                                className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${formDeliveryCaps.includes(perm.key)
+                                                    ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                                                    : 'bg-slate-800/40 border-slate-700/50 text-slate-400 hover:border-slate-600'}`}
+                                            >
+                                                <span className="text-base">{perm.icon}</span>
+                                                <span className="truncate">{perm.label}</span>
+                                                {formDeliveryCaps.includes(perm.key) && (
+                                                    <Check className="w-4 h-4 ml-auto text-emerald-400 flex-shrink-0" />
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             <div className="flex gap-3 pt-2">
                                 <button
                                     type="submit"

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRoles, useCreateRole, useUpdateRole, Role } from '@/hooks/useAdminUsers';
+import { DELIVERY_PERMISSIONS } from '@/lib/deliveryPermissions';
 import DataTable, { Column } from '@/components/DataTable';
 import { Plus, Shield, Edit, X, Check, Lock } from 'lucide-react';
 import { toast } from 'sonner';
@@ -85,26 +86,10 @@ const AVAILABLE_PERMISSIONS = [
     { key: 'day-orders', label: 'Day Orders', icon: '☀️' },
 ];
 
-// Delivery-app capability keys — a SEPARATE permission set from the admin page
-// permissions above. These gate pages in the Flutter DELIVERY app (collection
-// pickup, production supervisor, etc.) and are stored in
-// role.delivery_permissions, independent of role.permissions — so granting a
-// delivery capability NEVER shrinks a role's admin-panel access (an empty
-// `permissions` array still means full admin access). Keys must stay in sync
-// with the backend catalog and the delivery app.
-const DELIVERY_PERMISSIONS = [
-    // Last-mile / morning customer doorstep delivery (legacy role-4 screen).
-    { key: 'milk-delivery', label: 'Milk Delivery (last-mile)', icon: '🥛' },
-    // Truck route — drop-points + shops with mark-delivered (legacy role-5 screen).
-    { key: 'truck-delivery', label: 'Truck Deliveries (drop points)', icon: '🚚' },
-    { key: 'collection-pickup', label: 'Collection Pickup', icon: '🧺' },
-    { key: 'production-supervisor', label: 'Production Supervisor', icon: '🏭' },
-    { key: 'day-production-support', label: 'Day Production Support', icon: '🛠️' },
-    // Lets a non-day-driver (e.g. a production supervisor) cover the day-time
-    // delivery pool when the day driver is on leave. Routes to the same day
-    // delivery screen role-6 drivers use.
-    { key: 'day-delivery', label: 'Day Deliveries', icon: '🛵' },
-];
+// Delivery-app capabilities (DELIVERY_PERMISSIONS, imported at top) are a
+// SEPARATE permission set from the admin page permissions above — stored in
+// role.delivery_permissions, independent of role.permissions, so granting one
+// never shrinks a role's admin-panel access.
 
 export default function RolesPage() {
     const { data: roles = [], isLoading } = useRoles();
