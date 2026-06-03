@@ -44,15 +44,16 @@ export default function DayOrdersPage() {
     const { data: orders = [], isLoading } = useDaytimeOrders(filters);
 
     // Summary cards — computed from the (filtered) order list, so they track the
-    // date / status filters above. Cancelled orders are excluded from money +
-    // delivery metrics (they aren't revenue and aren't pending delivery).
+    // date / status filters above. Every tile excludes cancelled orders (they
+    // aren't revenue, aren't pending delivery, and don't count toward the order
+    // tally).
     const stats = useMemo(() => {
         const PAID = ['paid', 'cash', 'wallet_deducted'];
         const live = orders.filter((o) => o.order_status !== 'cancelled');
         const sum = (list: DaytimeOrder[]) => list.reduce((s, o) => s + Number(o.total_amount || 0), 0);
         const isPaid = (o: DaytimeOrder) => PAID.includes(o.payment_status);
         return {
-            count: orders.length,
+            count: live.length,
             revenue: sum(live),
             notDelivered: live.filter((o) => o.order_status !== 'delivered').length,
             collected: sum(live.filter(isPaid)),
