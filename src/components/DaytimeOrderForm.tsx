@@ -155,6 +155,27 @@ function LineItemRow({ item, idx, products, onProductChange, onChange, onRemove 
         });
     };
 
+    // Auto-select the first variant (and apply ITS price) once a variable
+    // product's active variants load, so the unit price always matches the
+    // variant shown in the dropdown. Without this, a new line keeps the base
+    // product price even though a variant is displayed — which read as the wrong
+    // price (e.g. base ₹119 instead of the 8-pc ₹239). Guarded per product so it
+    // fires once: the operator can still switch variants or pick "base product"
+    // afterwards without it snapping back.
+    const autoPickedFor = useRef<number | ''>('');
+    useEffect(() => {
+        if (!isVariable || variants.length === 0) return;
+        if (item.variant_id !== '') return;
+        if (autoPickedFor.current === item.product_id) return;
+        autoPickedFor.current = item.product_id;
+        const first = variants[0];
+        const price = first.regular_price ?? product?.price;
+        onChange(idx, {
+            variant_id: first.id,
+            ...(price != null ? { unit_price: String(price) } : {}),
+        });
+    }, [isVariable, variants, item.variant_id, item.product_id, idx, product, onChange]);
+
     // Live line amount = qty × unit price — updates as the operator edits qty/price.
     const lineAmount = (Number(item.qty) || 0) * (Number(item.unit_price) || 0);
 
