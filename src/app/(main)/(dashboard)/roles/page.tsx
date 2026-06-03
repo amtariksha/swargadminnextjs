@@ -85,6 +85,20 @@ const AVAILABLE_PERMISSIONS = [
     { key: 'day-orders', label: 'Day Orders', icon: '☀️' },
 ];
 
+// Delivery-app capability keys — a SEPARATE permission set from the admin page
+// permissions above. These gate pages in the Flutter DELIVERY app (collection
+// pickup, production supervisor, etc.) and are stored in
+// role.delivery_permissions, independent of role.permissions — so granting a
+// delivery capability NEVER shrinks a role's admin-panel access (an empty
+// `permissions` array still means full admin access). Keys must stay in sync
+// with the backend catalog and the delivery app.
+const DELIVERY_PERMISSIONS = [
+    { key: 'milk-delivery', label: 'Milk Delivery', icon: '🥛' },
+    { key: 'collection-pickup', label: 'Collection Pickup', icon: '🚛' },
+    { key: 'production-supervisor', label: 'Production Supervisor', icon: '🏭' },
+    { key: 'day-production-support', label: 'Day Production Support', icon: '🛠️' },
+];
+
 export default function RolesPage() {
     const { data: roles = [], isLoading } = useRoles();
     const createMutation = useCreateRole();
@@ -95,11 +109,12 @@ export default function RolesPage() {
     const [formData, setFormData] = useState({
         title: '',
         permissions: [] as string[],
+        delivery_permissions: [] as string[],
     });
 
     const handleOpenCreate = () => {
         setEditingRole(null);
-        setFormData({ title: '', permissions: [] });
+        setFormData({ title: '', permissions: [], delivery_permissions: [] });
         setShowModal(true);
     };
 
@@ -108,6 +123,7 @@ export default function RolesPage() {
         setFormData({
             title: role.title,
             permissions: role.permissions || [],
+            delivery_permissions: role.delivery_permissions || [],
         });
         setShowModal(true);
     };
@@ -124,7 +140,7 @@ export default function RolesPage() {
                 await createMutation.mutateAsync(formData);
             }
             setShowModal(false);
-            setFormData({ title: '', permissions: [] });
+            setFormData({ title: '', permissions: [], delivery_permissions: [] });
             setEditingRole(null);
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to save role');
@@ -137,6 +153,15 @@ export default function RolesPage() {
             permissions: prev.permissions.includes(permission)
                 ? prev.permissions.filter(p => p !== permission)
                 : [...prev.permissions, permission],
+        }));
+    };
+
+    const toggleDeliveryPermission = (permission: string) => {
+        setFormData(prev => ({
+            ...prev,
+            delivery_permissions: prev.delivery_permissions.includes(permission)
+                ? prev.delivery_permissions.filter(p => p !== permission)
+                : [...prev.delivery_permissions, permission],
         }));
     };
 
@@ -286,6 +311,36 @@ export default function RolesPage() {
                                 </div>
                                 <p className="text-xs text-slate-500 mt-2">
                                     Leave empty for full access. Selected: {formData.permissions.length} pages
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm text-slate-400 mb-1">Delivery App Permissions</label>
+                                <p className="text-xs text-slate-500 mb-3">
+                                    Separate from the admin pages above — these gate what a user sees in the
+                                    Flutter delivery app. They never affect admin-panel access.
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {DELIVERY_PERMISSIONS.map((perm) => (
+                                        <button
+                                            key={perm.key}
+                                            type="button"
+                                            onClick={() => toggleDeliveryPermission(perm.key)}
+                                            className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${formData.delivery_permissions.includes(perm.key)
+                                                    ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                                                    : 'bg-slate-800/30 border-slate-700/50 text-slate-400 hover:border-slate-600'
+                                                }`}
+                                        >
+                                            <span className="text-base">{perm.icon}</span>
+                                            <span className="text-sm">{perm.label}</span>
+                                            {formData.delivery_permissions.includes(perm.key) && (
+                                                <Check className="w-4 h-4 ml-auto text-emerald-400" />
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                                <p className="text-xs text-slate-500 mt-2">
+                                    Selected: {formData.delivery_permissions.length} delivery pages
                                 </p>
                             </div>
 

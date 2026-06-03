@@ -6,6 +6,7 @@ import { useVendors, Vendor } from '@/hooks/useInventory';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import VendorMaterialsEditor from '@/components/inventory/VendorMaterialsEditor';
 import { Plus, Edit, BookText } from 'lucide-react';
 import { POST, PUT, DELETE } from '@/lib/api';
 import { toast } from 'sonner';
@@ -177,6 +178,7 @@ export default function VendorsPage() {
               Active
             </label>
           )}
+          {editItem && <VendorMaterialsEditor vendorId={editItem.id} />}
           <div className="flex gap-3 pt-4">
             {editItem && (
               <button type="button" onClick={() => { setIsModalOpen(false); setDeleteItem(editItem); }}

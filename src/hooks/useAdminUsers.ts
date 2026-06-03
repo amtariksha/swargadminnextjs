@@ -26,6 +26,8 @@ export interface Role {
     id: number;
     title: string;
     permissions?: string[];
+    /** Delivery-app capability keys (matches DELIVERY_PERMISSIONS in /roles). Gates the delivery app's pages; independent of admin `permissions`. */
+    delivery_permissions?: string[];
     created_at?: string;
 }
 
@@ -181,6 +183,7 @@ export function useCreateRole() {
         mutationFn: async (data: {
             title: string;
             permissions?: string[];
+            delivery_permissions?: string[];
         }) => {
             const response = await POST('/add_role', data);
             return response;
@@ -200,6 +203,7 @@ export function useUpdateRole() {
             id: number;
             title?: string;
             permissions?: string[];
+            delivery_permissions?: string[];
         }) => {
             const response = await POST('/update_role', data);
             return response;

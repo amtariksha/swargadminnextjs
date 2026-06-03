@@ -31,8 +31,26 @@ export interface RawMaterial {
   current_stock: number | string;
   is_active: number;
   notes?: string | null;
+  // Accounting/GST fields (migration 056) — feed Purchase vouchers + OCR defaults.
+  hsn_rate_id?: number | null;
+  hsn_code?: string | null;
+  gst_rate?: number | string | null;
+  default_unit_price?: number | string | null;
   created_at?: string;
   updated_at?: string;
+}
+
+// Admin-configurable QC parameter definition for a raw material (migration 056).
+export interface QualityParam {
+  id: number;
+  raw_material_id: number;
+  name: string;
+  unit?: string | null;
+  value_type: 'numeric' | 'text';
+  min_value?: number | string | null;
+  max_value?: number | string | null;
+  sort_order: number;
+  is_active: number;
 }
 
 export interface PurchaseEntry {

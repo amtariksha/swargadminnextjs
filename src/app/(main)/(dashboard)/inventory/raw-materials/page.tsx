@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { useRawMaterials, RawMaterial } from '@/hooks/useInventory';
+import { useHsnCodes } from '@/hooks/useAccounting';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import QualityParamsEditor from '@/components/inventory/QualityParamsEditor';
 import { Plus, Edit, SlidersHorizontal } from 'lucide-react';
 import { POST, PUT, DELETE } from '@/lib/api';
 import { toast } from 'sonner';
@@ -12,11 +14,15 @@ import { toast } from 'sonner';
 const inputCls =
   'w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50';
 
-const blankForm = { name: '', unit: '', notes: '', is_active: 1 };
+const blankForm = {
+  name: '', unit: '', notes: '', is_active: 1,
+  hsn_rate_id: '', hsn_code: '', gst_rate: '', default_unit_price: '',
+};
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function RawMaterialsPage() {
   const { data: materials = [], isLoading, refetch } = useRawMaterials();
+  const { data: hsnCodes = [] } = useHsnCodes();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editItem, setEditItem] = useState<RawMaterial | null>(null);
   const [deleteItem, setDeleteItem] = useState<RawMaterial | null>(null);
@@ -26,10 +32,31 @@ export default function RawMaterialsPage() {
   const [adjItem, setAdjItem] = useState<RawMaterial | null>(null);
   const [adjForm, setAdjForm] = useState({ qty: '', movement_date: today(), notes: '' });
 
+  // Flatten HSN codes → rates into a single picker. Selecting a rate sets the
+  // material's hsn_rate_id + hsn_code + gst_rate so Purchase vouchers carry GST.
+  const hsnRateOptions = hsnCodes.flatMap((c) =>
+    (c.rates || []).map((r) => ({ id: r.id, code: c.code, gst_rate: r.gst_rate })),
+  );
+  const onHsnRateChange = (rateId: string) => {
+    const opt = hsnRateOptions.find((o) => String(o.id) === rateId);
+    setForm((f) => ({
+      ...f,
+      hsn_rate_id: rateId,
+      hsn_code: opt ? opt.code : f.hsn_code,
+      gst_rate: opt ? String(opt.gst_rate) : f.gst_rate,
+    }));
+  };
+
   const openAdd = () => { setEditItem(null); setForm(blankForm); setIsModalOpen(true); };
   const openEdit = (m: RawMaterial) => {
     setEditItem(m);
-    setForm({ name: m.name, unit: m.unit, notes: m.notes || '', is_active: m.is_active });
+    setForm({
+      name: m.name, unit: m.unit, notes: m.notes || '', is_active: m.is_active,
+      hsn_rate_id: m.hsn_rate_id != null ? String(m.hsn_rate_id) : '',
+      hsn_code: m.hsn_code || '',
+      gst_rate: m.gst_rate != null ? String(m.gst_rate) : '',
+      default_unit_price: m.default_unit_price != null ? String(m.default_unit_price) : '',
+    });
     setIsModalOpen(true);
   };
   const openAdjust = (m: RawMaterial) => {
@@ -41,15 +68,23 @@ export default function RawMaterialsPage() {
     e.preventDefault();
     if (!form.name.trim() || !form.unit.trim()) return;
     setIsSubmitting(true);
+    const gstFields = {
+      hsn_rate_id: form.hsn_rate_id === '' ? null : Number(form.hsn_rate_id),
+      hsn_code: form.hsn_code || null,
+      gst_rate: form.gst_rate === '' ? null : Number(form.gst_rate),
+      default_unit_price: form.default_unit_price === '' ? null : Number(form.default_unit_price),
+    };
     try {
       if (editItem) {
         await PUT(`/inventory/raw-materials/${editItem.id}`, {
           name: form.name.trim(), unit: form.unit.trim(), notes: form.notes || null, is_active: form.is_active,
+          ...gstFields,
         });
         toast.success('Raw material updated');
       } else {
         await POST('/inventory/raw-materials', {
           name: form.name.trim(), unit: form.unit.trim(), notes: form.notes || null,
+          ...gstFields,
         });
         toast.success('Raw material created');
       }
@@ -162,6 +197,32 @@ export default function RawMaterialsPage() {
               <p className="text-xs text-slate-500 mt-1">Changed only via purchases and stock adjustments.</p>
             </div>
           )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">HSN / GST rate</label>
+              <select value={form.hsn_rate_id} onChange={(e) => onHsnRateChange(e.target.value)} className={inputCls}>
+                <option value="">— none —</option>
+                {hsnRateOptions.map((o) => (
+                  <option key={o.id} value={String(o.id)}>{o.code} @ {o.gst_rate}%</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">GST rate %</label>
+              <input type="number" step="any" value={form.gst_rate}
+                onChange={(e) => setForm({ ...form, gst_rate: e.target.value })} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">HSN code</label>
+              <input type="text" value={form.hsn_code}
+                onChange={(e) => setForm({ ...form, hsn_code: e.target.value })} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Default price / unit</label>
+              <input type="number" step="any" value={form.default_unit_price}
+                onChange={(e) => setForm({ ...form, default_unit_price: e.target.value })} className={inputCls} />
+            </div>
+          </div>
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
             <textarea value={form.notes} rows={2}
@@ -174,6 +235,7 @@ export default function RawMaterialsPage() {
               Active
             </label>
           )}
+          {editItem && <QualityParamsEditor rawMaterialId={editItem.id} />}
           <div className="flex gap-3 pt-4">
             {editItem && (
               <button type="button" onClick={() => { setIsModalOpen(false); setDeleteItem(editItem); }}
