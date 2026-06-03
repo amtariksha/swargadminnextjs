@@ -166,11 +166,13 @@ function LineItemRow({ item, idx, products, onProductChange, onChange, onRemove 
                     value={item.product_id}
                     onSelect={(pid) => onProductChange(idx, pid)}
                 />
-                <input type="number" min="1" step="1" value={item.qty}
-                    onChange={(e) => onChange(idx, { qty: e.target.value })}
+                {/* text inputs (not number) → no up/down spinner. Qty is digits
+                    only; price allows a decimal. */}
+                <input type="text" inputMode="numeric" value={item.qty}
+                    onChange={(e) => onChange(idx, { qty: e.target.value.replace(/[^\d]/g, '') })}
                     placeholder="Qty" className={`${inputClassName} col-span-2`} />
-                <input type="number" min="0" step="0.01" value={item.unit_price}
-                    onChange={(e) => onChange(idx, { unit_price: e.target.value })}
+                <input type="text" inputMode="decimal" value={item.unit_price}
+                    onChange={(e) => onChange(idx, { unit_price: e.target.value.replace(/[^\d.]/g, '') })}
                     placeholder="Unit ₹" className={`${inputClassName} col-span-2`} />
                 <div className="col-span-3 text-right text-sm font-medium text-white tabular-nums">
                     ₹{lineAmount.toFixed(2)}
