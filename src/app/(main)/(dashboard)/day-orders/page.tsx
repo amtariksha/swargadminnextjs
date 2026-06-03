@@ -43,6 +43,23 @@ export default function DayOrdersPage() {
 
     const { data: orders = [], isLoading } = useDaytimeOrders(filters);
 
+    // Summary cards — computed from the (filtered) order list, so they track the
+    // date / status filters above. Cancelled orders are excluded from money +
+    // delivery metrics (they aren't revenue and aren't pending delivery).
+    const stats = useMemo(() => {
+        const PAID = ['paid', 'cash', 'wallet_deducted'];
+        const live = orders.filter((o) => o.order_status !== 'cancelled');
+        const sum = (list: DaytimeOrder[]) => list.reduce((s, o) => s + Number(o.total_amount || 0), 0);
+        const isPaid = (o: DaytimeOrder) => PAID.includes(o.payment_status);
+        return {
+            count: orders.length,
+            revenue: sum(live),
+            notDelivered: live.filter((o) => o.order_status !== 'delivered').length,
+            collected: sum(live.filter(isPaid)),
+            outstanding: sum(live.filter((o) => !isPaid(o))),
+        };
+    }, [orders]);
+
     const columns: Column<DaytimeOrder>[] = [
         { key: 'order_no', header: 'Order #', width: '90px', render: (o) => `#${o.order_no}` },
         {
@@ -174,6 +191,29 @@ export default function DayOrdersPage() {
                         className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 shadow-lg shadow-purple-500/25">
                         <Plus className="w-5 h-5" /> New Order
                     </Link>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div className="glass rounded-xl p-4">
+                    <p className="text-sm text-slate-400">Orders</p>
+                    <p className="text-2xl font-bold text-white">{stats.count}</p>
+                </div>
+                <div className="glass rounded-xl p-4">
+                    <p className="text-sm text-slate-400">Revenue</p>
+                    <p className="text-2xl font-bold text-white">₹{stats.revenue.toFixed(0)}</p>
+                </div>
+                <div className="glass rounded-xl p-4">
+                    <p className="text-sm text-slate-400">Not delivered</p>
+                    <p className="text-2xl font-bold text-amber-300">{stats.notDelivered}</p>
+                </div>
+                <div className="glass rounded-xl p-4">
+                    <p className="text-sm text-slate-400">Collected</p>
+                    <p className="text-2xl font-bold text-emerald-400">₹{stats.collected.toFixed(0)}</p>
+                </div>
+                <div className="glass rounded-xl p-4">
+                    <p className="text-sm text-slate-400">To collect</p>
+                    <p className="text-2xl font-bold text-red-300">₹{stats.outstanding.toFixed(0)}</p>
                 </div>
             </div>
 
