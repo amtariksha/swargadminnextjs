@@ -421,25 +421,35 @@ export function useSettings() {
     });
 }
 
+/** Truthy tokens an app_settings flag value may carry. `'enabled'` is included
+ * because many Swarg settings store that word rather than a boolean literal. */
+const TRUTHY_FLAG_VALUES = new Set(['1', 'true', 'on', 'yes', 'y', 'enabled']);
+
 /**
- * Resolve a single app_settings row to its truthy/falsy value. Treats
- * the row's `value` as truthy when it equals '1', 'true', or 'on'
- * (case-insensitive). Returns `defaultValue` when the row is missing or
- * while the query is still loading — UI components can default to
- * "feature hidden" or "feature visible" depending on their preference.
+ * Resolve an app_settings feature flag (keyed by `title`) to a boolean.
+ * Returns `defaultValue` when no matching row exists or while the query is
+ * still loading.
  *
- * The lookup key is `app_settings.title` — see migration files
- * 017/025/etc. for the seed pattern.
+ * Robust against two real-world quirks of `app_settings`:
+ *  - **Duplicate rows by title** (see migration 047_dedupe_app_settings) — the
+ *    flag is ON if *any* matching row is truthy, so a stale falsy duplicate
+ *    with a lower id can't mask the real enabled row.
+ *  - **Loose value/title formatting** — title is matched trimmed +
+ *    case-insensitive, and the value accepts 1/true/on/yes/y/enabled.
  *
- * Used by the variations rollout gate (`enable_variations`) to flip
- * Attributes / Variations menu items on per-tenant.
+ * Used by the variations rollout gate (`enable_variations`) to flip the
+ * Attributes / Variations menu items per-tenant.
  */
 export function useFeatureFlag(title: string, defaultValue = false): boolean {
     const { data: settings = [] } = useSettings();
-    const row = settings.find((s) => s.title === title || s.key === title);
-    if (!row) return defaultValue;
-    const raw = String(row.value ?? '').trim().toLowerCase();
-    return raw === '1' || raw === 'true' || raw === 'on' || raw === 'yes';
+    const want = title.trim().toLowerCase();
+    const matches = settings.filter(
+        (s) =>
+            (s.title ?? '').trim().toLowerCase() === want ||
+            (s.key ?? '').trim().toLowerCase() === want,
+    );
+    if (matches.length === 0) return defaultValue;
+    return matches.some((s) => TRUTHY_FLAG_VALUES.has(String(s.value ?? '').trim().toLowerCase()));
 }
 
 // ==========================================
