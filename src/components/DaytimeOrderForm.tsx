@@ -155,6 +155,9 @@ function LineItemRow({ item, idx, products, onProductChange, onChange, onRemove 
         });
     };
 
+    // Live line amount = qty × unit price — updates as the operator edits qty/price.
+    const lineAmount = (Number(item.qty) || 0) * (Number(item.unit_price) || 0);
+
     return (
         <div className="space-y-2 border-b border-slate-800/30 pb-2 last:border-0">
             <div className="grid grid-cols-12 gap-2 items-center">
@@ -169,28 +172,33 @@ function LineItemRow({ item, idx, products, onProductChange, onChange, onRemove 
                 <input type="number" min="0" step="0.01" value={item.unit_price}
                     onChange={(e) => onChange(idx, { unit_price: e.target.value })}
                     placeholder="Unit ₹" className={`${inputClassName} col-span-2`} />
-                <label className="col-span-3 flex items-center gap-1.5 text-xs text-slate-400">
-                    <input type="checkbox" checked={item.is_bulk_rate}
-                        onChange={(e) => onChange(idx, { is_bulk_rate: e.target.checked })} />
-                    Bulk rate
-                </label>
+                <div className="col-span-3 text-right text-sm font-medium text-white tabular-nums">
+                    ₹{lineAmount.toFixed(2)}
+                </div>
                 <button type="button" onClick={() => onRemove(idx)}
                     className="col-span-1 p-2 hover:bg-red-500/20 rounded-lg justify-self-end">
                     <Trash2 className="w-4 h-4 text-red-400" />
                 </button>
             </div>
-            {isVariable && variants.length > 0 && (
-                <select
-                    value={item.variant_id}
-                    onChange={(e) => onVariantChange(e.target.value === '' ? '' : Number(e.target.value))}
-                    className={`${selectClassName} w-full md:w-2/3`}
-                >
-                    <option value="">Variation — base product</option>
-                    {variants.map((v) => (
-                        <option key={v.id} value={v.id}>{variantLabel(v)}</option>
-                    ))}
-                </select>
-            )}
+            <div className="flex flex-wrap items-center gap-3">
+                {isVariable && variants.length > 0 && (
+                    <select
+                        value={item.variant_id}
+                        onChange={(e) => onVariantChange(e.target.value === '' ? '' : Number(e.target.value))}
+                        className={`${selectClassName} flex-1 min-w-[12rem]`}
+                    >
+                        <option value="">Variation — base product</option>
+                        {variants.map((v) => (
+                            <option key={v.id} value={v.id}>{variantLabel(v)}</option>
+                        ))}
+                    </select>
+                )}
+                <label className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <input type="checkbox" checked={item.is_bulk_rate}
+                        onChange={(e) => onChange(idx, { is_bulk_rate: e.target.checked })} />
+                    Bulk rate
+                </label>
+            </div>
         </div>
     );
 }
