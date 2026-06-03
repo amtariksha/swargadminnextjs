@@ -9,7 +9,7 @@ import { useUsers, useProducts, useUserAddresses, useAddTransaction, useDrivers 
 import { useCreateOrder, useAssignOrder } from '@/hooks/useOrders';
 import { useVariants } from '@/hooks/useVariations';
 import type { Variant } from '@/lib/types/variations';
-import FormField, { inputClassName, selectClassName, dateInputClassName, numericInputClassName, shortSelectClassName, numericFieldMaxWidth } from '@/components/FormField';
+import FormField, { inputClassName, selectClassName, dateInputClassName, numericInputClassName, shortSelectClassName, numericFieldMaxWidth, fieldNumber, fieldDate, fieldSelect, fieldText } from '@/components/FormField';
 import { ArrowLeft, Save, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -337,7 +337,7 @@ export default function CreateOrderPage() {
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="glass rounded-xl p-6 space-y-6">
+            <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="glass rounded-xl p-6 space-y-6 max-w-6xl">
                 {/* User + Product Selection */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* User Selection */}
@@ -480,14 +480,14 @@ export default function CreateOrderPage() {
                     products these now reflect the picked variant's price
                     / mrp; tax is parent-level (no per-variant tax in MVP). */}
                 {selectedProduct && (
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        <FormField label="MRP" required>
+                    <div className="flex flex-wrap gap-4">
+                        <FormField label="MRP" required className={fieldNumber}>
                             <input value={effectiveMrp} disabled className={disabledFieldClass} />
                         </FormField>
-                        <FormField label="Price" required>
+                        <FormField label="Price" required className={fieldNumber}>
                             <input value={effectivePrice} disabled className={disabledFieldClass} />
                         </FormField>
-                        <FormField label="Tax" required>
+                        <FormField label="Tax" required className={fieldNumber}>
                             <input value={effectiveTax} disabled className={disabledFieldClass} />
                         </FormField>
                     </div>
@@ -495,14 +495,14 @@ export default function CreateOrderPage() {
 
                 {/* Order Amount, Quantity, Start Date */}
                 {selectedProduct && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <FormField label="Order Amount" required>
+                    <div className="flex flex-wrap gap-4">
+                        <FormField label="Order Amount" required className={fieldNumber}>
                             <input value={orderAmount.toFixed(2)} disabled className={disabledFieldClass} />
                         </FormField>
-                        <FormField label="Quantity" error={errors.qty} required>
+                        <FormField label="Quantity" error={errors.qty} required className={fieldNumber}>
                             <input {...register('qty', { valueAsNumber: true })} type="number" min={1} className={numericInputClassName} />
                         </FormField>
-                        <FormField label="Start From" error={errors.start_date} required>
+                        <FormField label="Start From" error={errors.start_date} required className={fieldDate}>
                             <input {...register('start_date')} type="date" min={getTomorrowDate()}
                                 className={`${dateInputClassName} cursor-pointer [&::-webkit-calendar-picker-indicator]:cursor-pointer`}
                                 onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
@@ -512,8 +512,8 @@ export default function CreateOrderPage() {
 
                 {/* Subscription Type + Address */}
                 {selectedProduct && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField label="Subscription Type" error={errors.subscription_type} required>
+                    <div className="flex flex-wrap gap-4">
+                        <FormField label="Subscription Type" error={errors.subscription_type} required className={fieldSelect}>
                             <select {...register('subscription_type', { valueAsNumber: true })} className={shortSelectClassName}
                                 disabled={!isSubscriptionProduct}>
                                 <option value={1}>One Time Order</option>
@@ -527,7 +527,7 @@ export default function CreateOrderPage() {
                             </select>
                         </FormField>
                         {selectedUserId > 0 && addresses.length > 0 && (
-                            <FormField label="Address">
+                            <FormField label="Address" className={fieldText}>
                                 <select {...register('address_id', { valueAsNumber: true })} className={selectClassName}>
                                     <option value="">Select address</option>
                                     {addresses.map((a) => (
@@ -611,8 +611,8 @@ export default function CreateOrderPage() {
 
                 {/* Status + Order Status + Order Type row */}
                 {selectedProduct && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <FormField label="Status">
+                    <div className="flex flex-wrap gap-4">
+                        <FormField label="Status" className={fieldSelect}>
                             <select {...register('status', { valueAsNumber: true })} className={shortSelectClassName}>
                                 <option value={1}>Confirmed</option>
                                 <option value={0}>Pending</option>
@@ -622,13 +622,13 @@ export default function CreateOrderPage() {
                         {/* Subscription orders: show Order Status toggle + locked Prepaid */}
                         {isSubscriptionOrder && (
                             <>
-                                <FormField label="Order Status">
+                                <FormField label="Order Status" className={fieldSelect}>
                                     <select {...register('order_status', { valueAsNumber: true })} className={shortSelectClassName}>
                                         <option value={0}>Active</option>
                                         <option value={1}>Stop</option>
                                     </select>
                                 </FormField>
-                                <FormField label="Order Type">
+                                <FormField label="Order Type" className={fieldNumber}>
                                     <input value="Prepaid" disabled className={disabledFieldClass} />
                                 </FormField>
                             </>
@@ -636,7 +636,7 @@ export default function CreateOrderPage() {
 
                         {/* Non-subscription / One Time: show locked Pay Now */}
                         {!isSubscriptionOrder && (
-                            <FormField label="Order Type">
+                            <FormField label="Order Type" className={fieldNumber}>
                                 <input value="Pay Now" disabled className={disabledFieldClass} />
                             </FormField>
                         )}
@@ -646,7 +646,7 @@ export default function CreateOrderPage() {
                 {/* Delivery Partner — optional. When set, /add_order_assign
                     fires immediately after /add_order succeeds. Operator
                     can leave blank and assign later from the edit page. */}
-                <FormField label="Delivery Partner">
+                <FormField label="Delivery Partner" className={fieldText}>
                     <select
                         value={driverId}
                         onChange={(e) => setDriverId(e.target.value === '' ? '' : Number(e.target.value))}

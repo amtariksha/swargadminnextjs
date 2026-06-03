@@ -12,7 +12,7 @@ import {
     useUpdateOrder, useAssignOrder, useDeleteOrderAssignment,
     OrderTransaction, SubOrderDelivery,
 } from '@/hooks/useOrders';
-import FormField, { inputClassName, selectClassName, dateInputClassName } from '@/components/FormField';
+import FormField, { inputClassName, selectClassName, dateInputClassName, fieldNumber, fieldDate, fieldSelect, fieldText } from '@/components/FormField';
 import DataTable, { Column } from '@/components/DataTable';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { ArrowLeft, Save, Truck, X, CheckCircle } from 'lucide-react';
@@ -260,21 +260,21 @@ export default function OrderDetailPage() {
             </div>
 
             {/* Edit Form */}
-            <form onSubmit={handleSubmit(onSubmit)} className="glass rounded-xl p-6 space-y-4">
+            <form onSubmit={handleSubmit(onSubmit)} className="glass rounded-xl p-6 space-y-4 max-w-5xl">
                 <h2 className="text-lg font-semibold text-white">Edit Order</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <FormField label="Quantity" error={errors.qty}>
+                <div className="flex flex-wrap gap-4">
+                    <FormField label="Quantity" error={errors.qty} className={fieldNumber}>
                         <input {...register('qty', { valueAsNumber: true })} type="number" min={1}
                             disabled={isOneTime} className={inputClassName} />
                     </FormField>
-                    <FormField label="Amount (₹)" error={errors.order_amount}>
+                    <FormField label="Amount (₹)" error={errors.order_amount} className={fieldNumber}>
                         <input {...register('order_amount', { valueAsNumber: true })} type="number" step="0.01"
                             disabled className={`${inputClassName} !text-slate-500`} />
                     </FormField>
-                    <FormField label="Start Date" error={errors.start_date}>
+                    <FormField label="Start Date" error={errors.start_date} className={fieldDate}>
                         <input {...register('start_date')} type="date" className={dateInputClassName} />
                     </FormField>
-                    <FormField label="Status" error={errors.status}>
+                    <FormField label="Status" error={errors.status} className={fieldSelect}>
                         <select {...register('status', { valueAsNumber: true })} className={selectClassName}>
                             <option value={0}>Pending</option>
                             <option value={1}>Confirmed</option>
@@ -282,18 +282,18 @@ export default function OrderDetailPage() {
                         </select>
                     </FormField>
                     {isSubscription && (
-                        <FormField label="Order Status" error={errors.order_status}>
+                        <FormField label="Order Status" error={errors.order_status} className={fieldSelect}>
                             <select {...register('order_status', { valueAsNumber: true })} className={selectClassName}>
                                 <option value={0}>Active</option>
                                 <option value={1}>Stopped</option>
                             </select>
                         </FormField>
                     )}
-                    <FormField label="Subscription Type">
+                    <FormField label="Subscription Type" className={fieldSelect}>
                         <input value={SUB_TYPE_LABELS[subType] || 'N/A'} disabled className={`${inputClassName} !text-slate-500`} />
                     </FormField>
                     {addresses.length > 0 && (
-                        <FormField label="Address">
+                        <FormField label="Address" className={fieldText}>
                             <select {...register('address_id', { valueAsNumber: true })} className={selectClassName}>
                                 <option value="">Select address</option>
                                 {addresses.map((a) => (
