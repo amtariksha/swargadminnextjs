@@ -18,7 +18,7 @@ import type { Variant } from '@/lib/types/variations';
 import CustomerPicker, { CustomerValue } from '@/components/CustomerPicker';
 import AddressMapPicker from '@/components/AddressMapPicker';
 import { isMapsConfigured, type PickedPlace } from '@/lib/maps';
-import FormField, { inputClassName, selectClassName, textareaClassName, dateInputClassName, timeInputClassName, numericInputClassName, shortSelectClassName } from '@/components/FormField';
+import FormField, { inputClassName, selectClassName, textareaClassName, dateInputClassName, timeInputClassName, numericInputClassName, shortSelectClassName, fieldNumber, fieldDate, fieldSelect, fieldText } from '@/components/FormField';
 import { POST, PUT, ApiError } from '@/lib/api';
 import { MapPin, Plus, Trash2, Save } from 'lucide-react';
 import { toast } from 'sonner';
@@ -376,16 +376,16 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
     };
 
     return (
-        <form onSubmit={handleSubmit} className="glass rounded-xl p-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField label="Customer" required>
+        <form onSubmit={handleSubmit} className="glass rounded-xl p-6 space-y-6 max-w-5xl">
+            <div className="flex flex-wrap gap-4">
+                <FormField label="Customer" required className={fieldText}>
                     <CustomerPicker value={customer} onChange={setCustomer} />
                 </FormField>
-                <FormField label="Delivery Date" required>
+                <FormField label="Delivery Date" required className={fieldDate}>
                     <input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)}
                         className={dateInputClassName} />
                 </FormField>
-                <FormField label="Entry Type">
+                <FormField label="Entry Type" className={fieldSelect}>
                     <select value={entryType} onChange={(e) => setEntryType(e.target.value)}
                         className={shortSelectClassName}>
                         <option value="">Select source</option>
@@ -398,11 +398,11 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
                         )}
                     </select>
                 </FormField>
-                <FormField label="Desired Delivery Time">
+                <FormField label="Desired Delivery Time" className={fieldDate}>
                     <input type="time" value={desiredTime} onChange={(e) => setDesiredTime(e.target.value)}
                         className={timeInputClassName} />
                 </FormField>
-                <FormField label="Priority">
+                <FormField label="Priority" className={fieldSelect}>
                     <select value={priority} onChange={(e) => setPriority(Number(e.target.value))}
                         className={shortSelectClassName}>
                         <option value={0}>Normal</option>
@@ -480,16 +480,16 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
             </div>
 
             {/* Discount + shipping */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FormField label="Discount (₹)">
+            <div className="flex flex-wrap gap-4">
+                <FormField label="Discount (₹)" className={fieldNumber}>
                     <input type="number" min="0" step="0.01" value={discountFlat}
                         onChange={(e) => setDiscountFlat(e.target.value)} className={numericInputClassName} placeholder="0" />
                 </FormField>
-                <FormField label="Discount Reason">
+                <FormField label="Discount Reason" className={fieldText}>
                     <input value={discountReason} onChange={(e) => setDiscountReason(e.target.value)}
                         className={inputClassName} placeholder="Optional" />
                 </FormField>
-                <FormField label="Shipping (₹)">
+                <FormField label="Shipping (₹)" className={fieldNumber}>
                     <input type="number" min="0" step="0.01" value={shipping}
                         onChange={(e) => setShipping(e.target.value)} className={numericInputClassName} placeholder="0" />
                 </FormField>
