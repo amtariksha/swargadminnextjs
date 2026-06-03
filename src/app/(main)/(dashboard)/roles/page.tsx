@@ -93,8 +93,11 @@ const AVAILABLE_PERMISSIONS = [
 // `permissions` array still means full admin access). Keys must stay in sync
 // with the backend catalog and the delivery app.
 const DELIVERY_PERMISSIONS = [
-    { key: 'milk-delivery', label: 'Milk Delivery', icon: '🥛' },
-    { key: 'collection-pickup', label: 'Collection Pickup', icon: '🚛' },
+    // Last-mile / morning customer doorstep delivery (legacy role-4 screen).
+    { key: 'milk-delivery', label: 'Milk Delivery (last-mile)', icon: '🥛' },
+    // Truck route — drop-points + shops with mark-delivered (legacy role-5 screen).
+    { key: 'truck-delivery', label: 'Truck Deliveries (drop points)', icon: '🚚' },
+    { key: 'collection-pickup', label: 'Collection Pickup', icon: '🧺' },
     { key: 'production-supervisor', label: 'Production Supervisor', icon: '🏭' },
     { key: 'day-production-support', label: 'Day Production Support', icon: '🛠️' },
     // Lets a non-day-driver (e.g. a production supervisor) cover the day-time
