@@ -97,6 +97,10 @@ const DELIVERY_PERMISSIONS = [
     { key: 'collection-pickup', label: 'Collection Pickup', icon: '🚛' },
     { key: 'production-supervisor', label: 'Production Supervisor', icon: '🏭' },
     { key: 'day-production-support', label: 'Day Production Support', icon: '🛠️' },
+    // Lets a non-day-driver (e.g. a production supervisor) cover the day-time
+    // delivery pool when the day driver is on leave. Routes to the same day
+    // delivery screen role-6 drivers use.
+    { key: 'day-delivery', label: 'Day Deliveries', icon: '🛵' },
 ];
 
 export default function RolesPage() {
