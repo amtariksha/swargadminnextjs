@@ -144,7 +144,12 @@ function LineItemRow({ item, idx, products, onProductChange, onChange, onRemove 
             onChange(idx, { variant_id: '' });
             return;
         }
-        const variant = variants.find((v) => v.id === variantId);
+        // Compare ids numerically: variant ids are BIGINT and the pg driver
+        // hands them back as STRINGS ("42"), while variantId is a number from
+        // Number(e.target.value). A strict `v.id === variantId` therefore never
+        // matches → the variant isn't found → the price wrongly falls back to
+        // the base product price (the "₹239 shown, ₹119 charged" bug).
+        const variant = variants.find((v) => Number(v.id) === Number(variantId));
         // Default the row price to the variant's price; fall back to the base
         // product price when a variant carries no explicit price. Always sets a
         // value so picking a variant visibly updates the unit price.
