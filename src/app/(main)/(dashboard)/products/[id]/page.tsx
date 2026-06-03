@@ -121,7 +121,12 @@ export default function EditProductPage() {
                 cost_price: product.cost_price ?? undefined,
             });
         }
-    }, [product, reset]);
+        // `variationsEnabled` is intentionally a dep: it resolves from an async
+        // settings query, so the product_type <select> can mount AFTER `product`
+        // (and thus after the first reset). Re-running reset once the flag flips
+        // true re-applies product_type to the now-mounted select — otherwise a
+        // 'variable' product renders (and saves) as 'simple'.
+    }, [product, reset, variationsEnabled]);
 
     const onSubmit = async (data: ProductFormData) => {
         const manufactured = !!data.is_manufactured;
@@ -146,7 +151,7 @@ export default function EditProductPage() {
             }
         }
         try {
-            const payload = {
+            const payload: Record<string, unknown> = {
                 id: Number(id),
                 ...data,
                 source_intermediate_id: manufactured && data.source_intermediate_id ? Number(data.source_intermediate_id) : null,
@@ -155,16 +160,23 @@ export default function EditProductPage() {
                 packaging_type_id: returnablePackaging && data.packaging_type_id ? Number(data.packaging_type_id) : null,
                 allow_back_order: backOrder ? 1 : 0,
                 back_order_next_available: backOrder ? data.back_order_next_available : null,
-                // Variations (migration 030). Defaults preserve simple-product
-                // behaviour. When 'variable', stock_managed_at decides if the
-                // product carries a single shared pool or per-variant stock.
-                product_type: data.product_type || 'simple',
-                stock_managed_at: data.product_type === 'variable'
-                    ? (data.stock_managed_at || 'variant')
-                    : 'variant',
                 cost_price: data.cost_price != null && data.cost_price !== 0 ? data.cost_price : null,
             };
-            await updateProduct.mutateAsync(payload as unknown as Record<string, unknown>);
+            // Variations (migration 030). Only touch product_type / stock_managed_at
+            // when the variations UI is actually shown. When the tenant flag is off
+            // the type <select> never mounts, so blindly sending a value here would
+            // clobber a product set to 'variable' elsewhere back to 'simple'. Omitting
+            // the keys makes the backend leave the existing column values untouched.
+            if (variationsEnabled) {
+                payload.product_type = data.product_type || 'simple';
+                payload.stock_managed_at = data.product_type === 'variable'
+                    ? (data.stock_managed_at || 'variant')
+                    : 'variant';
+            } else {
+                delete payload.product_type;
+                delete payload.stock_managed_at;
+            }
+            await updateProduct.mutateAsync(payload as Record<string, unknown>);
             toast.success('Product updated successfully');
             router.push('/products');
         } catch (error) {
