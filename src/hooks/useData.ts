@@ -2060,9 +2060,19 @@ export interface DaytimeOrder {
         id: number;
         status: string;
         claimed_by_user_id?: number | null;
+        // Day driver who claimed/delivered the pool row (joined name).
+        claimed_by_name?: string | null;
         claimed_at?: string | null;
         delivered_at?: string | null;
         delivered_qty?: number | null;
+        // Delivered GPS (driver app captures on mark-delivered).
+        lat?: number | null;
+        lng?: number | null;
+        // R2 URL of the proof-of-delivery photo, or null if none captured.
+        proof_photo_url?: string | null;
+        // Free-text reason a customer-care override recorded (release / reassign /
+        // force mark-delivered).
+        admin_note?: string | null;
     } | null;
 }
 

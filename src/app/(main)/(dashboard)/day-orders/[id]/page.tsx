@@ -7,7 +7,7 @@ import { useDaytimeOrder, useDrivers } from '@/hooks/useData';
 import DaytimeOrderForm from '@/components/DaytimeOrderForm';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { POST, ApiError } from '@/lib/api';
-import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PAID_STATES = ['paid', 'cash', 'wallet_deducted'];
@@ -22,6 +22,12 @@ export default function DaytimeOrderDetailPage() {
     const [confirmPay, setConfirmPay] = useState<'cash' | 'wallet' | null>(null);
     const [confirmDelivered, setConfirmDelivered] = useState(false);
     const [deliveredBy, setDeliveredBy] = useState<number | ''>('');
+    // Customer-care override: reason saved with mark-delivered / release / reassign,
+    // and the driver to hand the delivery to on a reassign.
+    const [reason, setReason] = useState('');
+    const [confirmRelease, setConfirmRelease] = useState(false);
+    const [reassignTo, setReassignTo] = useState<number | ''>('');
+    const [confirmReassign, setConfirmReassign] = useState(false);
     // Day drivers (role 6) — who can be recorded as having delivered the order.
     const { data: drivers = [] } = useDrivers();
     const dayDrivers = drivers.filter((d) => d.role_id === 6);
@@ -66,9 +72,24 @@ export default function DaytimeOrderDetailPage() {
 
     const markDelivered = () =>
         runAction('delivered',
-            () => POST(`/daytime/orders/${id}/mark_delivered`, { delivery_user_id: deliveredBy }),
+            () => POST(`/daytime/orders/${id}/mark_delivered`, { delivery_user_id: deliveredBy, reason: reason || undefined }),
             'Marked delivered')
-            .then(() => setConfirmDelivered(false));
+            .then(() => { setConfirmDelivered(false); setReason(''); });
+
+    const sendReminder = () =>
+        runAction('reminder', () => POST(`/daytime/orders/${id}/send_reminder`), 'Payment reminder sent');
+
+    const releaseToPool = () =>
+        runAction('release',
+            () => POST(`/daytime/orders/${id}/release`, { reason: reason || undefined }),
+            'Released back to the pool')
+            .then(() => { setConfirmRelease(false); setReason(''); });
+
+    const reassignDelivery = () =>
+        runAction('reassign',
+            () => POST(`/daytime/orders/${id}/reassign`, { delivery_user_id: reassignTo, reason: reason || undefined }),
+            'Delivery reassigned')
+            .then(() => { setConfirmReassign(false); setReason(''); });
 
     if (isLoading) {
         return <div className="space-y-4"><div className="h-8 w-40 bg-slate-800/50 rounded animate-pulse" />
@@ -128,6 +149,10 @@ export default function DaytimeOrderDetailPage() {
                             className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-800/60 text-slate-200 rounded-xl hover:bg-slate-800 disabled:opacity-50">
                             <Wallet className="w-4 h-4" /> {busy === 'wallet' ? 'Saving…' : 'Pay from wallet'}
                         </button>
+                        <button onClick={sendReminder} disabled={busy !== null}
+                            className="flex items-center gap-2 px-4 py-2 text-sm bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl hover:bg-amber-500/30 disabled:opacity-50">
+                            <MessageCircle className="w-4 h-4" /> {busy === 'reminder' ? 'Sending…' : 'Send reminder'}
+                        </button>
                         <button onClick={() => setConfirmCancel(true)} disabled={busy !== null}
                             className="flex items-center gap-2 px-4 py-2 text-sm bg-red-500/20 text-red-300 border border-red-500/30 rounded-xl hover:bg-red-500/30 disabled:opacity-50">
                             <XCircle className="w-4 h-4" /> Cancel order
@@ -135,13 +160,18 @@ export default function DaytimeOrderDetailPage() {
                     </div>
                 )}
                 {order.order_status !== 'cancelled' && order.order_status !== 'delivered' && (
-                    <div className="border-t border-slate-800/50 pt-3 space-y-2">
-                        <p className="text-xs font-semibold text-slate-300">Mark delivered (admin)</p>
+                    <div className="border-t border-slate-800/50 pt-3 space-y-3">
+                        <p className="text-xs font-semibold text-slate-300">Delivery — customer care</p>
+                        {/* Shared reason/note saved with whichever override is taken. */}
+                        <input value={reason} onChange={(e) => setReason(e.target.value)}
+                            placeholder="Reason / note (optional — e.g. driver unreachable)"
+                            className="w-full px-3 py-2 text-sm bg-slate-900/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500" />
                         <div className="flex flex-wrap items-center gap-2">
+                            {/* Mark delivered on behalf of a driver. */}
                             <select value={deliveredBy}
                                 onChange={(e) => setDeliveredBy(e.target.value ? Number(e.target.value) : '')}
                                 className="px-3 py-2 text-sm bg-slate-900/50 border border-slate-700/50 rounded-xl text-white">
-                                <option value="">Select delivery person…</option>
+                                <option value="">Delivered by…</option>
                                 {dayDrivers.map((d) => (
                                     <option key={d.user_id} value={d.user_id}>{d.name}</option>
                                 ))}
@@ -150,14 +180,52 @@ export default function DaytimeOrderDetailPage() {
                                 className="flex items-center gap-2 px-4 py-2 text-sm bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-xl hover:bg-emerald-500/30 disabled:opacity-50">
                                 <CheckCircle2 className="w-4 h-4" /> {busy === 'delivered' ? 'Saving…' : 'Mark delivered'}
                             </button>
+                            {/* Reassign to another day driver. */}
+                            <select value={reassignTo}
+                                onChange={(e) => setReassignTo(e.target.value ? Number(e.target.value) : '')}
+                                className="px-3 py-2 text-sm bg-slate-900/50 border border-slate-700/50 rounded-xl text-white">
+                                <option value="">Reassign to…</option>
+                                {dayDrivers.map((d) => (
+                                    <option key={d.user_id} value={d.user_id}>{d.name}</option>
+                                ))}
+                            </select>
+                            <button onClick={() => setConfirmReassign(true)} disabled={busy !== null || reassignTo === ''}
+                                className="flex items-center gap-2 px-4 py-2 text-sm bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-xl hover:bg-blue-500/30 disabled:opacity-50">
+                                <UserCog className="w-4 h-4" /> {busy === 'reassign' ? 'Saving…' : 'Reassign'}
+                            </button>
+                            {/* Release back to the pool — only meaningful while claimed. */}
+                            {order.delivery?.status === 'claimed' && (
+                                <button onClick={() => setConfirmRelease(true)} disabled={busy !== null}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-800/60 text-slate-200 rounded-xl hover:bg-slate-800 disabled:opacity-50">
+                                    <RotateCcw className="w-4 h-4" /> {busy === 'release' ? 'Releasing…' : 'Release to pool'}
+                                </button>
+                            )}
                         </div>
                     </div>
                 )}
                 {order.delivery && (
-                    <p className="text-xs text-slate-500">
-                        Delivery: {order.delivery.status}
-                        {order.delivery.delivered_at ? ` · delivered ${order.delivery.delivered_at}` : ''}
-                    </p>
+                    <div className="text-xs text-slate-500 space-y-1">
+                        <p>
+                            Delivery: <span className="text-slate-300">{order.delivery.status}</span>
+                            {order.delivery.claimed_by_name ? ` · ${order.delivery.claimed_by_name}` : ''}
+                            {order.delivery.delivered_at ? ` · delivered ${order.delivery.delivered_at}` : ''}
+                            {(order.delivery.lat != null && order.delivery.lng != null) && (
+                                <>{' · '}<a href={`https://www.google.com/maps/search/?api=1&query=${order.delivery.lat},${order.delivery.lng}`}
+                                    target="_blank" rel="noreferrer" className="text-purple-400 hover:text-purple-300">location</a></>
+                            )}
+                        </p>
+                        {order.delivery.admin_note && (
+                            <p className="text-amber-400/80">Note: {order.delivery.admin_note}</p>
+                        )}
+                        {order.delivery.proof_photo_url && (
+                            <a href={order.delivery.proof_photo_url} target="_blank" rel="noreferrer"
+                                className="inline-block mt-1">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={order.delivery.proof_photo_url} alt="Proof of delivery"
+                                    className="w-20 h-20 rounded-lg object-cover border border-slate-700 hover:ring-2 hover:ring-purple-500/50" />
+                            </a>
+                        )}
+                    </div>
                 )}
             </div>
 
@@ -214,12 +282,32 @@ export default function DaytimeOrderDetailPage() {
                 isOpen={confirmPay !== null}
                 title={confirmPay === 'wallet' ? 'Pay from customer wallet' : 'Mark paid in cash'}
                 message={confirmPay === 'wallet'
-                    ? `Debit ₹${Number(order.total_amount).toFixed(2)} from ${order.customer_name}'s wallet now? This happens immediately and cannot be undone.`
+                    ? `Debit ₹${Number(order.total_amount).toFixed(2)} from ${order.customer_name}'s wallet now? This debits the wallet immediately, logs a debit in their transaction history, and cannot be undone.`
                     : `Mark this ₹${Number(order.total_amount).toFixed(2)} order as paid in cash? This cannot be undone.`}
                 onConfirm={() => confirmPay && markPaid(confirmPay)}
                 onCancel={() => setConfirmPay(null)}
                 confirmText={confirmPay === 'wallet' ? 'Debit wallet' : 'Mark cash'}
                 isLoading={busy === confirmPay}
+            />
+
+            <ConfirmDialog
+                isOpen={confirmReassign}
+                title="Reassign delivery"
+                message={`Hand order #${order.order_no} to ${dayDrivers.find((d) => d.user_id === reassignTo)?.name || 'the selected driver'}? They become the claimer immediately.`}
+                onConfirm={reassignDelivery}
+                onCancel={() => setConfirmReassign(false)}
+                confirmText="Reassign"
+                isLoading={busy === 'reassign'}
+            />
+
+            <ConfirmDialog
+                isOpen={confirmRelease}
+                title="Release back to the pool"
+                message={`Release order #${order.order_no} from its current driver and return it to the shared day pool for anyone to re-claim?`}
+                onConfirm={releaseToPool}
+                onCancel={() => setConfirmRelease(false)}
+                confirmText="Release"
+                isLoading={busy === 'release'}
             />
         </div>
     );

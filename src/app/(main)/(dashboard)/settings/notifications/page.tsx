@@ -98,6 +98,15 @@ const TEMPLATE_FIELDS: { title: string; description: string; placeholder: string
         placeholder: 'e.g. app_daytime_order_delivered',
     },
     {
+        title: 'Daytime Payment Reminder Template',
+        description: 'Unpaid day-order followup. Sent by the "Send reminder" button (order detail / '
+            + 'payments page) AND a daily auto-reminder cron (10:00 IST by default; gated by app_settings '
+            + '"Daytime Payment Reminder Enabled" + "Daytime Payment Reminder Run Time"). Approved template '
+            + 'should have 4 variables: {{1}} name · {{2}} order # · {{3}} amount · {{4}} payment link. '
+            + 'Leave blank to disable all reminders.',
+        placeholder: 'e.g. app_daytime_payment_reminder',
+    },
+    {
         title: 'New User Registered Admin',
         description: 'Admin notification fired on every new customer signup.',
         placeholder: 'e.g. swarg_internal_notification',

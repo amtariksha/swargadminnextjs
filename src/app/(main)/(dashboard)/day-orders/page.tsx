@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useDaytimeOrders, DaytimeOrder } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import DateWithTodayButton from '@/components/DateWithTodayButton';
-import { Sun, Plus, BarChart3, Link2 } from 'lucide-react';
+import { Sun, Plus, BarChart3, Link2, MapPin } from 'lucide-react';
 
 const ORDER_STATUS_STYLE: Record<string, string> = {
     pending: 'bg-amber-500/20 text-amber-300',
@@ -48,6 +48,7 @@ export default function DayOrdersPage() {
         {
             key: 'customer_name',
             header: 'Customer',
+            width: '170px',
             render: (o) => (
                 <div>
                     <div className="text-white">{o.customer_name}</div>
@@ -64,6 +65,7 @@ export default function DayOrdersPage() {
         {
             key: 'items',
             header: 'Products',
+            width: '190px',
             render: (o) => {
                 const items = o.items || [];
                 if (!items.length) return <span className="text-slate-500">—</span>;
@@ -101,7 +103,52 @@ export default function DayOrdersPage() {
             width: '120px',
             render: (o) => <Badge value={o.payment_status} map={PAYMENT_STATUS_STYLE} />,
         },
-        { key: 'created_by_name', header: 'Sales Exec', width: '140px', render: (o) => o.created_by_name || '—' },
+        { key: 'created_by_name', header: 'Sales Exec', width: '130px', render: (o) => o.created_by_name || '—' },
+        {
+            key: 'claimed_by',
+            header: 'Claimed by',
+            width: '130px',
+            render: (o) => o.delivery?.claimed_by_name
+                ? <span className="text-slate-300">{o.delivery.claimed_by_name}</span>
+                : <span className="text-slate-500">—</span>,
+        },
+        {
+            key: 'delivered_at',
+            header: 'Delivered',
+            width: '150px',
+            render: (o) => o.delivery?.delivered_at
+                ? <span className="text-xs text-slate-300">{o.delivery.delivered_at}</span>
+                : <span className="text-slate-500">—</span>,
+        },
+        {
+            key: 'delivered_loc',
+            header: 'Location',
+            width: '90px',
+            render: (o) => (o.delivery?.lat != null && o.delivery?.lng != null)
+                ? (
+                    <a href={`https://www.google.com/maps/search/?api=1&query=${o.delivery.lat},${o.delivery.lng}`}
+                        target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 text-purple-400 hover:text-purple-300 text-xs">
+                        <MapPin className="w-3.5 h-3.5" /> Map
+                    </a>
+                )
+                : <span className="text-slate-500">—</span>,
+        },
+        {
+            key: 'proof_photo',
+            header: 'Photo',
+            width: '80px',
+            render: (o) => o.delivery?.proof_photo_url
+                ? (
+                    <a href={o.delivery.proof_photo_url} target="_blank" rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()} className="inline-block">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={o.delivery.proof_photo_url} alt="Proof of delivery"
+                            className="w-9 h-9 rounded object-cover border border-slate-700 hover:ring-2 hover:ring-purple-500/50" />
+                    </a>
+                )
+                : <span className="text-slate-500">—</span>,
+        },
     ];
 
     return (

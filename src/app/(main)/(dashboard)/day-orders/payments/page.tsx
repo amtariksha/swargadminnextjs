@@ -16,7 +16,8 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { useDaytimeOrders, DaytimeOrder } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
-import { Link2, ArrowLeft, ExternalLink, Copy, IndianRupee } from 'lucide-react';
+import { POST, ApiError } from '@/lib/api';
+import { Link2, ArrowLeft, ExternalLink, Copy, IndianRupee, MessageCircle } from 'lucide-react';
 
 const PAYMENT_STATUS_STYLE: Record<string, string> = {
     unpaid: 'bg-red-500/20 text-red-300',
@@ -38,8 +39,34 @@ const hasLink = (o: DaytimeOrder) => o.payment_mode === 'link' || !!o.payment_li
 export default function DayOrderPaymentsPage() {
     const router = useRouter();
     const [statusFilter, setStatusFilter] = useState('');
+    const [reminding, setReminding] = useState(false);
 
-    const { data: orders = [], isLoading } = useDaytimeOrders({});
+    const { data: orders = [], isLoading, refetch } = useDaytimeOrders({});
+
+    // Every unpaid (unpaid|link_sent), non-cancelled day order — the bulk reminder targets.
+    const unpaidIds = useMemo(
+        () => orders
+            .filter((o) => ['unpaid', 'link_sent'].includes(o.payment_status) && o.order_status !== 'cancelled')
+            .map((o) => o.id),
+        [orders],
+    );
+
+    const remindUnpaid = async () => {
+        if (!unpaidIds.length) { toast.info('No unpaid orders to remind'); return; }
+        setReminding(true);
+        try {
+            const res = await POST<{ matched: number; sent: number; skipped: number }>(
+                '/daytime/send_reminders', { ids: unpaidIds });
+            const d = (res as { data?: { sent?: number; skipped?: number } })?.data;
+            toast.success(`Reminders sent: ${d?.sent ?? 0}${d?.skipped ? ` · skipped ${d.skipped}` : ''}`);
+            refetch();
+        } catch (error) {
+            toast.error(error instanceof ApiError ? error.userMessage
+                : error instanceof Error ? error.message : 'Could not send reminders');
+        } finally {
+            setReminding(false);
+        }
+    };
 
     const linkOrders = useMemo(() => {
         const withLink = orders.filter(hasLink);
@@ -132,10 +159,18 @@ export default function DayOrderPaymentsPage() {
                         <p className="text-slate-400">Razorpay links for day-time orders + live status</p>
                     </div>
                 </div>
-                <Link href="/day-orders"
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-800/60 text-slate-200 rounded-xl font-medium hover:bg-slate-800">
-                    <ArrowLeft className="w-5 h-5" /> Day Orders
-                </Link>
+                <div className="flex items-center gap-2">
+                    <button onClick={remindUnpaid} disabled={reminding || !unpaidIds.length}
+                        className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl font-medium hover:bg-amber-500/30 disabled:opacity-50"
+                        title="Send the payment-reminder WhatsApp to every unpaid day order">
+                        <MessageCircle className="w-5 h-5" />
+                        {reminding ? 'Sending…' : `Remind unpaid${unpaidIds.length ? ` (${unpaidIds.length})` : ''}`}
+                    </button>
+                    <Link href="/day-orders"
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-800/60 text-slate-200 rounded-xl font-medium hover:bg-slate-800">
+                        <ArrowLeft className="w-5 h-5" /> Day Orders
+                    </Link>
+                </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
