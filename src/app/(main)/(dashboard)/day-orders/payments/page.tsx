@@ -43,10 +43,14 @@ export default function DayOrderPaymentsPage() {
 
     const { data: orders = [], isLoading, refetch } = useDaytimeOrders({});
 
-    // Every unpaid (unpaid|link_sent), non-cancelled day order — the bulk reminder targets.
+    // Every unpaid (unpaid|link_sent), non-cancelled day order — the bulk reminder
+    // targets. Morning-recovery orders are excluded: they're auto-billed by the
+    // subscription on delivery, so a "please pay" reminder would be wrong.
     const unpaidIds = useMemo(
         () => orders
-            .filter((o) => ['unpaid', 'link_sent'].includes(o.payment_status) && o.order_status !== 'cancelled')
+            .filter((o) => ['unpaid', 'link_sent'].includes(o.payment_status)
+                && o.order_status !== 'cancelled'
+                && o.entry_type !== 'morning_backup')
             .map((o) => o.id),
         [orders],
     );

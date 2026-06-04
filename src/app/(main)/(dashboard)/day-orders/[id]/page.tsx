@@ -6,8 +6,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useDaytimeOrder, useDrivers } from '@/hooks/useData';
 import DaytimeOrderForm from '@/components/DaytimeOrderForm';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { POST, ApiError } from '@/lib/api';
-import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog } from 'lucide-react';
+import { POST, PUT, ApiError } from '@/lib/api';
+import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog, CalendarClock } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PAID_STATES = ['paid', 'cash', 'wallet_deducted'];
@@ -28,6 +28,8 @@ export default function DaytimeOrderDetailPage() {
     const [confirmRelease, setConfirmRelease] = useState(false);
     const [reassignTo, setReassignTo] = useState<number | ''>('');
     const [confirmReassign, setConfirmReassign] = useState(false);
+    // Reschedule a morning-recovery order to another delivery date.
+    const [rescheduleDate, setRescheduleDate] = useState('');
     // Day drivers (role 6) — who can be recorded as having delivered the order.
     const { data: drivers = [] } = useDrivers();
     const dayDrivers = drivers.filter((d) => d.role_id === 6);
@@ -91,6 +93,11 @@ export default function DaytimeOrderDetailPage() {
             'Delivery reassigned')
             .then(() => { setConfirmReassign(false); setReason(''); });
 
+    const saveReschedule = () =>
+        runAction('reschedule',
+            () => PUT(`/daytime/orders/${id}`, { delivery_date: rescheduleDate || order?.delivery_date }),
+            'Delivery date updated');
+
     if (isLoading) {
         return <div className="space-y-4"><div className="h-8 w-40 bg-slate-800/50 rounded animate-pulse" />
             <div className="h-96 bg-slate-800/50 rounded-xl animate-pulse" /></div>;
@@ -103,10 +110,17 @@ export default function DaytimeOrderDetailPage() {
     const isPaid = PAID_STATES.includes(order.payment_status);
     const isCancelled = order.order_status === 'cancelled';
     const isDelivered = order.order_status === 'delivered';
-    // Line items are only editable on an open, unpaid order. A delivered order's
-    // items are frozen — but its PAYMENT is not: a delivered-but-unpaid order
-    // must still be collectable (cash / wallet / link / reminder).
-    const editable = !isCancelled && !isDelivered && !isPaid;
+    // Morning-recovery (morning_backup) orders are billed by the subscription on
+    // delivery — NO day-network payment, and items/amount are frozen. They get a
+    // read-only summary + a date-only reschedule, never the full edit form or the
+    // payment buttons (which would double-charge / nag the customer).
+    const isRecovery = order.entry_type === 'morning_backup';
+    const canReschedule = isRecovery && !isCancelled && !isDelivered;
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    // Line items are only editable on an open, unpaid, non-recovery order. A
+    // delivered order's items are frozen — but its PAYMENT is not: a
+    // delivered-but-unpaid order must still be collectable.
+    const editable = !isCancelled && !isDelivered && !isPaid && !isRecovery;
 
     return (
         <div className="space-y-6">
@@ -134,7 +148,12 @@ export default function DaytimeOrderDetailPage() {
                         <ExternalLink className="w-4 h-4" /> {order.payment_short_url}
                     </a>
                 )}
-                {isPaid ? (
+                {isRecovery ? (
+                    <p className="text-slate-400 text-sm">
+                        Morning-recovery order — billed automatically by the customer&apos;s subscription
+                        wallet when it&apos;s delivered. No separate day-network payment is taken here.
+                    </p>
+                ) : isPaid ? (
                     <p className="text-emerald-300 text-sm">Settled via {order.payment_mode || order.payment_status}.</p>
                 ) : isCancelled ? (
                     <p className="text-slate-400 text-sm">This order is cancelled.</p>
@@ -239,6 +258,33 @@ export default function DaytimeOrderDetailPage() {
                     </div>
                 )}
             </div>
+
+            {/* Reschedule — recovery orders only (date-only; items/amount frozen). */}
+            {canReschedule && (
+                <div className="glass rounded-xl p-5 space-y-3">
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                        <CalendarClock className="w-4 h-4 text-purple-400" /> Reschedule delivery
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                        Move this recovery to another day. Must be today or later, and not yet picked
+                        up by a driver. Items + amount are billed by the morning subscription and
+                        can&apos;t be edited here.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <input type="date" min={todayStr}
+                            value={rescheduleDate || order.delivery_date || ''}
+                            onChange={(e) => setRescheduleDate(e.target.value)}
+                            className="px-3 py-2 text-sm bg-slate-900/50 border border-slate-700/50 rounded-xl text-white" />
+                        <button onClick={saveReschedule}
+                            disabled={busy !== null
+                                || !(rescheduleDate || order.delivery_date)
+                                || (rescheduleDate || order.delivery_date) === order.delivery_date}
+                            className="flex items-center gap-2 px-4 py-2 text-sm bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-xl hover:bg-purple-500/30 disabled:opacity-50">
+                            <CalendarClock className="w-4 h-4" /> {busy === 'reschedule' ? 'Saving…' : 'Save date'}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Edit form (editable orders) or read-only summary */}
             {editable ? (
