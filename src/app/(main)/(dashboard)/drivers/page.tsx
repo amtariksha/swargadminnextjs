@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useDrivers, useDropPoints, Driver, DRIVER_ROLES } from '@/hooks/useData';
+import { DELIVERY_PERMISSIONS } from '@/lib/deliveryPermissions';
 import DataTable, { Column } from '@/components/DataTable';
-import { Plus, X } from 'lucide-react';
+import { Plus, X, Check } from 'lucide-react';
 import { POST } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -47,6 +48,14 @@ export default function DriversPage() {
     const [formDropPointId, setFormDropPointId] = useState('');
     const [formRole, setFormRole] = useState(4);
     const [editUserId, setEditUserId] = useState<number | null>(null);
+    // Per-user delivery-app capability override (added on top of the role's caps).
+    const [formDeliveryCaps, setFormDeliveryCaps] = useState<string[]>([]);
+
+    const toggleDeliveryCap = (key: string) => {
+        setFormDeliveryCaps((prev) =>
+            prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+        );
+    };
 
     const openAddModal = () => {
         setIsAddMode(true);
@@ -57,6 +66,7 @@ export default function DriversPage() {
         setFormDropPointId('');
         setFormRole(4);
         setEditUserId(null);
+        setFormDeliveryCaps([]);
         setShowModal(true);
     };
 
@@ -69,6 +79,7 @@ export default function DriversPage() {
         setFormDropPointId(driver.drop_point_id != null ? String(driver.drop_point_id) : '');
         setFormRole(driver.role_id || 4);
         setEditUserId(driver.user_id || driver.id);
+        setFormDeliveryCaps(driver.delivery_permissions || []);
         setShowModal(true);
     };
 
@@ -90,6 +101,8 @@ export default function DriversPage() {
                     ...(formRole === 4
                         ? { drop_point_id: formDropPointId === '' ? null : Number(formDropPointId) }
                         : {}),
+                    // Extra delivery-app access on top of the driver's role.
+                    delivery_permissions: formDeliveryCaps,
                 });
                 toast.success('User Details Updated successfully');
             }
@@ -325,6 +338,34 @@ export default function DriversPage() {
                                             <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-transform ${formIsLocation === 1 ? 'translate-x-5' : ''}`} />
                                         </button>
                                         <span className="text-sm text-slate-400">On</span>
+                                    </div>
+                                </div>
+                            )}
+                            {!isAddMode && (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Delivery App Capabilities</label>
+                                    <p className="text-xs text-slate-500 mb-2">
+                                        Extra delivery-app access for this driver, added on top of their role
+                                        (e.g. give a last-mile driver Collection Pickup without changing their route).
+                                        The driver must log out and back in to pick up changes.
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {DELIVERY_PERMISSIONS.map((perm) => (
+                                            <button
+                                                key={perm.key}
+                                                type="button"
+                                                onClick={() => toggleDeliveryCap(perm.key)}
+                                                className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${formDeliveryCaps.includes(perm.key)
+                                                    ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                                                    : 'bg-slate-800/40 border-slate-700/50 text-slate-400 hover:border-slate-600'}`}
+                                            >
+                                                <span className="text-base">{perm.icon}</span>
+                                                <span className="truncate">{perm.label}</span>
+                                                {formDeliveryCaps.includes(perm.key) && (
+                                                    <Check className="w-4 h-4 ml-auto text-emerald-400 flex-shrink-0" />
+                                                )}
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
                             )}

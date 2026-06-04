@@ -45,6 +45,8 @@ export interface Driver {
     drop_point_id?: number | null;
     role_id?: number;
     role_label?: string;
+    /** Per-user delivery-app capability override (unioned with the role's caps). */
+    delivery_permissions?: string[];
     created_at: string;
     updated_at?: string;
 }
