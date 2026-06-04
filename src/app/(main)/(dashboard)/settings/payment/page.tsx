@@ -14,6 +14,9 @@ interface PaymentGateway {
     key_id: string;
     secret_id: string;
     active: number;
+    // Write-only on the backend — the API returns only whether it's configured,
+    // never the value itself.
+    has_webhook_secret?: boolean;
     updated_at?: string;
 }
 
@@ -21,7 +24,7 @@ export default function PaymentSettingsPage() {
     const queryClient = useQueryClient();
     const [showModal, setShowModal] = useState(false);
     const [editItem, setEditItem] = useState<PaymentGateway | null>(null);
-    const [formData, setFormData] = useState({ key_id: '', secret_id: '', active: 0 });
+    const [formData, setFormData] = useState({ key_id: '', secret_id: '', active: 0, webhook_secret: '' });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const { data: gateways = [], isLoading } = useQuery({
@@ -38,6 +41,8 @@ export default function PaymentSettingsPage() {
             key_id: item.key_id || '',
             secret_id: item.secret_id || '',
             active: item.active,
+            // Always blank — the secret is never returned; blank = keep existing.
+            webhook_secret: '',
         });
         setShowModal(true);
     };
@@ -52,6 +57,9 @@ export default function PaymentSettingsPage() {
                 key_id: formData.key_id,
                 secret_id: formData.secret_id,
                 active: formData.active,
+                // Only sent when the admin typed a new value; blank is ignored
+                // server-side so the existing secret is preserved.
+                ...(formData.webhook_secret.trim() ? { webhook_secret: formData.webhook_secret.trim() } : {}),
             });
             setShowModal(false);
             setEditItem(null);
@@ -100,6 +108,15 @@ export default function PaymentSettingsPage() {
             render: (item) => (
                 <span className="font-mono text-sm text-slate-400">
                     {item.secret_id ? '••••••••••' : '-'}
+                </span>
+            ),
+        },
+        {
+            key: 'has_webhook_secret',
+            header: 'Webhook Secret',
+            render: (item) => (
+                <span className={`text-sm ${item.has_webhook_secret ? 'text-green-400' : 'text-amber-400'}`}>
+                    {item.has_webhook_secret ? 'Configured' : 'Not set'}
                 </span>
             ),
         },
@@ -160,6 +177,21 @@ export default function PaymentSettingsPage() {
                                     className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white font-mono text-sm"
                                     placeholder="Enter Secret ID"
                                 />
+                            </div>
+                            <div>
+                                <label className="block text-sm text-slate-400 mb-1">Webhook Secret</label>
+                                <input
+                                    type="password"
+                                    value={formData.webhook_secret}
+                                    onChange={(e) => setFormData({ ...formData, webhook_secret: e.target.value })}
+                                    autoComplete="new-password"
+                                    className="w-full px-4 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white font-mono text-sm"
+                                    placeholder={editItem.has_webhook_secret ? 'Configured — leave blank to keep' : 'Not set — paste the Razorpay webhook secret'}
+                                />
+                                <p className="text-xs text-slate-500 mt-1">
+                                    The signing secret from the Razorpay dashboard webhook. Write-only — never shown again.
+                                    When set, incoming webhooks must carry a valid signature.
+                                </p>
                             </div>
                             <div>
                                 <label className="block text-sm text-slate-400 mb-1">Status</label>
