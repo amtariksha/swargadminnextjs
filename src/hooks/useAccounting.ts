@@ -424,3 +424,129 @@ export function useStatementRows(importId: number | null, filters: Record<string
         enabled: importId != null,
     });
 }
+
+// ══ Phase 2/3 GL: chart of accounts, vouchers, reports, GST returns, Tally ═══
+
+export interface Period { fy?: string; from_date?: string; to_date?: string; }
+
+export interface ChartLedger { id: number; name: string; code: string | null; ledger_kind: number; balance: number | string; balance_type: 'Dr' | 'Cr'; }
+export interface ChartGroup { group_id: number; group_name: string; nature: number; affects_pl: number; ledgers: ChartLedger[]; subtotal: number | string; subtotal_type: 'Dr' | 'Cr'; }
+export interface ChartOfAccounts { groups: ChartGroup[]; total_debit: number | string; total_credit: number | string; }
+export function useChartOfAccounts() {
+    return useQuery({
+        queryKey: ['accounting', 'chart'],
+        queryFn: async () => (await GET<ChartOfAccounts>('/accounting/gl/chart')).data,
+    });
+}
+
+export interface AccountGroup { id: number; name: string; parent_group_id: number | null; nature: number; affects_pl: number; is_system: number; }
+export function useAccountGroups() {
+    return useQuery({
+        queryKey: ['accounting', 'groups'],
+        queryFn: async () => (await GET<AccountGroup[]>('/accounting/gl/groups')).data || [],
+    });
+}
+
+export interface LedgerAccount { id: number; name: string; code: string | null; ledger_kind: number; account_group_id: number; group_name: string; nature: number; }
+export function useLedgerAccounts(params: Record<string, string> = {}) {
+    return useQuery({
+        queryKey: ['accounting', 'ledgers-list', params],
+        queryFn: async () => (await GET<LedgerAccount[]>('/accounting/gl/ledgers', params)).data || [],
+    });
+}
+
+export interface TbLedger {
+    ledgerId: number; ledgerName: string; groupName: string; nature: number; affectsPl: number;
+    opening: number; debit: number; credit: number; closing: number; closingDebit: number; closingCredit: number;
+}
+export interface TrialBalance { fy: string; from: string; to: string; ledgers: TbLedger[]; totals: Record<string, number>; balanced: boolean; }
+export function useTrialBalance(p: Period) {
+    return useQuery({
+        queryKey: ['accounting', 'tb', p],
+        queryFn: async () => (await GET<TrialBalance>('/accounting/reports/trial-balance', p as Record<string, string>)).data,
+    });
+}
+
+export interface BalanceSheetSide { ledgerName: string; groupName: string; amount: number; }
+export interface BalanceSheet {
+    as_on: string; assets: BalanceSheetSide[]; liabilities: BalanceSheetSide[]; equity: BalanceSheetSide[];
+    totalAssets: number; totalLiabilities: number; totalEquity: number; netProfit: number; liabilitiesSide: number; balanced: boolean;
+}
+export function useBalanceSheet(asOn?: string) {
+    return useQuery({
+        queryKey: ['accounting', 'bs', asOn],
+        queryFn: async () => (await GET<BalanceSheet>('/accounting/reports/balance-sheet', asOn ? { as_on: asOn } : {})).data,
+    });
+}
+
+export interface ProfitAndLoss { fy: string; from: string; to: string; income: BalanceSheetSide[]; expense: BalanceSheetSide[]; totalIncome: number; totalExpense: number; netProfit: number; }
+export function usePnl(p: Period) {
+    return useQuery({
+        queryKey: ['accounting', 'pnl', p],
+        queryFn: async () => (await GET<ProfitAndLoss>('/accounting/reports/pnl', p as Record<string, string>)).data,
+    });
+}
+
+export interface DayBookEntry { ledger_name: string; debit: number; credit: number; }
+export interface DayBookVoucher { id: number; voucher_type: string; voucher_number: string; voucher_date: string; narration: string | null; party_name: string | null; entries: DayBookEntry[]; }
+export function useDayBook(date?: string) {
+    return useQuery({
+        queryKey: ['accounting', 'daybook', date],
+        queryFn: async () => (await GET<{ from: string; to: string; vouchers: DayBookVoucher[] }>('/accounting/reports/day-book', date ? { date } : {})).data,
+    });
+}
+
+export function useLedgerStatement(ledgerId: number | null, p: Period) {
+    return useQuery({
+        queryKey: ['accounting', 'ledger-stmt', ledgerId, p],
+        queryFn: async () => (await GET<Record<string, unknown>>(`/accounting/reports/ledger/${ledgerId}`, p as Record<string, string>)).data,
+        enabled: ledgerId != null,
+    });
+}
+
+export interface VoucherRow { id: number; voucher_type: string; voucher_number: string; voucher_date: string; narration: string | null; source: number; status: number; party_name: string | null; amount: number | string; }
+export function useVouchers(params: Record<string, string> = {}) {
+    return useQuery({
+        queryKey: ['accounting', 'vouchers', params],
+        queryFn: async () => (await GET<VoucherRow[]>('/accounting/vouchers', params)).data || [],
+    });
+}
+export function useVoucher(id: number | null) {
+    return useQuery({
+        queryKey: ['accounting', 'voucher', id],
+        queryFn: async () => (await GET<Record<string, unknown>>(`/accounting/vouchers/${id}`)).data,
+        enabled: id != null,
+    });
+}
+
+export interface GstReturnRow { id: number; return_type: number; period_key: string; status: number; total_taxable: number | string; total_tax: number | string; invoice_count: number; generated_at: string; }
+export function useGstReturns() {
+    return useQuery({
+        queryKey: ['accounting', 'gst-returns'],
+        queryFn: async () => (await GET<GstReturnRow[]>('/accounting/gst/returns')).data || [],
+    });
+}
+
+export interface ReconRow { ledgerName: string; swarg: number; tally: number; diff: number; }
+export interface Reconciliation { as_on: string; has_tally_snapshot: boolean; rows: ReconRow[]; mismatches: ReconRow[]; matched: boolean; }
+export function useTallyReconcile(asOn?: string) {
+    return useQuery({
+        queryKey: ['accounting', 'reconcile', asOn],
+        queryFn: async () => (await GET<Reconciliation>('/accounting/reconcile/trial-balance', asOn ? { as_on: asOn } : {})).data,
+    });
+}
+export function useTallyImportRuns() {
+    return useQuery({
+        queryKey: ['accounting', 'import-runs'],
+        queryFn: async () => (await GET<Array<Record<string, unknown>>>('/accounting/tally/import-runs')).data || [],
+    });
+}
+
+export interface OpeningBalanceRow { id: number; ledger_account_id: number; ledger_name: string; group_name: string; debit: number | string; credit: number | string; is_provisional: number; posted_voucher_id: number | null; }
+export interface OpeningBalances { fy: string; rows: OpeningBalanceRow[]; total_debit: number; total_credit: number; balanced: boolean; posted: boolean; }
+export function useOpeningBalances(fy?: string) {
+    return useQuery({
+        queryKey: ['accounting', 'opening', fy],
+        queryFn: async () => (await GET<OpeningBalances>('/accounting/opening-balances', fy ? { fy } : {})).data,
+    });
+}

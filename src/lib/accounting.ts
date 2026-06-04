@@ -164,3 +164,62 @@ export function documentTypeLabel(t: number | string | null | undefined): string
 export function invoiceStatusLabel(s: number | string | null | undefined): string {
     return INVOICE_STATUS_LABELS[Number(s)] || '-';
 }
+
+// ══ Phase 2/3 GL labels + period helpers ════════════════════════════════════
+
+export const NATURE_LABELS: Record<number, string> = {
+    1: 'Asset', 2: 'Liability', 3: 'Income', 4: 'Expense', 5: 'Equity',
+};
+
+export const VOUCHER_TYPE_LABELS: Record<string, string> = {
+    sales: 'Sales', purchase: 'Purchase', receipt: 'Receipt', payment: 'Payment',
+    contra: 'Contra', journal: 'Journal', credit_note: 'Credit Note', debit_note: 'Debit Note',
+    estimate: 'Estimate', purchase_order: 'Purchase Order', expense: 'Expense', income: 'Income',
+    opening_balance: 'Opening Balance',
+};
+
+/** Voucher types an operator may create by hand (the rest auto-post). */
+export const MANUAL_VOUCHER_TYPES: Option[] = [
+    { value: 'journal', label: 'Journal' },
+    { value: 'payment', label: 'Payment' },
+    { value: 'receipt', label: 'Receipt (manual)' },
+    { value: 'contra', label: 'Contra (bank ↔ cash)' },
+    { value: 'expense', label: 'Expense' },
+    { value: 'income', label: 'Income' },
+    { value: 'credit_note', label: 'Credit Note' },
+    { value: 'debit_note', label: 'Debit Note' },
+];
+
+export const VOUCHER_SOURCE_LABELS: Record<number, string> = {
+    1: 'System', 2: 'Manual', 3: 'AI', 4: 'Tally import',
+};
+
+export const RETURN_TYPE_LABELS: Record<number, string> = {
+    1: 'GSTR-1', 2: 'GSTR-3B', 3: 'GSTR-9',
+};
+
+export function voucherTypeLabel(t: string | null | undefined): string {
+    return VOUCHER_TYPE_LABELS[String(t)] || String(t || '-');
+}
+
+/** Current Indian financial year 'YYYY-YYYY' (Apr–Mar). */
+export function currentFy(): string {
+    const d = new Date();
+    const y = d.getMonth() + 1 >= 4 ? d.getFullYear() : d.getFullYear() - 1;
+    return `${y}-${y + 1}`;
+}
+
+/** A few recent FYs for a selector. */
+export function fyOptions(count = 4): Option[] {
+    const [start] = currentFy().split('-').map(Number);
+    return Array.from({ length: count }, (_, i) => {
+        const y = start - i;
+        return { value: `${y}-${y + 1}`, label: `FY ${y}-${String(y + 1).slice(2)}` };
+    });
+}
+
+/** FY 'YYYY-YYYY' → { from:'YYYY-04-01', to:'YYYY-03-31' }. */
+export function fyBounds(fy: string): { from: string; to: string } {
+    const [a, b] = fy.split('-');
+    return { from: `${a}-04-01`, to: `${b}-03-31` };
+}
