@@ -7,7 +7,7 @@ import { useDaytimeOrder, useDrivers } from '@/hooks/useData';
 import DaytimeOrderForm from '@/components/DaytimeOrderForm';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { POST, PUT, ApiError } from '@/lib/api';
-import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog, CalendarClock } from 'lucide-react';
+import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog, CalendarClock, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PAID_STATES = ['paid', 'cash', 'wallet_deducted'];
@@ -54,14 +54,40 @@ export default function DaytimeOrderDetailPage() {
         }
     };
 
-    const generateLink = () =>
-        runAction('link', async () => {
-            const res = await POST<{ short_url?: string; whatsapp?: { sent?: boolean } }>(
+    // Generate the link AND surface whether the WhatsApp actually went out — a
+    // suppressed / misconfigured msg91 send used to look like success.
+    const generateLink = async () => {
+        setBusy('link');
+        try {
+            const res = await POST<{ whatsapp?: { sent?: boolean; skipped?: string; error?: string } }>(
                 `/daytime/orders/${id}/payment_link`,
             );
-            const sent = (res as { data?: { whatsapp?: { sent?: boolean } } })?.data?.whatsapp?.sent;
-            return sent;
-        }, 'Payment link generated' );
+            const wa = (res as { data?: { whatsapp?: { sent?: boolean; skipped?: string; error?: string } } })?.data?.whatsapp;
+            if (wa?.sent) {
+                toast.success('Payment link generated & sent on WhatsApp');
+            } else {
+                const why = wa?.skipped || wa?.error || 'unknown';
+                toast.warning(`Link generated, but WhatsApp NOT sent (${why}). Copy the link below and share it manually.`);
+            }
+            refresh();
+        } catch (error) {
+            toast.error(error instanceof ApiError ? error.userMessage
+                : error instanceof Error ? error.message : 'Could not generate link');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    // Reconciliation: poll Razorpay for the link's status (for a manually-shared
+    // link / missed webhook). Flips the order to paid if it's been paid.
+    const syncPayment = () =>
+        runAction('sync', async () => {
+            const res = await POST<{ link_status?: string; payment_status?: string; changed?: boolean }>(
+                `/daytime/orders/${id}/sync_payment`,
+            );
+            const d = (res as { data?: { link_status?: string; payment_status?: string; changed?: boolean } })?.data;
+            return d;
+        }, 'Payment status checked');
 
     const markPaid = (mode: 'cash' | 'wallet') =>
         runAction(mode, () => POST(`/daytime/orders/${id}/mark_paid`, { payment_mode: mode }),
@@ -168,6 +194,13 @@ export default function DaytimeOrderDetailPage() {
                             <Link2 className="w-4 h-4" />
                             {busy === 'link' ? 'Generating…' : order.payment_link_id ? 'Resend payment link' : 'Generate & send payment link'}
                         </button>
+                        {order.payment_link_id && (
+                            <button onClick={syncPayment} disabled={busy !== null}
+                                className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-800/60 text-slate-200 rounded-xl hover:bg-slate-800 disabled:opacity-50"
+                                title="Poll Razorpay — use after sharing the link manually if the status hasn't updated">
+                                <RefreshCw className="w-4 h-4" /> {busy === 'sync' ? 'Checking…' : 'Check payment status'}
+                            </button>
+                        )}
                         <button onClick={() => setConfirmPay('cash')} disabled={busy !== null}
                             className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-800/60 text-slate-200 rounded-xl hover:bg-slate-800 disabled:opacity-50">
                             <Banknote className="w-4 h-4" /> {busy === 'cash' ? 'Saving…' : 'Mark cash'}
