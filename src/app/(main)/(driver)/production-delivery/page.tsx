@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { format, addDays } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
@@ -48,6 +48,15 @@ export default function ProductionDeliveryPage() {
     const tomorrow = format(addDays(new Date(), 1),    'yyyy-MM-dd');
 
     const [activeTab, setActiveTab]      = useState<TabId>('routewise');
+
+    // Deep-link support: /production-delivery?tab=prepacking opens that tab
+    // (used by the sidebar "Pre-Packing List" entry). Read once on mount to
+    // avoid a useSearchParams Suspense boundary.
+    useEffect(() => {
+        const t = new URLSearchParams(window.location.search).get('tab');
+        if (t && TABS.some((tab) => tab.id === t)) setActiveTab(t as TabId);
+    }, []);
+
     const [routewiseDate, setRoutewiseDate] = useState(today);
     const [packingDate,   setPackingDate]   = useState(tomorrow);
     const [dairyDate,     setDairyDate]     = useState(today);

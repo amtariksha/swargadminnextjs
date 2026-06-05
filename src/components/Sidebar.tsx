@@ -210,7 +210,7 @@ const navItems: NavItem[] = [
         children: [
             { name: 'Upcoming Orders', href: '/upcoming-orders', icon: <ShoppingCart className="w-4 h-4" /> },
             { name: 'Upcoming Subs', href: '/upcoming-subs-orders', icon: <CalendarDays className="w-4 h-4" /> },
-            { name: 'Pre-Packing List', href: '/pre-packing-list', icon: <Package className="w-4 h-4" /> },
+            { name: 'Pre-Packing List', href: '/production-delivery?tab=prepacking', icon: <Package className="w-4 h-4" /> },
             { name: 'User Holidays', href: '/holidays', icon: <Calendar className="w-4 h-4" /> },
             { name: 'Calendar', href: '/calendar', icon: <Calendar className="w-4 h-4" /> },
             { name: 'Low Wallet', href: '/notifications/low-wallet', icon: <Wallet className="w-4 h-4" /> },
