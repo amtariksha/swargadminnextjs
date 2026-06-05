@@ -1704,32 +1704,45 @@ export function useUpdateTransactionDescriptions() {
     });
 }
 
-// ── Recovery report (under-billed ₹0-debit orders) ───────────────────────────
+// ── Recovery report (money owed back: under-billed orders + double recharges) ─
+export type RecoveryKind = 'under_billed' | 'duplicate_credit';
+
 export interface RecoveryRow {
-    order_id: number;
+    kind: RecoveryKind;
+    order_id: number | null;
+    payment_id: string | null;
     user_id: number;
     name: string | null;
     phone: string | null;
     current_wallet: number;
-    product: string | null;
-    unit_price: number;
-    order_qty: number;
-    order_status: number;
-    delivery_days: number;
-    units_delivered: number;
-    should_have_billed: number;
-    actually_debited: number;
+    order_status: number | null;
+    detail: string;
     recovered: number;
-    shortfall: number;
+    recoverable: number;
+    // under_billed specifics (present for kind === 'under_billed')
+    product?: string | null;
+    unit_price?: number;
+    order_qty?: number;
+    delivery_days?: number;
+    units_delivered?: number;
+    should_have_billed?: number;
+    actually_debited?: number;
+    // duplicate_credit specifics
+    credit_count?: number;
+    total_credited?: number;
+    duplicate_amount?: number;
 }
 
 export interface RecoverySummary {
-    affected_orders: number;
-    owed_orders: number;
+    owed_rows: number;
     owed_customers: number;
-    active_owed_orders: number;
-    total_shortfall: number;
+    total_recoverable: number;
     total_recovered: number;
+    under_billed_orders: number;
+    under_billed_total: number;
+    active_owed_orders: number;
+    duplicate_payments: number;
+    duplicate_total: number;
 }
 
 export function useRecoveryReport() {
@@ -1745,7 +1758,8 @@ export function useRecoveryReport() {
 export function useRecoveryCharge() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (orderId: number) => POST('/recovery/charge', { order_id: orderId }),
+        mutationFn: async (ref: { order_id?: number; payment_id?: string }) =>
+            POST('/recovery/charge', ref),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['recovery-report'] });
         },

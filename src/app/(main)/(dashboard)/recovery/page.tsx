@@ -1,26 +1,27 @@
 'use client';
 
-// Recovery report — orders that ever debited ₹0 at delivery (the order_amount=0
-// bug). Shortfall = (units delivered × agreed price) − (rupees actually
-// debited). "Recover" posts a wallet debit for the outstanding shortfall
-// (server-computed, idempotent). Backend: GET /get_report/recovery,
-// POST /recovery/charge.
+// Recovery report — money owed back to us, two kinds:
+//   under_billed     — delivered but charged ₹0 (the order_amount=0 bug)
+//   duplicate_credit — one Razorpay payment credited 2×+ (double recharge)
+// "Recover" posts a wallet debit for the outstanding amount (server-computed,
+// idempotent). Backend: GET /get_report/recovery, POST /recovery/charge.
 
 import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { IndianRupee, RefreshCw, Download, AlertTriangle } from 'lucide-react';
 import { useRecoveryReport, useRecoveryCharge, type RecoveryRow } from '@/hooks/useData';
 
-type Filter = 'owed' | 'active' | 'recoverable' | 'recovered';
+type Filter = 'owed' | 'under_billed' | 'duplicate' | 'active' | 'recoverable' | 'recovered';
 
 const inr = (n: number) => `₹${(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const rowKey = (r: RecoveryRow) => `${r.kind}:${r.order_id ?? r.payment_id}`;
 
 export default function RecoveryPage() {
     const { data, isLoading, isFetching, refetch } = useRecoveryReport();
     const chargeMutation = useRecoveryCharge();
     const [filter, setFilter] = useState<Filter>('owed');
     const [search, setSearch] = useState('');
-    const [pendingId, setPendingId] = useState<number | null>(null);
+    const [pendingKey, setPendingKey] = useState<string | null>(null);
 
     const rows = data?.rows ?? [];
     const summary = data?.summary;
@@ -28,40 +29,50 @@ export default function RecoveryPage() {
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
         return rows.filter((r) => {
-            const isOwed = r.shortfall > 0.5;
+            const isOwed = r.recoverable > 0.5;
             if (filter === 'recovered') { if (r.recovered <= 0.5) return false; }
             else if (!isOwed) return false;
+            if (filter === 'under_billed' && r.kind !== 'under_billed') return false;
+            if (filter === 'duplicate' && r.kind !== 'duplicate_credit') return false;
             if (filter === 'active' && r.order_status !== 1) return false;
-            if (filter === 'recoverable' && (r.order_status !== 1 || r.current_wallet < r.shortfall)) return false;
-            if (q && !(`${r.name ?? ''}`.toLowerCase().includes(q) || `${r.phone ?? ''}`.includes(q) || `${r.order_id}`.includes(q))) return false;
+            if (filter === 'recoverable' && r.current_wallet < r.recoverable) return false;
+            if (q && !(`${r.name ?? ''}`.toLowerCase().includes(q)
+                || `${r.phone ?? ''}`.includes(q)
+                || `${r.order_id ?? ''}`.includes(q)
+                || `${r.payment_id ?? ''}`.toLowerCase().includes(q))) return false;
             return true;
         });
     }, [rows, filter, search]);
 
     const handleRecover = async (r: RecoveryRow) => {
-        const goesNegative = r.current_wallet < r.shortfall;
-        const msg = `Debit ${inr(r.shortfall)} from ${r.name || 'customer'} (wallet ${inr(r.current_wallet)})`
-            + (goesNegative ? ` — wallet will go NEGATIVE to ${inr(r.current_wallet - r.shortfall)}.` : '.')
-            + `\n\nPost recovery debit for order #${r.order_id}?`;
+        const goesNegative = r.current_wallet < r.recoverable;
+        const what = r.kind === 'duplicate_credit'
+            ? `the duplicate recharge on ${r.payment_id}`
+            : `the under-billed deliveries on order #${r.order_id}`;
+        const msg = `Debit ${inr(r.recoverable)} from ${r.name || 'customer'} (wallet ${inr(r.current_wallet)}) for ${what}.`
+            + (goesNegative ? `\n\n⚠ Wallet will go NEGATIVE to ${inr(r.current_wallet - r.recoverable)}.` : '')
+            + `\n\nProceed?`;
         if (!window.confirm(msg)) return;
-        setPendingId(r.order_id);
+        setPendingKey(rowKey(r));
         try {
-            await chargeMutation.mutateAsync(r.order_id);
-            toast.success(`Recovered ${inr(r.shortfall)} from ${r.name || 'customer'}`);
+            await chargeMutation.mutateAsync(
+                r.kind === 'duplicate_credit' ? { payment_id: r.payment_id ?? undefined } : { order_id: r.order_id ?? undefined },
+            );
+            toast.success(`Recovered ${inr(r.recoverable)} from ${r.name || 'customer'}`);
         } catch (e) {
             toast.error(e instanceof Error ? e.message : 'Failed to post recovery');
         } finally {
-            setPendingId(null);
+            setPendingKey(null);
         }
     };
 
     const exportCsv = () => {
-        const headers = ['order_id', 'name', 'phone', 'product', 'status', 'units_delivered',
-            'unit_price', 'should_have_billed', 'actually_debited', 'recovered', 'shortfall', 'current_wallet'];
+        const headers = ['kind', 'order_id', 'payment_id', 'name', 'phone', 'detail',
+            'status', 'recoverable', 'recovered', 'current_wallet'];
         const lines = filtered.map((r) => [
-            r.order_id, JSON.stringify(r.name ?? ''), r.phone ?? '', JSON.stringify(r.product ?? ''),
-            r.order_status === 1 ? 'active' : 'inactive', r.units_delivered, r.unit_price,
-            r.should_have_billed, r.actually_debited, r.recovered, r.shortfall, r.current_wallet,
+            r.kind, r.order_id ?? '', r.payment_id ?? '', JSON.stringify(r.name ?? ''), r.phone ?? '',
+            JSON.stringify(r.detail ?? ''), r.order_status === 1 ? 'active' : (r.order_status == null ? '' : 'inactive'),
+            r.recoverable, r.recovered, r.current_wallet,
         ].join(','));
         const csv = [headers.join(','), ...lines].join('\n');
         const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
@@ -72,6 +83,8 @@ export default function RecoveryPage() {
 
     const FILTERS: { key: Filter; label: string }[] = [
         { key: 'owed', label: 'All owed' },
+        { key: 'under_billed', label: 'Under-billed' },
+        { key: 'duplicate', label: 'Double recharge' },
         { key: 'active', label: 'Active orders' },
         { key: 'recoverable', label: 'Recoverable now (wallet covers)' },
         { key: 'recovered', label: 'Already recovered' },
@@ -83,7 +96,8 @@ export default function RecoveryPage() {
                 <div className="flex-1">
                     <h1 className="text-2xl font-bold text-white">Recovery</h1>
                     <p className="text-slate-400 text-sm">
-                        Orders under-billed by the ₹0-debit bug. Shortfall = units delivered × agreed price − amount actually charged.
+                        Money owed back: under-billed (₹0-debit) deliveries and double Razorpay recharges.
+                        &quot;Recover&quot; posts a wallet debit for the outstanding amount (idempotent).
                     </p>
                 </div>
                 <button onClick={exportCsv} disabled={!filtered.length}
@@ -100,15 +114,18 @@ export default function RecoveryPage() {
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                     <div className="glass rounded-xl p-4">
                         <div className="flex items-center gap-2 text-amber-300 text-sm mb-1"><IndianRupee className="w-4 h-4" /> Total recoverable</div>
-                        <div className="text-2xl font-bold text-white">{inr(summary.total_shortfall)}</div>
+                        <div className="text-2xl font-bold text-white">{inr(summary.total_recoverable)}</div>
+                        <div className="text-xs text-slate-500 mt-1">{summary.owed_rows} rows · {summary.owed_customers} customers</div>
                     </div>
                     <div className="glass rounded-xl p-4">
-                        <div className="text-sm text-slate-400 mb-1">Owed orders</div>
-                        <div className="text-2xl font-bold text-white">{summary.owed_orders}<span className="text-sm text-slate-500 ml-1">/ {summary.owed_customers} customers</span></div>
+                        <div className="text-sm text-slate-400 mb-1">Under-billed deliveries</div>
+                        <div className="text-2xl font-bold text-white">{inr(summary.under_billed_total)}</div>
+                        <div className="text-xs text-slate-500 mt-1">{summary.under_billed_orders} orders · {summary.active_owed_orders} active</div>
                     </div>
                     <div className="glass rounded-xl p-4">
-                        <div className="text-sm text-slate-400 mb-1">Active (still subscribed)</div>
-                        <div className="text-2xl font-bold text-emerald-400">{summary.active_owed_orders}</div>
+                        <div className="text-sm text-slate-400 mb-1">Double recharges</div>
+                        <div className="text-2xl font-bold text-white">{inr(summary.duplicate_total)}</div>
+                        <div className="text-xs text-slate-500 mt-1">{summary.duplicate_payments} payments</div>
                     </div>
                     <div className="glass rounded-xl p-4">
                         <div className="text-sm text-slate-400 mb-1">Already recovered</div>
@@ -126,7 +143,7 @@ export default function RecoveryPage() {
                         {f.label}
                     </button>
                 ))}
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name / phone / order…"
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name / phone / order / payment…"
                     className="ml-auto px-3 py-1.5 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-sm w-64 focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
             </div>
 
@@ -136,52 +153,60 @@ export default function RecoveryPage() {
                         <thead className="bg-slate-900/60 text-slate-400 uppercase text-xs tracking-wide">
                             <tr>
                                 <th className="px-3 py-2 text-left">Customer</th>
-                                <th className="px-3 py-2 text-left">Product</th>
-                                <th className="px-3 py-2 text-left">Status</th>
-                                <th className="px-3 py-2 text-right">Units</th>
-                                <th className="px-3 py-2 text-right">Should bill</th>
-                                <th className="px-3 py-2 text-right">Charged</th>
-                                <th className="px-3 py-2 text-right">Shortfall</th>
+                                <th className="px-3 py-2 text-left">Type</th>
+                                <th className="px-3 py-2 text-left">Detail</th>
+                                <th className="px-3 py-2 text-right">Recoverable</th>
                                 <th className="px-3 py-2 text-right">Wallet</th>
                                 <th className="px-3 py-2 text-right">Action</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/40">
                             {isLoading ? (
-                                <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-400">Loading…</td></tr>
+                                <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-400">Loading…</td></tr>
                             ) : filtered.length === 0 ? (
-                                <tr><td colSpan={9} className="px-3 py-8 text-center text-slate-500">No orders match this filter.</td></tr>
+                                <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-500">No items match this filter.</td></tr>
                             ) : (
                                 filtered.map((r) => {
-                                    const goesNegative = r.current_wallet < r.shortfall;
+                                    const goesNegative = r.current_wallet < r.recoverable;
+                                    const isDup = r.kind === 'duplicate_credit';
                                     return (
-                                        <tr key={r.order_id} className="hover:bg-slate-800/30">
+                                        <tr key={rowKey(r)} className="hover:bg-slate-800/30">
                                             <td className="px-3 py-2.5">
                                                 <div className="font-medium text-white">{r.name || `#${r.user_id}`}</div>
-                                                <div className="text-xs text-slate-500">{r.phone} · order #{r.order_id}</div>
+                                                <div className="text-xs text-slate-500">{r.phone}{r.order_id ? ` · order #${r.order_id}` : ''}</div>
                                             </td>
-                                            <td className="px-3 py-2.5 text-slate-300">{r.product || '—'}</td>
                                             <td className="px-3 py-2.5">
-                                                <span className={`text-xs ${r.order_status === 1 ? 'text-emerald-400' : 'text-slate-500'}`}>
-                                                    {r.order_status === 1 ? 'Active' : 'Inactive'}
+                                                <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${isDup
+                                                    ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                                                    {isDup ? 'Double recharge' : 'Under-billed'}
                                                 </span>
+                                                {r.kind === 'under_billed' && (
+                                                    <span className={`ml-1 text-[11px] ${r.order_status === 1 ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                                        {r.order_status === 1 ? 'active' : 'inactive'}
+                                                    </span>
+                                                )}
                                             </td>
-                                            <td className="px-3 py-2.5 text-right text-slate-300">{r.units_delivered}</td>
-                                            <td className="px-3 py-2.5 text-right text-slate-300">{inr(r.should_have_billed)}</td>
-                                            <td className="px-3 py-2.5 text-right text-slate-400">{inr(r.actually_debited)}</td>
-                                            <td className="px-3 py-2.5 text-right font-semibold text-amber-300">{inr(r.shortfall)}</td>
+                                            <td className="px-3 py-2.5 text-slate-300">
+                                                <div>{r.detail}</div>
+                                                <div className="text-xs text-slate-500">
+                                                    {isDup
+                                                        ? `total credited ${inr(r.total_credited ?? 0)}`
+                                                        : `${r.units_delivered ?? 0} units · should ${inr(r.should_have_billed ?? 0)} / charged ${inr(r.actually_debited ?? 0)}`}
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-2.5 text-right font-semibold text-amber-300">{inr(r.recoverable)}</td>
                                             <td className={`px-3 py-2.5 text-right ${goesNegative ? 'text-red-400' : 'text-slate-300'}`}>{inr(r.current_wallet)}</td>
                                             <td className="px-3 py-2.5 text-right">
-                                                {r.shortfall > 0.5 ? (
+                                                {r.recoverable > 0.5 ? (
                                                     <button
                                                         onClick={() => handleRecover(r)}
-                                                        disabled={pendingId === r.order_id || chargeMutation.isPending}
+                                                        disabled={pendingKey === rowKey(r) || chargeMutation.isPending}
                                                         title={goesNegative ? 'Wallet will go negative' : 'Post recovery debit'}
                                                         className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 ${goesNegative
                                                             ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
                                                             : 'bg-purple-600 hover:bg-purple-700 text-white'}`}>
                                                         {goesNegative && <AlertTriangle className="w-3.5 h-3.5" />}
-                                                        {pendingId === r.order_id ? 'Posting…' : `Recover ${inr(r.shortfall)}`}
+                                                        {pendingKey === rowKey(r) ? 'Posting…' : `Recover ${inr(r.recoverable)}`}
                                                     </button>
                                                 ) : (
                                                     <span className="text-xs text-emerald-400">Recovered</span>
@@ -195,8 +220,8 @@ export default function RecoveryPage() {
                     </table>
                 </div>
                 <div className="px-4 py-3 border-t border-slate-800/40 text-xs text-slate-500">
-                    {filtered.length} order{filtered.length === 1 ? '' : 's'} shown.
-                    &quot;Recover&quot; posts a wallet debit for the shortfall (idempotent — re-running does nothing once recovered).
+                    {filtered.length} item{filtered.length === 1 ? '' : 's'} shown.
+                    &quot;Recover&quot; posts a wallet debit for the outstanding amount (idempotent — re-running does nothing once recovered).
                     A red wallet means the debit takes them negative (they owe us).
                 </div>
             </div>
