@@ -7,7 +7,7 @@ import {
     useUser, useUserOrders, useUserTransactions, useUserHolidays, useUserAddresses,
     useUserDeliveryHistory, useUserCalendar, useAddHoliday, useDeleteHoliday, useAddTransaction,
     useAddAddress, useUpdateAddress, useDeleteAddress,
-    useCustomerFeedback, useCustomerContext,
+    useCustomerFeedback, useCustomerContext, useTransactionDescriptions,
     type UserTransaction, type UserHoliday, type Address, type CustomerFeedback,
 } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
@@ -29,7 +29,6 @@ import { toast } from 'sonner';
 import { formatApiDate, apiDateMs } from '@/lib/dateUtils';
 const ORDER_TYPE_LABELS: Record<number, string> = { 1: 'Prepaid', 2: 'Postpaid', 3: 'Pay Now', 4: 'Pay Later' };
 const SUB_TYPE_LABELS: Record<number, string> = { 1: 'One Time', 2: 'Weekly', 3: 'Daily', 4: 'Alternative' };
-const TXN_DESCRIPTIONS = ['Cash Deposit', 'Recharge', 'Bank Transfer', 'Cheque Payment Via Payment Gateway', 'Refund', 'Referral Bonus'];
 
 export default function UserDetailPage() {
     const { id } = useParams<{ id: string }>();
@@ -51,6 +50,11 @@ export default function UserDetailPage() {
     const [holidayEndDate, setHolidayEndDate] = useState('');
     const [txnForm, setTxnForm] = useState({ amount: '', type: '1', description: '', payment_mode: '1' });
     const [addrForm, setAddrForm] = useState({ name: '', s_phone: '', flat_no: '', apartment_name: '', area: '', landmark: '', city: '', pincode: '', lat: '', lng: '' });
+    const { data: txnDescriptions = [] } = useTransactionDescriptions(true);
+    const txnDescriptionOptions = useMemo(() => {
+        const wanted = txnForm.type === '2' ? 'debit' : 'credit';
+        return txnDescriptions.filter((d) => d.type === wanted || d.type === 'both');
+    }, [txnDescriptions, txnForm.type]);
 
     // Calendar date
     const [calendarDate, setCalendarDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -539,9 +543,9 @@ export default function UserDetailPage() {
             {/* Transaction Modal */}
             <Modal isOpen={showTxnModal} onClose={() => setShowTxnModal(false)} title="Add Transaction">
                 <div className="space-y-4">
-                    <div><label className="block text-sm text-slate-300 mb-1">Type</label><select value={txnForm.type} onChange={(e) => setTxnForm({ ...txnForm, type: e.target.value })} className={selectClassName}><option value="1">Credit (Add Money)</option><option value="2">Debit (Deduct Money)</option></select></div>
+                    <div><label className="block text-sm text-slate-300 mb-1">Type</label><select value={txnForm.type} onChange={(e) => setTxnForm({ ...txnForm, type: e.target.value, description: '' })} className={selectClassName}><option value="1">Credit (Add Money)</option><option value="2">Debit (Deduct Money)</option></select></div>
                     <div><label className="block text-sm text-slate-300 mb-1">Amount (max ₹5000)</label><input type="number" value={txnForm.amount} onChange={(e) => setTxnForm({ ...txnForm, amount: e.target.value })} min={1} max={5000} className={inputClassName} /></div>
-                    <div><label className="block text-sm text-slate-300 mb-1">Description</label><select value={txnForm.description} onChange={(e) => setTxnForm({ ...txnForm, description: e.target.value })} className={selectClassName}><option value="">Select...</option>{TXN_DESCRIPTIONS.map(d => <option key={d} value={d}>{d}</option>)}</select></div>
+                    <div><label className="block text-sm text-slate-300 mb-1">Description</label><select value={txnForm.description} onChange={(e) => setTxnForm({ ...txnForm, description: e.target.value })} className={selectClassName}><option value="">Select...</option>{txnDescriptionOptions.map(d => <option key={d.label} value={d.label}>{d.label}</option>)}</select></div>
                     {txnForm.type === '2' && user && Number(txnForm.amount) > walletAmt && <p className="text-red-400 text-xs">Exceeds wallet balance (₹{walletAmt})</p>}
                     <div className="flex gap-3">
                         <button onClick={() => setShowTxnModal(false)} className="flex-1 px-4 py-2.5 text-sm text-slate-300 bg-slate-800/50 rounded-xl">Cancel</button>

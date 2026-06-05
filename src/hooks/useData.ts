@@ -1670,6 +1670,39 @@ export function useUpdateRefundReasons() {
     });
 }
 
+// ── Transaction descriptions (admin-managed presets for Add Transaction) ──────
+export type TransactionDescriptionType = 'credit' | 'debit' | 'both';
+
+export interface TransactionDescription {
+    label: string;
+    active: boolean;
+    type: TransactionDescriptionType;
+}
+
+export function useTransactionDescriptions(activeOnly = false) {
+    return useQuery({
+        queryKey: ['transaction-descriptions', activeOnly],
+        queryFn: async () => {
+            const response = await GET<TransactionDescription[]>(
+                `/transaction_descriptions${activeOnly ? '?active=1' : ''}`,
+            );
+            return response.data || [];
+        },
+    });
+}
+
+export function useUpdateTransactionDescriptions() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (descriptions: TransactionDescription[]) => {
+            return PUT<TransactionDescription[]>('/transaction_descriptions', { descriptions });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['transaction-descriptions'] });
+        },
+    });
+}
+
 export function useRefundOrderContext(transactionId: number | null | undefined) {
     return useQuery({
         queryKey: ['refund-order-context', transactionId],

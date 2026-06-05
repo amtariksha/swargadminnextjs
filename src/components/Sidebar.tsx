@@ -123,6 +123,7 @@ const navItems: NavItem[] = [
             { name: 'Payment Gateway', href: '/settings/payment', icon: <Banknote className="w-4 h-4" /> },
             { name: 'Social Media', href: '/settings/social-media', icon: <Share2 className="w-4 h-4" /> },
             { name: 'Refund Reasons', href: '/settings/refund-reasons', icon: <RotateCcw className="w-4 h-4" />, permissionKey: 'refunds' },
+            { name: 'Transaction Descriptions', href: '/settings/transaction-descriptions', icon: <Receipt className="w-4 h-4" /> },
             { name: 'Banners', href: '/banners', icon: <Image className="w-4 h-4" /> },
             { name: 'Testimonials', href: '/testimonials', icon: <MessageSquare className="w-4 h-4" /> },
             { name: 'Pages', href: '/pages', icon: <FileText className="w-4 h-4" /> },

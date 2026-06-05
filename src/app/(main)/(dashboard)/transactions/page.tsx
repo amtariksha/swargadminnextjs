@@ -3,15 +3,13 @@
 import { useState, useMemo } from 'react';
 import { format, subDays } from 'date-fns';
 import { apiDateMs, formatApiDate } from '@/lib/dateUtils';
-import { useTransactionsByDateRange, useUsers, useAddTransaction, type UserTransaction, type User } from '@/hooks/useData';
+import { useTransactionsByDateRange, useUsers, useAddTransaction, useTransactionDescriptions, type UserTransaction, type User } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import RefundModal from '@/components/RefundModal';
 import { inputClassName, selectClassName } from '@/components/FormField';
 import { CreditCard, Plus, RotateCcw, Download } from 'lucide-react';
 import { toast } from 'sonner';
-
-const TXN_DESCRIPTIONS = ['Cash Deposit', 'Recharge', 'Bank Transfer', 'Cheque Payment Via Payment Gateway', 'Refund', 'Referral Bonus'];
 
 export default function TransactionsPage() {
     const today = format(new Date(), 'yyyy-MM-dd');
@@ -25,6 +23,14 @@ export default function TransactionsPage() {
     const { data: transactions = [], isLoading, refetch } = useTransactionsByDateRange(startDate, endDate);
     const { data: users = [] } = useUsers();
     const addTxnMutation = useAddTransaction();
+    const { data: txnDescriptions = [] } = useTransactionDescriptions(true);
+
+    // Descriptions relevant to the chosen Credit/Debit type ('both' always shows).
+    const wantedType = txnForm.type === '2' ? 'debit' : 'credit';
+    const descriptionOptions = useMemo(
+        () => txnDescriptions.filter((d) => d.type === wantedType || d.type === 'both'),
+        [txnDescriptions, wantedType],
+    );
 
     const sortedTxns = useMemo(() =>
         [...transactions].sort((a, b) => apiDateMs(b.created_at) - apiDateMs(a.created_at)),
@@ -237,7 +243,7 @@ export default function TransactionsPage() {
                     </div>
                     <div>
                         <label className="block text-sm text-slate-300 mb-1">Type</label>
-                        <select value={txnForm.type} onChange={(e) => setTxnForm({ ...txnForm, type: e.target.value })} className={selectClassName}>
+                        <select value={txnForm.type} onChange={(e) => setTxnForm({ ...txnForm, type: e.target.value, description: '' })} className={selectClassName}>
                             <option value="1">Credit (Add Money)</option>
                             <option value="2">Debit (Deduct Money)</option>
                         </select>
@@ -246,7 +252,7 @@ export default function TransactionsPage() {
                         <label className="block text-sm text-slate-300 mb-1">Description</label>
                         <select value={txnForm.description} onChange={(e) => setTxnForm({ ...txnForm, description: e.target.value })} className={selectClassName}>
                             <option value="">Select description...</option>
-                            {TXN_DESCRIPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                            {descriptionOptions.map(d => <option key={d.label} value={d.label}>{d.label}</option>)}
                         </select>
                     </div>
                     <div className="flex gap-3">
