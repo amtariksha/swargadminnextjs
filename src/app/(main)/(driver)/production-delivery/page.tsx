@@ -3,7 +3,8 @@
 import { useState, useMemo, useCallback } from 'react';
 import { format, addDays } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
-import { GET } from '@/lib/api';
+import { GET, POST } from '@/lib/api';
+import { toast } from 'sonner';
 import DriverGroupTable from '@/components/DriverGroupTable';
 import DateWithTodayButton from '@/components/DateWithTodayButton';
 import {
@@ -15,9 +16,9 @@ import {
     groupByDriver,
     productsToCsvUrl,
 } from '@/lib/deliveryHelpers';
-import { Truck, Package, Milk, Download } from 'lucide-react';
+import { Truck, Package, Milk, Download, Boxes, RefreshCw } from 'lucide-react';
 
-type TabId = 'routewise' | 'packing' | 'dairy';
+type TabId = 'routewise' | 'packing' | 'dairy' | 'prepacking';
 
 interface TabConfig {
     id: TabId;
@@ -26,10 +27,14 @@ interface TabConfig {
 }
 
 const TABS: TabConfig[] = [
-    { id: 'routewise', label: 'Delivery Truck', icon: <Truck className="w-4 h-4" /> },
-    { id: 'packing',   label: 'Packing List',   icon: <Package className="w-4 h-4" /> },
-    { id: 'dairy',     label: 'Dairy Pickup',   icon: <Milk className="w-4 h-4" /> },
+    { id: 'routewise',  label: 'Delivery Truck',    icon: <Truck className="w-4 h-4" /> },
+    { id: 'packing',    label: 'Packing List',      icon: <Package className="w-4 h-4" /> },
+    { id: 'prepacking', label: 'Pre-Packing List',  icon: <Boxes className="w-4 h-4" /> },
+    { id: 'dairy',      label: 'Dairy Pickup',      icon: <Milk className="w-4 h-4" /> },
 ];
+
+interface PackingItem { product_id: number | null; product: string; qty: number; }
+interface DryRunResult { date: string; considered: number; would_insert: number; packingList: PackingItem[]; }
 
 /**
  * Production-delivery: bundles the three sub-views drivers actually use
@@ -46,6 +51,26 @@ export default function ProductionDeliveryPage() {
     const [routewiseDate, setRoutewiseDate] = useState(today);
     const [packingDate,   setPackingDate]   = useState(tomorrow);
     const [dairyDate,     setDairyDate]     = useState(today);
+
+    // Pre-Packing List: an on-demand DRY RUN of tomorrow's generation (nothing
+    // written), aggregated to total quantity-to-pack per product. Unlike the
+    // "Packing List" tab (which reads the already-generated list), this works
+    // before the list is generated.
+    const [prepackLoading, setPrepackLoading] = useState(false);
+    const [prepackResult, setPrepackResult]   = useState<DryRunResult | null>(null);
+    const runPrepack = useCallback(async () => {
+        setPrepackLoading(true);
+        try {
+            const res = await POST<DryRunResult>('/genrate_order_list', { date: tomorrow, dryRun: true });
+            setPrepackResult(res?.data ?? null);
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Failed to run quantity check');
+        } finally {
+            setPrepackLoading(false);
+        }
+    }, [tomorrow]);
+    const prepackItems = prepackResult?.packingList ?? [];
+    const prepackTotalUnits = prepackItems.reduce((s, i) => s + (i.qty || 0), 0);
 
     const dateForActive =
         activeTab === 'routewise' ? routewiseDate :
@@ -279,6 +304,65 @@ export default function ProductionDeliveryPage() {
                                 </tbody>
                             </table>
                         </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'prepacking' && (
+                <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <h2 className="text-lg font-semibold flex items-center gap-2">
+                            <Boxes className="w-5 h-5 text-purple-400" />
+                            Pre-Packing List — {tomorrow}
+                        </h2>
+                        <button onClick={runPrepack} disabled={prepackLoading}
+                            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                            {prepackLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Boxes className="w-4 h-4" />}
+                            {prepackLoading ? 'Checking…' : 'Run quantity check'}
+                        </button>
+                    </div>
+
+                    {!prepackResult && !prepackLoading && (
+                        <div className="glass rounded-xl p-10 text-center text-slate-500">
+                            Dry run — nothing is saved. Click <span className="text-slate-300 font-medium">Run quantity check</span> to compute tomorrow&apos;s packing quantities.
+                        </div>
+                    )}
+
+                    {prepackResult && (
+                        <>
+                            <div className="glass rounded-xl overflow-hidden">
+                                <div className="px-4 py-3 bg-slate-800/50 flex items-center justify-between">
+                                    <h3 className="font-semibold text-white">Quantity to pack</h3>
+                                    <span className="text-sm text-purple-400 font-medium">
+                                        {prepackItems.length} products · {prepackTotalUnits} units · {prepackResult.would_insert} deliveries
+                                    </span>
+                                </div>
+                                <table className="w-full">
+                                    <thead>
+                                        <tr className="border-b border-slate-800/50">
+                                            <th className="text-left px-4 py-2 text-xs text-slate-400 font-medium">Product</th>
+                                            <th className="text-right px-4 py-2 text-xs text-slate-400 font-medium w-32">Qty to pack</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {prepackItems.length === 0 ? (
+                                            <tr><td colSpan={2} className="px-4 py-8 text-center text-slate-500">Nothing to pack for {tomorrow}.</td></tr>
+                                        ) : prepackItems.map((it) => (
+                                            <tr key={it.product_id ?? it.product} className="border-b border-slate-800/30 hover:bg-slate-800/20">
+                                                <td className="px-4 py-2.5 text-sm text-white">{it.product}</td>
+                                                <td className="px-4 py-2.5 text-right">
+                                                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-sm font-bold">{it.qty}</span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p className="text-xs text-slate-500">
+                                Net of wallet allocation — low-balance orders that would be skipped or partially
+                                delivered are already reflected, so this is what will actually go out.
+                            </p>
+                        </>
                     )}
                 </div>
             )}
