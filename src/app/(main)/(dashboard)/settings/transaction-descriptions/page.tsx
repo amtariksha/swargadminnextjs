@@ -18,6 +18,11 @@ const TYPE_OPTIONS: { value: TransactionDescriptionType; label: string }[] = [
     { value: 'both', label: 'Both' },
 ];
 
+// Self-contained — deliberately NOT the shared inputClassName, which carries
+// `w-full` and would make this select expand and squeeze the label input.
+const typeSelectClassName =
+    'w-28 shrink-0 px-3 py-2.5 bg-slate-900/50 border border-slate-700/50 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50';
+
 export default function TransactionDescriptionsPage() {
     const { data, isLoading } = useTransactionDescriptions(false);
     const updateMutation = useUpdateTransactionDescriptions();
@@ -129,12 +134,12 @@ export default function TransactionDescriptionsPage() {
                                 value={r.label}
                                 onChange={(e) => updateRow(i, { label: e.target.value })}
                                 placeholder="Description label"
-                                className={`flex-1 ${inputClassName} ${isDup ? 'border-red-500/60' : ''}`}
+                                className={`flex-1 min-w-0 ${inputClassName} ${isDup ? 'border-red-500/60' : ''}`}
                             />
                             <select
                                 value={r.type}
                                 onChange={(e) => updateRow(i, { type: e.target.value as TransactionDescriptionType })}
-                                className={`${inputClassName} w-28`}
+                                className={typeSelectClassName}
                             >
                                 {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
@@ -167,10 +172,10 @@ export default function TransactionDescriptionsPage() {
                         onChange={(e) => setNewLabel(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') addRow(); }}
                         placeholder="Add a new description…"
-                        className={`flex-1 ${inputClassName}`}
+                        className={`flex-1 min-w-0 ${inputClassName}`}
                     />
                     <select value={newType} onChange={(e) => setNewType(e.target.value as TransactionDescriptionType)}
-                        className={`${inputClassName} w-28`}>
+                        className={typeSelectClassName}>
                         {TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
                     <button onClick={addRow} disabled={!newLabel.trim()}
