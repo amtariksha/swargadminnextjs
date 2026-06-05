@@ -98,6 +98,11 @@ export async function GET(request: NextRequest) {
                             type: c.type || "",
                             text: c.text || "",
                             format: c.format || undefined,
+                            // Pass through buttons (URL / quick-reply) so the notification
+                            // mapping editor can auto-detect the dynamic URL button's slot.
+                            buttons: Array.isArray(c.buttons)
+                                ? c.buttons
+                                : (Array.isArray(c.button) ? c.button : undefined),
                         }))
                         : [];
 
@@ -126,7 +131,12 @@ export async function GET(request: NextRequest) {
                     ? raw.components
                     : Array.isArray(raw.code)
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose MSG91 component shape
-                        ? raw.code.map((c: any) => ({ type: c.type, text: c.text, format: c.format }))
+                        ? raw.code.map((c: any) => ({
+                            type: c.type, text: c.text, format: c.format,
+                            buttons: Array.isArray(c.buttons)
+                                ? c.buttons
+                                : (Array.isArray(c.button) ? c.button : undefined),
+                        }))
                         : [];
 
                 templates.push({

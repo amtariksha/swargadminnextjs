@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { GET, POST, PUT, DELETE } from '@/lib/api';
+import { wfetch } from '@/lib/whatsapp/wfetch';
 
 // Users
 export interface User {
@@ -2251,5 +2252,133 @@ export function useDaytimeIncentives(filters: Record<string, string> = {}) {
             );
             return response.data;
         },
+    });
+}
+
+// ─────────────────────── Notification template mapping ──────────────────────
+// Config-driven, per-tenant WhatsApp notification mapping. The operator wires
+// each event's template {{placeholders}} / button / header to data-source tokens
+// in the admin — no backend release. Backend: notification_template_map (Node).
+
+export interface NotificationEvent {
+    event: string;
+    domain: string;
+    label: string;
+    legacySetting: string;
+}
+
+export interface NotificationSource {
+    token: string;
+    label: string;
+}
+
+export interface NotificationMapConfig {
+    header?: { kind: 'none' | 'image'; source: string };
+    body?: { placeholder: string; source: string }[];
+    button?: { number: number; source: string };
+}
+
+/** A catalog event enriched with its saved mapping (or a seeded default). */
+export interface NotificationMap extends NotificationEvent {
+    template_name: string;
+    language: string;
+    config: NotificationMapConfig;
+    enabled: boolean;
+    configured: boolean;
+}
+
+export interface NotificationCatalog {
+    events: NotificationEvent[];
+    sources: Record<string, NotificationSource[]>;
+}
+
+/** One component of a synced msg91 template (body / header / buttons). */
+export interface RemoteTemplateComponent {
+    type: string;
+    text?: string;
+    format?: string;
+    buttons?: { type?: string; text?: string; url?: string }[];
+}
+
+export interface RemoteTemplate {
+    id: string;
+    name: string;
+    status: string;
+    language: string;
+    category: string;
+    components: RemoteTemplateComponent[];
+}
+
+export function useNotificationCatalog() {
+    return useQuery({
+        queryKey: ['notification-catalog'],
+        queryFn: async () => {
+            const response = await GET<NotificationCatalog>('/notification_template_catalog');
+            return response.data;
+        },
+    });
+}
+
+export function useNotificationMaps() {
+    return useQuery({
+        queryKey: ['notification-maps'],
+        queryFn: async () => {
+            const response = await GET<NotificationMap[]>('/notification_template_maps');
+            return response.data || [];
+        },
+    });
+}
+
+export function useUpsertNotificationMap() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (payload: {
+            event: string;
+            template_name: string;
+            language?: string;
+            enabled?: boolean;
+            config: NotificationMapConfig;
+        }) => {
+            const { event, ...body } = payload;
+            return PUT(`/notification_template_maps/${event}`, body as unknown as Record<string, unknown>);
+        },
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notification-maps'] }),
+    });
+}
+
+export function useTestNotificationMap() {
+    return useMutation({
+        mutationFn: async (payload: {
+            event: string;
+            phone: string;
+            template_name: string;
+            language?: string;
+            config: NotificationMapConfig;
+        }) => {
+            const { event, ...body } = payload;
+            return POST(`/notification_template_maps/${event}/test`, body as unknown as Record<string, unknown>);
+        },
+    });
+}
+
+/**
+ * Synced msg91 templates from the PRIMARY (sending) number — the editing aid
+ * that tells each template's shape (header / body placeholders / buttons). Read
+ * via the WhatsApp module's same-origin Next.js route (wfetch injects the JWT),
+ * NOT the Node backend. Approved templates only.
+ */
+export function useRemoteTemplates() {
+    return useQuery({
+        queryKey: ['whatsapp-remote-templates'],
+        queryFn: async (): Promise<RemoteTemplate[]> => {
+            const res = await wfetch('/api/whatsapp/templates');
+            const body = await res.json();
+            if (!res.ok) {
+                throw new Error((body && body.error) || `Failed to load templates (${res.status})`);
+            }
+            const list = Array.isArray(body) ? (body as RemoteTemplate[]) : [];
+            return list.filter((t) => (t.status || '').toLowerCase() === 'approved');
+        },
+        staleTime: 60_000,
     });
 }
