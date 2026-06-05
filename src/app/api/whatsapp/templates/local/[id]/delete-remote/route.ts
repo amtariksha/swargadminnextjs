@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { getRequestContext } from "@/lib/whatsapp/request";
 import { getAppSetting } from "@/lib/whatsapp/settings";
+import { getPrimaryIntegratedNumber } from "@/lib/whatsapp/numbers";
 
 // ─── DELETE /api/templates/local/[id]/delete-remote ───────────
 // Delete a template from MSG91 and remove local record
@@ -20,17 +21,8 @@ export async function DELETE(
         );
     }
 
-    // Get the integrated number
-    let integratedNumber = "";
-    const { data: dbNumbers } = await supabaseAdmin
-        .from("integrated_numbers")
-        .select("number")
-        .eq("active", true)
-        .limit(1)
-        .maybeSingle();
-    if (dbNumbers?.number) {
-        integratedNumber = dbNumbers.number;
-    }
+    // The PRIMARY number (is_primary / WA_PRIMARY_NUMBER / sending number).
+    const integratedNumber = await getPrimaryIntegratedNumber();
 
     // Fetch the local template
     const { data: template, error: fetchError } = await supabaseAdmin

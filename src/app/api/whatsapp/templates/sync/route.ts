@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { getRequestContext } from "@/lib/whatsapp/request";
 import { getAppSetting } from "@/lib/whatsapp/settings";
+import { getPrimaryIntegratedNumber } from "@/lib/whatsapp/numbers";
 
 // ─── POST /api/templates/sync ───────────────────────────────
 // Sync templates with MSG91 / Meta — fetches remote templates and
@@ -31,17 +32,9 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        // Get the integrated number — prefer msg91 provider for this endpoint
-        const { data: numRows } = await supabaseAdmin
-            .from("integrated_numbers")
-            .select("number, provider")
-            .eq("active", true)
-            .order("created_at", { ascending: true })
-            .limit(10);
-
-        const msg91Num = (numRows || []).find((n: any) => !n.provider || n.provider === "msg91");
-        const anyNum = (numRows || [])[0];
-        const integratedNumber = msg91Num?.number || anyNum?.number || "";
+        // The PRIMARY number (is_primary / WA_PRIMARY_NUMBER / sending number),
+        // NOT the oldest msg91 line — see getPrimaryIntegratedNumber.
+        const integratedNumber = await getPrimaryIntegratedNumber();
 
         if (!integratedNumber) {
             return NextResponse.json(
@@ -81,6 +74,7 @@ export async function POST(request: NextRequest) {
         const remoteTemplates: { id: string; name: string; status: string; category: string; language: string }[] = [];
 
         for (const raw of rawTemplates) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose MSG91 raw shape
             const languages = raw.languages as any[] | undefined;
 
             if (Array.isArray(languages) && languages.length > 0) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { getRequestContext } from "@/lib/whatsapp/request";
 import { getAppSetting } from "@/lib/whatsapp/settings";
+import { getPrimaryIntegratedNumber } from "@/lib/whatsapp/numbers";
 
 /**
  * GET /api/templates
@@ -35,18 +36,9 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        // Get the integrated number — prefer msg91 provider numbers for this endpoint
-        const { data: numRow } = await supabaseAdmin
-            .from("integrated_numbers")
-            .select("number, provider")
-            .eq("active", true)
-            .order("created_at", { ascending: true })
-            .limit(10);
-
-        // Prefer an MSG91-provider number; fall back to any number
-        const msg91Num = (numRow || []).find((n: any) => !n.provider || n.provider === "msg91");
-        const anyNum = (numRow || [])[0];
-        const integratedNumber = msg91Num?.number || anyNum?.number || "";
+        // The PRIMARY number (is_primary / WA_PRIMARY_NUMBER / sending number),
+        // NOT the oldest msg91 line — see getPrimaryIntegratedNumber.
+        const integratedNumber = await getPrimaryIntegratedNumber();
 
         if (!integratedNumber) {
             return NextResponse.json(
@@ -89,6 +81,7 @@ export async function GET(request: NextRequest) {
         const templates: Record<string, unknown>[] = [];
 
         for (const raw of rawTemplates) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose MSG91 raw shape
             const languages = raw.languages as any[] | undefined;
 
             if (Array.isArray(languages) && languages.length > 0) {
@@ -100,6 +93,7 @@ export async function GET(request: NextRequest) {
 
                     // Extract components from the "code" array
                     const components = Array.isArray(lang.code)
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose MSG91 component shape
                         ? lang.code.map((c: any) => ({
                             type: c.type || "",
                             text: c.text || "",
@@ -131,6 +125,7 @@ export async function GET(request: NextRequest) {
                 const components = Array.isArray(raw.components)
                     ? raw.components
                     : Array.isArray(raw.code)
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose MSG91 component shape
                         ? raw.code.map((c: any) => ({ type: c.type, text: c.text, format: c.format }))
                         : [];
 
