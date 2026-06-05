@@ -134,9 +134,9 @@ interface DropPointStop {
 }
 
 // Shape of the genrate_order_list dry-run response (Feature 05-E).
-interface DryRunPartial { orderId: number; userId: number; customerName: string; deliveredQty: number; orderedQty: number; }
-interface DryRunSkip { orderId: number; userId: number; customerName: string; orderedQty: number; }
-interface DryRunUnassigned { order_id: number; user_id: number; customer_name: string; }
+interface DryRunPartial { orderId: number; userId: number; customerName: string; customerPhone: string | null; deliveredQty: number; orderedQty: number; }
+interface DryRunSkip { orderId: number; userId: number; customerName: string; customerPhone: string | null; orderedQty: number; }
+interface DryRunUnassigned { order_id: number; user_id: number; customer_name: string; customer_phone: string | null; }
 interface DryRunResult {
     date: string;
     considered: number;
@@ -1125,7 +1125,7 @@ function CheckDeliveriesModal({ state, onClose }: {
                             <ProblemSection title={`No driver assigned (${r.unassigned.length})`} tone="red">
                                 {r.unassigned.map(u => (
                                     <li key={u.order_id} className="flex justify-between gap-2">
-                                        <span>Order #{u.order_id} — {u.customer_name || `User ${u.user_id}`}</span>
+                                        <span>Order #{u.order_id} — {u.customer_name || `User ${u.user_id}`}{u.customer_phone ? ` · ${u.customer_phone}` : ''}</span>
                                     </li>
                                 ))}
                             </ProblemSection>
@@ -1134,7 +1134,7 @@ function CheckDeliveriesModal({ state, onClose }: {
                             <ProblemSection title={`Not delivered — low balance (${r.skips.length})`} tone="amber">
                                 {r.skips.map(s => (
                                     <li key={s.orderId} className="flex justify-between gap-2">
-                                        <span>Order #{s.orderId} — {s.customerName || `User ${s.userId}`}</span>
+                                        <span>Order #{s.orderId} — {s.customerName || `User ${s.userId}`}{s.customerPhone ? ` · ${s.customerPhone}` : ''}</span>
                                         <span className="text-slate-500 whitespace-nowrap">{s.orderedQty} ordered</span>
                                     </li>
                                 ))}
@@ -1144,7 +1144,7 @@ function CheckDeliveriesModal({ state, onClose }: {
                             <ProblemSection title={`Partial delivery — low balance (${r.partials.length})`} tone="amber">
                                 {r.partials.map(p => (
                                     <li key={p.orderId} className="flex justify-between gap-2">
-                                        <span>Order #{p.orderId} — {p.customerName || `User ${p.userId}`}</span>
+                                        <span>Order #{p.orderId} — {p.customerName || `User ${p.userId}`}{p.customerPhone ? ` · ${p.customerPhone}` : ''}</span>
                                         <span className="text-slate-500 whitespace-nowrap">{p.deliveredQty} of {p.orderedQty}</span>
                                     </li>
                                 ))}
