@@ -57,6 +57,7 @@ import {
     Workflow,
     ShieldCheck,
     Calculator,
+    IndianRupee,
 } from 'lucide-react';
 
 interface NavItem {
@@ -81,6 +82,7 @@ const navItems: NavItem[] = [
     // 2-3
     { name: 'Delivery Report', href: '/delivery-report', icon: <BarChart3 className="w-5 h-5" /> },
     { name: 'Performance Report', href: '/performance-report', icon: <TrendingUp className="w-5 h-5" /> },
+    { name: 'Recovery', href: '/recovery', icon: <IndianRupee className="w-5 h-5" /> },
     // --- People --- (divider after 3)
     // 4-5
     { name: 'Users', href: '/users', icon: <Users className="w-5 h-5" /> },

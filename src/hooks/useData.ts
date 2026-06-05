@@ -1703,6 +1703,54 @@ export function useUpdateTransactionDescriptions() {
     });
 }
 
+// ── Recovery report (under-billed ₹0-debit orders) ───────────────────────────
+export interface RecoveryRow {
+    order_id: number;
+    user_id: number;
+    name: string | null;
+    phone: string | null;
+    current_wallet: number;
+    product: string | null;
+    unit_price: number;
+    order_qty: number;
+    order_status: number;
+    delivery_days: number;
+    units_delivered: number;
+    should_have_billed: number;
+    actually_debited: number;
+    recovered: number;
+    shortfall: number;
+}
+
+export interface RecoverySummary {
+    affected_orders: number;
+    owed_orders: number;
+    owed_customers: number;
+    active_owed_orders: number;
+    total_shortfall: number;
+    total_recovered: number;
+}
+
+export function useRecoveryReport() {
+    return useQuery({
+        queryKey: ['recovery-report'],
+        queryFn: async () => {
+            const res = await GET<{ rows: RecoveryRow[]; summary: RecoverySummary }>('/get_report/recovery');
+            return res.data;
+        },
+    });
+}
+
+export function useRecoveryCharge() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (orderId: number) => POST('/recovery/charge', { order_id: orderId }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['recovery-report'] });
+        },
+    });
+}
+
 export function useRefundOrderContext(transactionId: number | null | undefined) {
     return useQuery({
         queryKey: ['refund-order-context', transactionId],
