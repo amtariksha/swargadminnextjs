@@ -1731,6 +1731,10 @@ export interface RecoveryRow {
     credit_count?: number;
     total_credited?: number;
     duplicate_amount?: number;
+    // resolution ("already recovered", marked manually — settled outside the system)
+    resolved?: boolean;
+    resolved_note?: string | null;
+    resolved_at?: string | null;
 }
 
 export interface RecoverySummary {
@@ -1743,6 +1747,7 @@ export interface RecoverySummary {
     active_owed_orders: number;
     duplicate_payments: number;
     duplicate_total: number;
+    resolved_rows?: number;
 }
 
 export function useRecoveryReport() {
@@ -1760,6 +1765,25 @@ export function useRecoveryCharge() {
     return useMutation({
         mutationFn: async (ref: { order_id?: number; payment_id?: string }) =>
             POST('/recovery/charge', ref),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['recovery-report'] });
+        },
+    });
+}
+
+// Mark a recovery row "already recovered" (settled outside the system) — drops it
+// from the owed list WITHOUT a wallet debit. `undo: true` removes the mark.
+export function useRecoveryResolve() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (ref: {
+            kind: RecoveryKind;
+            order_id?: number;
+            payment_id?: string;
+            note?: string;
+            amount?: number;
+            undo?: boolean;
+        }) => POST('/recovery/resolve', ref),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['recovery-report'] });
         },

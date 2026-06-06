@@ -9,9 +9,9 @@
 import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { IndianRupee, RefreshCw, Download, AlertTriangle } from 'lucide-react';
-import { useRecoveryReport, useRecoveryCharge, type RecoveryRow } from '@/hooks/useData';
+import { useRecoveryReport, useRecoveryCharge, useRecoveryResolve, type RecoveryRow } from '@/hooks/useData';
 
-type Filter = 'owed' | 'under_billed' | 'duplicate' | 'active' | 'recoverable' | 'recovered';
+type Filter = 'owed' | 'under_billed' | 'duplicate' | 'active' | 'recoverable' | 'recovered' | 'resolved';
 
 const inr = (n: number) => `₹${(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const rowKey = (r: RecoveryRow) => `${r.kind}:${r.order_id ?? r.payment_id}`;
@@ -19,6 +19,7 @@ const rowKey = (r: RecoveryRow) => `${r.kind}:${r.order_id ?? r.payment_id}`;
 export default function RecoveryPage() {
     const { data, isLoading, isFetching, refetch } = useRecoveryReport();
     const chargeMutation = useRecoveryCharge();
+    const resolveMutation = useRecoveryResolve();
     const [filter, setFilter] = useState<Filter>('owed');
     const [search, setSearch] = useState('');
     const [pendingKey, setPendingKey] = useState<string | null>(null);
@@ -29,8 +30,11 @@ export default function RecoveryPage() {
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
         return rows.filter((r) => {
-            const isOwed = r.recoverable > 0.5;
-            if (filter === 'recovered') { if (r.recovered <= 0.5) return false; }
+            // Resolved ("already recovered") rows are no longer owed — they only
+            // surface under the dedicated 'resolved' filter.
+            const isOwed = r.recoverable > 0.5 && !r.resolved;
+            if (filter === 'resolved') { if (!r.resolved) return false; }
+            else if (filter === 'recovered') { if (r.recovered <= 0.5) return false; }
             else if (!isOwed) return false;
             if (filter === 'under_billed' && r.kind !== 'under_billed') return false;
             if (filter === 'duplicate' && r.kind !== 'duplicate_credit') return false;
@@ -66,6 +70,47 @@ export default function RecoveryPage() {
         }
     };
 
+    const refOf = (r: RecoveryRow) =>
+        r.kind === 'duplicate_credit'
+            ? { payment_id: r.payment_id ?? undefined }
+            : { order_id: r.order_id ?? undefined };
+
+    // Mark a row "already recovered" — removes it from owed WITHOUT a wallet debit.
+    const handleMarkRecovered = async (r: RecoveryRow) => {
+        const what = r.kind === 'duplicate_credit'
+            ? `the duplicate recharge on ${r.payment_id}`
+            : `the under-billed deliveries on order #${r.order_id}`;
+        const ok = window.confirm(
+            `Mark ${what} as ALREADY RECOVERED?\n\n`
+            + `This only removes it from the owed list — it does NOT debit the wallet. `
+            + `Use it when the ${inr(r.recoverable)} was already clawed back outside the system `
+            + `(manual debit, refund accepted, offline settlement).`,
+        );
+        if (!ok) return;
+        const note = (window.prompt('Optional note (how/when it was recovered):', '') ?? '').trim();
+        setPendingKey(rowKey(r));
+        try {
+            await resolveMutation.mutateAsync({ kind: r.kind, ...refOf(r), amount: r.recoverable, note: note || undefined });
+            toast.success(`Marked ${inr(r.recoverable)} as already recovered`);
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Failed to mark recovered');
+        } finally {
+            setPendingKey(null);
+        }
+    };
+
+    const handleUndoResolve = async (r: RecoveryRow) => {
+        setPendingKey(rowKey(r));
+        try {
+            await resolveMutation.mutateAsync({ kind: r.kind, ...refOf(r), undo: true });
+            toast.success('Un-marked — back to the owed list');
+        } catch (e) {
+            toast.error(e instanceof Error ? e.message : 'Failed to undo');
+        } finally {
+            setPendingKey(null);
+        }
+    };
+
     const exportCsv = () => {
         const headers = ['kind', 'order_id', 'payment_id', 'name', 'phone', 'detail',
             'status', 'recoverable', 'recovered', 'current_wallet'];
@@ -88,6 +133,7 @@ export default function RecoveryPage() {
         { key: 'active', label: 'Active orders' },
         { key: 'recoverable', label: 'Recoverable now (wallet covers)' },
         { key: 'recovered', label: 'Already recovered' },
+        { key: 'resolved', label: 'Marked recovered' },
     ];
 
     return (
@@ -197,17 +243,39 @@ export default function RecoveryPage() {
                                             <td className="px-3 py-2.5 text-right font-semibold text-amber-300">{inr(r.recoverable)}</td>
                                             <td className={`px-3 py-2.5 text-right ${goesNegative ? 'text-red-400' : 'text-slate-300'}`}>{inr(r.current_wallet)}</td>
                                             <td className="px-3 py-2.5 text-right">
-                                                {r.recoverable > 0.5 ? (
-                                                    <button
-                                                        onClick={() => handleRecover(r)}
-                                                        disabled={pendingKey === rowKey(r) || chargeMutation.isPending}
-                                                        title={goesNegative ? 'Wallet will go negative' : 'Post recovery debit'}
-                                                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 ${goesNegative
-                                                            ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
-                                                            : 'bg-purple-600 hover:bg-purple-700 text-white'}`}>
-                                                        {goesNegative && <AlertTriangle className="w-3.5 h-3.5" />}
-                                                        {pendingKey === rowKey(r) ? 'Posting…' : `Recover ${inr(r.recoverable)}`}
-                                                    </button>
+                                                {r.resolved ? (
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <span className="text-xs text-sky-300"
+                                                            title={r.resolved_note || 'Marked as already recovered (no wallet debit)'}>
+                                                            Resolved (manual)
+                                                        </span>
+                                                        <button
+                                                            onClick={() => handleUndoResolve(r)}
+                                                            disabled={pendingKey === rowKey(r) || resolveMutation.isPending}
+                                                            className="text-xs text-slate-400 hover:text-white underline disabled:opacity-50">
+                                                            {pendingKey === rowKey(r) ? '…' : 'Undo'}
+                                                        </button>
+                                                    </div>
+                                                ) : r.recoverable > 0.5 ? (
+                                                    <div className="flex items-center justify-end gap-2">
+                                                        <button
+                                                            onClick={() => handleRecover(r)}
+                                                            disabled={pendingKey === rowKey(r) || chargeMutation.isPending}
+                                                            title={goesNegative ? 'Wallet will go negative' : 'Post recovery debit'}
+                                                            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 ${goesNegative
+                                                                ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                                                                : 'bg-purple-600 hover:bg-purple-700 text-white'}`}>
+                                                            {goesNegative && <AlertTriangle className="w-3.5 h-3.5" />}
+                                                            {pendingKey === rowKey(r) ? 'Posting…' : `Recover ${inr(r.recoverable)}`}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleMarkRecovered(r)}
+                                                            disabled={pendingKey === rowKey(r) || resolveMutation.isPending}
+                                                            title="Already recovered outside the system — mark it without a debit"
+                                                            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-700/50 text-slate-300 hover:bg-slate-600/50 disabled:opacity-50">
+                                                            Mark recovered
+                                                        </button>
+                                                    </div>
                                                 ) : (
                                                     <span className="text-xs text-emerald-400">Recovered</span>
                                                 )}
@@ -222,6 +290,7 @@ export default function RecoveryPage() {
                 <div className="px-4 py-3 border-t border-slate-800/40 text-xs text-slate-500">
                     {filtered.length} item{filtered.length === 1 ? '' : 's'} shown.
                     &quot;Recover&quot; posts a wallet debit for the outstanding amount (idempotent — re-running does nothing once recovered).
+                    &quot;Mark recovered&quot; only removes a row from the owed list (no debit) — for money already settled outside the system; Undo brings it back.
                     A red wallet means the debit takes them negative (they owe us).
                 </div>
             </div>
