@@ -126,7 +126,12 @@ function EventCard({ map, sources, templates, templatesError }: EventCardProps) 
         return init;
     });
     const [headerSource, setHeaderSource] = useState(map.config?.header?.source || 'tenant_header_image');
-    const [buttonSource, setButtonSource] = useState(map.config?.button?.source || '');
+    // null = not chosen yet → fall back to a sensible default once a URL button
+    // is auto-detected (so the slot is never sent without a parameter, which
+    // msg91 rejects with "Button at index N requires a parameter").
+    const [buttonSourceOverride, setButtonSourceOverride] = useState<string | null>(
+        map.config?.button?.source ?? null,
+    );
     // null = follow the template's auto-detected slot; a number = operator override.
     const [buttonNumberOverride, setButtonNumberOverride] = useState<number | null>(
         map.config?.button?.number ?? null,
@@ -150,8 +155,6 @@ function EventCard({ map, sources, templates, templatesError }: EventCardProps) 
         [map.config],
     );
     const activePlaceholders = selected ? placeholders : manualPlaceholders;
-    const showButton = selected ? detectedSlot != null || !!buttonSource : !!buttonSource;
-    const showHeader = selected ? imageHeader : (map.config?.header?.kind === 'image');
 
     // Effective (displayed) source for a placeholder: the operator's explicit
     // choice if any, else a name-based suggestion. The button slot follows the
@@ -159,6 +162,13 @@ function EventCard({ map, sources, templates, templatesError }: EventCardProps) 
     const effectiveSource = (p: string): string =>
         bodyOverrides[p] !== undefined ? bodyOverrides[p] : suggestSource(p, sources);
     const buttonNumber = buttonNumberOverride ?? detectedSlot ?? 4;
+    // When a URL button is detected and nothing's chosen, default to the payment
+    // link suffix — the only URL-button source that makes sense for day orders.
+    const buttonSource = buttonSourceOverride !== null
+        ? buttonSourceOverride
+        : (detectedSlot != null ? 'payment_link_suffix' : '');
+    const showButton = selected ? detectedSlot != null || !!buttonSource : !!buttonSource;
+    const showHeader = selected ? imageHeader : (map.config?.header?.kind === 'image');
 
     function buildConfig(): NotificationMapConfig {
         const cfg: NotificationMapConfig = {
@@ -340,7 +350,7 @@ function EventCard({ map, sources, templates, templatesError }: EventCardProps) 
                         />
                         <select
                             value={buttonSource}
-                            onChange={(e) => setButtonSource(e.target.value)}
+                            onChange={(e) => setButtonSourceOverride(e.target.value)}
                             className={selectClass}
                         >
                             <option value="">— no dynamic URL button —</option>
