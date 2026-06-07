@@ -116,7 +116,19 @@ function PasscodeDialog({ title, selectedDate, onConfirm, onCancel, strictToday 
 // driver-facing /production-delivery page can render the same view.)
 
 // ====== Main Page ======
-type TabId = 'orders' | 'routewise' | 'packing' | 'dairy' | 'drop-points';
+type TabId = 'orders' | 'routewise' | 'packing' | 'dairy' | 'drop-points' | 'shops';
+
+// B2B "Shops" tab — one stop per B2B shop (customer) with per-product lines.
+interface ShopStop {
+    b2b_user_id: number;
+    drop_point_id: number | null;
+    title: string;
+    customer_name: string;
+    customer_phone: string | null;
+    route_order: number | null;
+    status: number; // 1 = pending, 3 = all lines resolved
+    products: Array<{ pre_delivery_id: number; order_id: number; product_title: string; qty_text: string | null; delivered_qty: number; reason: string | null; status: number }>;
+}
 
 interface DropPointStop {
     drop_point_id: number;
@@ -198,6 +210,16 @@ export default function DeliveryListPage() {
         queryKey: ['drop-point-delivery-list', selectedDate],
         queryFn: async () => {
             const response = await GET<DropPointStop[]>(`/get_drop_point_delivery_list/${selectedDate}`);
+            return response.data || [];
+        },
+    });
+
+    // B2B shops delivery list — backs the "Shops" tab. One stop per B2B shop
+    // (customer), each product line with delivered qty / not-delivered + reason.
+    const { data: shopStops = [], isLoading: isLoadingShops } = useQuery<ShopStop[]>({
+        queryKey: ['shop-delivery-list', selectedDate],
+        queryFn: async () => {
+            const response = await GET<ShopStop[]>(`/get_shop_delivery_list/${selectedDate}`);
             return response.data || [];
         },
     });
@@ -590,6 +612,7 @@ export default function DeliveryListPage() {
         { id: 'packing', label: 'Packing List', icon: <Package className="w-4 h-4" />, count: packingProducts.reduce((s, p) => s + p.qty, 0) },
         { id: 'dairy', label: 'Dairy Pickup', icon: <Store className="w-4 h-4" />, count: dairyGroups.reduce((s, g) => s + g.totalQty, 0) },
         { id: 'drop-points', label: 'Drop Points', icon: <MapPin className="w-4 h-4" />, count: dropPointStops.reduce((s, p) => s + p.total_qty, 0) },
+        { id: 'shops', label: 'Shops', icon: <Store className="w-4 h-4" />, count: shopStops.length },
     ];
 
     return (
@@ -814,6 +837,63 @@ export default function DeliveryListPage() {
                                         {stop.delivered_at && (
                                             <p className="text-xs text-slate-600">Delivered {stop.delivered_at}</p>
                                         )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {activeTab === 'shops' && (
+                <div className="space-y-4">
+                    <div className="flex items-center gap-4 text-sm text-slate-400">
+                        <span><strong className="text-white">{shopStops.length}</strong> shops</span>
+                        <span><strong className="text-green-400">{shopStops.filter(s => s.status === 3).length}</strong> done</span>
+                    </div>
+                    {isLoadingShops ? (
+                        <p className="text-slate-400 text-sm">Loading shops…</p>
+                    ) : shopStops.length === 0 ? (
+                        <div className="glass rounded-xl p-8 text-center text-slate-400 text-sm">
+                            No B2B shop deliveries for {selectedDate}. Mark customers as B2B shops, then
+                            generate the delivery list.
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {shopStops.map((shop) => {
+                                const done = shop.status === 3;
+                                return (
+                                    <div key={shop.b2b_user_id} className="glass rounded-xl p-5 space-y-3">
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    {shop.route_order != null && <span className="text-xs font-mono text-slate-500">#{shop.route_order}</span>}
+                                                    <h2 className="text-white font-semibold">{shop.title}</h2>
+                                                </div>
+                                                <p className="text-xs text-slate-500 mt-0.5">
+                                                    {shop.customer_name}{shop.customer_phone ? ` · ${shop.customer_phone}` : ''}
+                                                </p>
+                                            </div>
+                                            <span className={`text-xs font-medium px-2 py-1 rounded-lg shrink-0 ${done ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-300'}`}>
+                                                {done ? 'Done' : 'Pending'}
+                                            </span>
+                                        </div>
+                                        <div className="border-t border-slate-800/50 pt-2 space-y-1">
+                                            {shop.products.map((p) => {
+                                                const notDel = p.status === 2;
+                                                return (
+                                                    <div key={p.pre_delivery_id} className="flex items-center justify-between text-sm">
+                                                        <span className="text-slate-300">
+                                                            {p.product_title}
+                                                            {notDel && p.reason ? <span className="text-red-400 text-xs"> · {p.reason}</span> : null}
+                                                        </span>
+                                                        <span className={`font-mono ${notDel ? 'text-red-400' : 'text-slate-400'}`}>
+                                                            {notDel ? 'Not delivered' : `${p.delivered_qty}${p.qty_text ? ` × ${p.qty_text}` : ''}`}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 );
                             })}

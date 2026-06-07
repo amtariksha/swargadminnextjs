@@ -1,14 +1,17 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useUser, useUpdateUser } from '@/hooks/useData';
+import { GET, POST } from '@/lib/api';
 import FormField, { inputClassName } from '@/components/FormField';
 import { ArrowLeft, Save } from 'lucide-react';
 import { toast } from 'sonner';
+
+interface B2bStatus { is_b2b: number; drop_point_id: number | null; route_order: number | null; }
 
 const userSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -27,6 +30,34 @@ export default function EditUserPage() {
     const { register, handleSubmit, reset, formState: { errors } } = useForm<UserFormData>({
         resolver: zodResolver(userSchema),
     });
+
+    // B2B shop status (customer_type + its 1:1 'shop' drop point).
+    const [b2b, setB2b] = useState<B2bStatus | null>(null);
+    const [b2bSaving, setB2bSaving] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+        GET<B2bStatus>(`/admin/customer_b2b_status/${id}`)
+            .then((r) => { if (active && r.data) setB2b(r.data); })
+            .catch(() => { });
+        return () => { active = false; };
+    }, [id]);
+
+    const toggleB2b = async () => {
+        if (!b2b) return;
+        const next = b2b.is_b2b === 1 ? 0 : 1;
+        setB2bSaving(true);
+        try {
+            await POST('/admin/set_b2b_shop', { user_id: Number(id), is_b2b: next });
+            const r = await GET<B2bStatus>(`/admin/customer_b2b_status/${id}`);
+            if (r.data) setB2b(r.data);
+            toast.success(next === 1 ? 'Marked as B2B shop' : 'Removed B2B shop');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to update B2B status');
+        } finally {
+            setB2bSaving(false);
+        }
+    };
 
     useEffect(() => {
         if (user) {
@@ -90,6 +121,32 @@ export default function EditUserPage() {
                     </button>
                 </div>
             </form>
+
+            <div className="glass rounded-xl p-6 max-w-lg">
+                <div className="flex items-center justify-between gap-4">
+                    <div>
+                        <h2 className="text-white font-semibold">B2B Shop</h2>
+                        <p className="text-xs text-slate-500 mt-1">
+                            {b2b == null
+                                ? 'Loading…'
+                                : b2b.is_b2b === 1
+                                    ? `This customer is a B2B shop${b2b.drop_point_id ? ` · drop point #${b2b.drop_point_id}` : ''}. Orders route to the truck and bill by invoice (no wallet).`
+                                    : 'Mark as a B2B shop — orders route to the truck via a dedicated drop point and bill by invoice instead of wallet.'}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={toggleB2b}
+                        disabled={b2b == null || b2bSaving}
+                        className={`shrink-0 px-4 py-2 text-sm rounded-xl disabled:opacity-50 ${b2b?.is_b2b === 1
+                            ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                            : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
+                            }`}
+                    >
+                        {b2bSaving ? 'Saving…' : b2b?.is_b2b === 1 ? 'Remove B2B' : 'Mark as B2B shop'}
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }
