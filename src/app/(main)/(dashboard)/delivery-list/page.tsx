@@ -127,6 +127,7 @@ interface ShopStop {
     customer_phone: string | null;
     route_order: number | null;
     truck_driver_name: string | null;
+    moved_to_day: boolean; // handed to a day driver (live b2b_shop day order)
     status: number; // 1 = pending, 3 = all lines resolved
     products: Array<{ pre_delivery_id: number; order_id: number; product_title: string; qty_text: string | null; delivered_qty: number; reason: string | null; status: number }>;
 }
@@ -192,6 +193,9 @@ export default function DeliveryListPage() {
     // Feature 10 — the row pending confirmation for "send to day-time network".
     const [dayNetItem, setDayNetItem] = useState<DeliveryItem | null>(null);
     const [dayNetSubmitting, setDayNetSubmitting] = useState(false);
+    // B2B "send shop to day pool" (mirrors the customer day-net flow, per shop).
+    const [shopDayItem, setShopDayItem] = useState<ShopStop | null>(null);
+    const [shopDaySubmitting, setShopDaySubmitting] = useState(false);
 
     const { data: drivers = [] } = useDrivers();
 
@@ -217,7 +221,7 @@ export default function DeliveryListPage() {
 
     // B2B shops delivery list — backs the "Shops" tab. One stop per B2B shop
     // (customer), each product line with delivered qty / not-delivered + reason.
-    const { data: shopStops = [], isLoading: isLoadingShops } = useQuery<ShopStop[]>({
+    const { data: shopStops = [], isLoading: isLoadingShops, refetch: refetchShops } = useQuery<ShopStop[]>({
         queryKey: ['shop-delivery-list', selectedDate],
         queryFn: async () => {
             const response = await GET<ShopStop[]>(`/get_shop_delivery_list/${selectedDate}`);
@@ -351,6 +355,29 @@ export default function DeliveryListPage() {
             }
         } finally {
             setDayNetSubmitting(false);
+        }
+    };
+
+    // B2B sibling of handleSendToDayNetwork — hand a whole shop's undelivered
+    // truck lines to the day pool. One billable day order per shop (no wallet,
+    // GST invoice on day delivery). Truck rows stay read-only.
+    const handleSendShopToDay = async (shop: ShopStop) => {
+        setShopDaySubmitting(true);
+        try {
+            const r = await POST<{ lines?: number }>('/daytime/from_shop', { user_id: shop.b2b_user_id, date: selectedDate });
+            toast.success(r.message || `${shop.title} sent to the day-time network`);
+            setShopDayItem(null);
+            refetchShops();
+        } catch (error) {
+            if (error instanceof ApiError && (error.code === 'already_in_day_pool' || error.status === 409)) {
+                toast.info(`${shop.title} is already in the day-time pool`);
+                setShopDayItem(null);
+                refetchShops();
+            } else {
+                toast.error(error instanceof Error ? error.message : 'Could not send shop to day network');
+            }
+        } finally {
+            setShopDaySubmitting(false);
         }
     };
 
@@ -863,6 +890,7 @@ export default function DeliveryListPage() {
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             {shopStops.map((shop) => {
                                 const done = shop.status === 3;
+                                const hasNotDelivered = shop.products.some((p) => p.status === 2);
                                 return (
                                     <div key={shop.b2b_user_id} className="glass rounded-xl p-5 space-y-3">
                                         <div className="flex items-start justify-between gap-3">
@@ -876,9 +904,16 @@ export default function DeliveryListPage() {
                                                     {shop.truck_driver_name ? <span className="text-slate-400"> · driver: {shop.truck_driver_name}</span> : null}
                                                 </p>
                                             </div>
-                                            <span className={`text-xs font-medium px-2 py-1 rounded-lg shrink-0 ${done ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-300'}`}>
-                                                {done ? 'Done' : 'Pending'}
-                                            </span>
+                                            {shop.moved_to_day ? (
+                                                <span className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg shrink-0 bg-emerald-500/15 text-emerald-300"
+                                                    title="Handed to a day driver — billed by invoice on day delivery">
+                                                    <Sun className="w-3 h-3" /> In Day Pool
+                                                </span>
+                                            ) : (
+                                                <span className={`text-xs font-medium px-2 py-1 rounded-lg shrink-0 ${done ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-300'}`}>
+                                                    {done ? 'Done' : 'Pending'}
+                                                </span>
+                                            )}
                                         </div>
                                         <div className="border-t border-slate-800/50 pt-2 space-y-1">
                                             {shop.products.map((p) => {
@@ -896,6 +931,13 @@ export default function DeliveryListPage() {
                                                 );
                                             })}
                                         </div>
+                                        {!shop.moved_to_day && hasNotDelivered && (
+                                            <button onClick={() => setShopDayItem(shop)}
+                                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 text-xs font-medium"
+                                                title="Hand this shop's undelivered lines to a day driver — billed by invoice (no wallet)">
+                                                <Sun className="w-3 h-3" /> Send to day pool
+                                            </button>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -929,6 +971,19 @@ export default function DeliveryListPage() {
                 isLoading={dayNetSubmitting}
                 onConfirm={() => { if (dayNetItem) handleSendToDayNetwork(dayNetItem); }}
                 onCancel={() => setDayNetItem(null)}
+            />
+
+            {/* B2B — confirm before handing a shop's undelivered lines to the day pool */}
+            <ConfirmDialog
+                isOpen={shopDayItem !== null}
+                title="Send shop to day-time network"
+                message={shopDayItem
+                    ? `Hand ${shopDayItem.title}'s undelivered lines to the day-time pool? A day driver can claim and deliver them, billed by GST invoice (no wallet). The shop leaves the truck list; its truck records stay unchanged.`
+                    : ''}
+                confirmText="Send to Day Net"
+                isLoading={shopDaySubmitting}
+                onConfirm={() => { if (shopDayItem) handleSendShopToDay(shopDayItem); }}
+                onCancel={() => setShopDayItem(null)}
             />
 
             {/* Edit Qty Modal */}
