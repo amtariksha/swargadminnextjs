@@ -66,16 +66,19 @@ interface OrdersBreakdownResponse {
     totals: { count: number; value: number; qty: number };
 }
 
-interface OrderDetailRow {
+interface DeliveryDetailRow {
+    delivery_id: number;
     order_id: number;
     user_id: number;
     customer_name: string | null;
     customer_phone: string | null;
     product_title: string | null;
     qty: number;
+    delivered_qty: number;
     price: number;
     order_amount: number;
-    start_date: string | null;
+    delivery_date: string | null;
+    driver_name: string | null;
     subscription_type: number | null;
     status: number;
 }
@@ -222,18 +225,18 @@ export default function DeliveryReportPage() {
     const obRows = ordersBreakdown?.rows ?? [];
     const obTotals = ordersBreakdown?.totals ?? { count: 0, value: 0, qty: 0 };
 
-    // Drill-down — the orders behind one category row (fetched when the modal opens).
+    // Drill-down — the deliveries behind one category row (fetched when the modal opens).
     const { data: drillData, isLoading: drillLoading } = useQuery({
         queryKey: ['orders-breakdown-detail', startDate, endDate, drillCategory?.category],
         queryFn: async () => {
-            const response = await GET<{ category: string; label: string; orders: OrderDetailRow[] }>(
+            const response = await GET<{ category: string; label: string; deliveries: DeliveryDetailRow[] }>(
                 `/get_report/orders_breakdown/detail/${startDate}/${endDate}/${drillCategory!.category}`,
             );
             return response.data;
         },
         enabled: !!drillCategory && !!startDate && !!endDate,
     });
-    const drillOrders = drillData?.orders ?? [];
+    const drillDeliveries = drillData?.deliveries ?? [];
 
     // Group data by date for chart
     const chartData = useMemo(() => {
@@ -338,7 +341,7 @@ export default function DeliveryReportPage() {
 
     const obColumns: Column<OrdersBreakdownRow>[] = [
         { key: 'label', header: 'Category', render: (r) => <span className="font-medium text-white">{r.label}</span> },
-        { key: 'count', header: 'Orders', width: '110px', render: (r) => <span className="text-purple-300 font-semibold">{r.count}</span> },
+        { key: 'count', header: 'Deliveries', width: '120px', render: (r) => <span className="text-purple-300 font-semibold">{r.count}</span> },
         { key: 'qty', header: 'Qty', width: '100px', render: (r) => <span className="text-blue-300">{r.qty}</span> },
         { key: 'value', header: 'Value', width: '140px', render: (r) => <span className="text-green-400 font-medium">₹{r.value.toLocaleString()}</span> },
         {
@@ -357,7 +360,7 @@ export default function DeliveryReportPage() {
         },
     ];
 
-    const drillColumns: Column<OrderDetailRow>[] = [
+    const drillColumns: Column<DeliveryDetailRow>[] = [
         {
             key: 'customer_name',
             header: 'Customer',
@@ -369,12 +372,11 @@ export default function DeliveryReportPage() {
             ),
         },
         { key: 'product_title', header: 'Product', render: (r) => r.product_title || '-' },
-        { key: 'qty', header: 'Qty', width: '60px' },
-        { key: 'price', header: 'Price', width: '90px', render: (r) => <span>₹{r.price}</span> },
+        { key: 'delivered_qty', header: 'Delivered', width: '90px', render: (r) => <span className="text-blue-300">{r.delivered_qty}</span> },
         { key: 'order_amount', header: 'Amount', width: '100px', render: (r) => <span className="text-green-400 font-medium">₹{r.order_amount}</span> },
-        { key: 'start_date', header: 'Start Date', width: '120px', render: (r) => r.start_date || '-' },
+        { key: 'delivery_date', header: 'Delivery Date', width: '120px', render: (r) => r.delivery_date || '-' },
+        { key: 'driver_name', header: 'Driver', render: (r) => r.driver_name || '-' },
         { key: 'order_id', header: 'Order', width: '80px' },
-        { key: 'status', header: 'Status', width: '100px', render: (r) => <span className="text-xs">{r.status === 2 ? 'Cancelled' : r.status === 1 ? 'Confirmed' : 'Pending'}</span> },
     ];
 
     return (
@@ -668,7 +670,7 @@ export default function DeliveryReportPage() {
                 {/* Stat cards */}
                 <div className="grid grid-cols-3 gap-4">
                     <div className="glass rounded-xl p-4">
-                        <p className="text-sm text-slate-400">Total Orders</p>
+                        <p className="text-sm text-slate-400">Total Deliveries</p>
                         <p className="text-2xl font-bold text-white">{obTotals.count}</p>
                     </div>
                     <div className="glass rounded-xl p-4">
@@ -682,7 +684,7 @@ export default function DeliveryReportPage() {
                 </div>
 
                 <p className="text-xs text-slate-500">
-                    By order start date · cancelled orders excluded · click a row to see the orders behind it.
+                    Deliveries by delivery date (set both dates the same for a single day) · click a row to see the deliveries behind it.
                 </p>
 
                 {/* Breakdown table */}
@@ -691,7 +693,7 @@ export default function DeliveryReportPage() {
                     columns={obColumns}
                     loading={obLoading}
                     pageSize={10}
-                    emptyMessage="No orders in selected period"
+                    emptyMessage="No deliveries in selected period"
                 />
             </>)}
 
@@ -713,12 +715,12 @@ export default function DeliveryReportPage() {
                         </div>
                         <div className="p-4 overflow-y-auto">
                             <DataTable
-                                data={drillOrders}
+                                data={drillDeliveries}
                                 columns={drillColumns}
                                 loading={drillLoading}
                                 pageSize={50}
-                                searchPlaceholder="Search orders..."
-                                emptyMessage="No orders in this category"
+                                searchPlaceholder="Search deliveries..."
+                                emptyMessage="No deliveries in this category"
                             />
                         </div>
                     </div>
