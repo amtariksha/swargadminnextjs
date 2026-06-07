@@ -11,7 +11,7 @@ import FormField, { inputClassName } from '@/components/FormField';
 import { ArrowLeft, Save } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface B2bStatus { is_b2b: number; drop_point_id: number | null; route_order: number | null; }
+interface B2bStatus { is_b2b: number; billing_cycle: number; drop_point_id: number | null; route_order: number | null; }
 
 const userSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -43,17 +43,37 @@ export default function EditUserPage() {
         return () => { active = false; };
     }, [id]);
 
-    const toggleB2b = async () => {
-        if (!b2b) return;
-        const next = b2b.is_b2b === 1 ? 0 : 1;
+    const saveB2b = async (is_b2b: number, billing_cycle: number, okMsg: string) => {
         setB2bSaving(true);
         try {
-            await POST('/admin/set_b2b_shop', { user_id: Number(id), is_b2b: next });
+            await POST('/admin/set_b2b_shop', { user_id: Number(id), is_b2b, billing_cycle });
             const r = await GET<B2bStatus>(`/admin/customer_b2b_status/${id}`);
             if (r.data) setB2b(r.data);
-            toast.success(next === 1 ? 'Marked as B2B shop' : 'Removed B2B shop');
+            toast.success(okMsg);
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to update B2B status');
+        } finally {
+            setB2bSaving(false);
+        }
+    };
+
+    const toggleB2b = () => {
+        if (!b2b) return;
+        const next = b2b.is_b2b === 1 ? 0 : 1;
+        saveB2b(next, b2b.billing_cycle, next === 1 ? 'Marked as B2B shop' : 'Removed B2B shop');
+    };
+
+    const generateBill = async () => {
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const from = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+        const to = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        setB2bSaving(true);
+        try {
+            const r = await POST<{ invoice_number?: string }>('/admin/generate_monthly_bill', { user_id: Number(id), from, to });
+            toast.success(r.message || 'Bill generated');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to generate bill');
         } finally {
             setB2bSaving(false);
         }
@@ -122,7 +142,7 @@ export default function EditUserPage() {
                 </div>
             </form>
 
-            <div className="glass rounded-xl p-6 max-w-lg">
+            <div className="glass rounded-xl p-6 max-w-lg space-y-4">
                 <div className="flex items-center justify-between gap-4">
                     <div>
                         <h2 className="text-white font-semibold">B2B Shop</h2>
@@ -146,6 +166,37 @@ export default function EditUserPage() {
                         {b2bSaving ? 'Saving…' : b2b?.is_b2b === 1 ? 'Remove B2B' : 'Mark as B2B shop'}
                     </button>
                 </div>
+
+                {b2b?.is_b2b === 1 && (
+                    <div className="border-t border-slate-800/50 pt-4 space-y-3">
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <p className="text-sm text-white">Billing cycle</p>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    {b2b.billing_cycle === 1
+                                        ? 'Monthly — one consolidated invoice per month (no per-delivery invoices).'
+                                        : 'Per delivery — each delivery is invoiced.'}
+                                </p>
+                            </div>
+                            <div className="flex gap-2 shrink-0">
+                                <button type="button" disabled={b2bSaving} onClick={() => saveB2b(1, 0, 'Set to per-delivery billing')}
+                                    className={`px-3 py-1.5 text-xs rounded-lg disabled:opacity-50 ${b2b.billing_cycle === 0 ? 'bg-purple-500/30 text-purple-200' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                                    Per delivery
+                                </button>
+                                <button type="button" disabled={b2bSaving} onClick={() => saveB2b(1, 1, 'Set to monthly billing')}
+                                    className={`px-3 py-1.5 text-xs rounded-lg disabled:opacity-50 ${b2b.billing_cycle === 1 ? 'bg-purple-500/30 text-purple-200' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
+                                    Monthly
+                                </button>
+                            </div>
+                        </div>
+                        {b2b.billing_cycle === 1 && (
+                            <button type="button" onClick={generateBill} disabled={b2bSaving}
+                                className="w-full px-4 py-2 text-sm rounded-xl bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 disabled:opacity-50">
+                                {b2bSaving ? 'Working…' : "Generate this month's bill"}
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );
