@@ -51,7 +51,11 @@ export default function OrderDetailPage() {
     const isOneTime = subType === null || subType === undefined || subType === 1;
 
     const { data: transactions = [] } = useOrderTransactions(id, isSubscription);
-    const { data: deliveries = [] } = useSubOrderDeliveries(isSubscription ? id : undefined);
+    // Fetch deliveries for every order type. One-time / daily orders also get a
+    // subscribed_order_delivery row at mark-delivered, so the SOD endpoint returns
+    // their delivery history too — previously gated to subscriptions, which is why
+    // delivered one-time orders showed "No delivery records".
+    const { data: deliveries = [] } = useSubOrderDeliveries(id);
     const { data: drivers = [] } = useDrivers();
     const { data: addresses = [] } = useUserAddresses(orderData?.user_id);
 
