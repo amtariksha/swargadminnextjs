@@ -53,6 +53,33 @@ interface PerformanceReport {
     perDriver: PerformanceDriverRow[];
 }
 
+interface OrdersBreakdownRow {
+    category: string;
+    label: string;
+    count: number;
+    value: number;
+    qty: number;
+}
+
+interface OrdersBreakdownResponse {
+    rows: OrdersBreakdownRow[];
+    totals: { count: number; value: number; qty: number };
+}
+
+interface OrderDetailRow {
+    order_id: number;
+    user_id: number;
+    customer_name: string | null;
+    customer_phone: string | null;
+    product_title: string | null;
+    qty: number;
+    price: number;
+    order_amount: number;
+    start_date: string | null;
+    subscription_type: number | null;
+    status: number;
+}
+
 const REASON_BUCKETS = [
     { key: 'delivery_boy', label: 'Delivery Boy', color: 'from-purple-600 to-pink-500', text: 'text-purple-300' },
     { key: 'customer_care', label: 'Customer Care', color: 'from-blue-600 to-cyan-500', text: 'text-blue-300' },
@@ -83,7 +110,8 @@ export default function DeliveryReportPage() {
     const today = format(new Date(), 'yyyy-MM-dd');
     const weekAgo = format(subDays(new Date(), 7), 'yyyy-MM-dd');
 
-    const [activeTab, setActiveTab] = useState<'deliveries' | 'performance'>('deliveries');
+    const [activeTab, setActiveTab] = useState<'deliveries' | 'performance' | 'orders'>('deliveries');
+    const [drillCategory, setDrillCategory] = useState<{ category: string; label: string } | null>(null);
     const [startDate, setStartDate] = useState(weekAgo);
     const [endDate, setEndDate] = useState(today);
     const [selectedDriver, setSelectedDriver] = useState<number | ''>('');
@@ -180,6 +208,32 @@ export default function DeliveryReportPage() {
     const perfBuckets = performance?.buckets ?? { delivery_boy: 0, customer_care: 0, packaging: 0, driver: 0 };
     const perfMax = Math.max(perfBuckets.delivery_boy, perfBuckets.customer_care, perfBuckets.packaging, perfBuckets.driver, 1);
     const perfDrivers = performance?.perDriver ?? [];
+
+    // ── Orders tab (Part C) — order count/value/qty by category ─────────────
+    // Date range only (an orders-by-type rollup; driver/product filters don't apply).
+    const { data: ordersBreakdown, isLoading: obLoading } = useQuery({
+        queryKey: ['orders-breakdown', startDate, endDate],
+        queryFn: async () => {
+            const response = await GET<OrdersBreakdownResponse>(`/get_report/orders_breakdown/${startDate}/${endDate}`);
+            return response.data;
+        },
+        enabled: activeTab === 'orders' && !!startDate && !!endDate,
+    });
+    const obRows = ordersBreakdown?.rows ?? [];
+    const obTotals = ordersBreakdown?.totals ?? { count: 0, value: 0, qty: 0 };
+
+    // Drill-down — the orders behind one category row (fetched when the modal opens).
+    const { data: drillData, isLoading: drillLoading } = useQuery({
+        queryKey: ['orders-breakdown-detail', startDate, endDate, drillCategory?.category],
+        queryFn: async () => {
+            const response = await GET<{ category: string; label: string; orders: OrderDetailRow[] }>(
+                `/get_report/orders_breakdown/detail/${startDate}/${endDate}/${drillCategory!.category}`,
+            );
+            return response.data;
+        },
+        enabled: !!drillCategory && !!startDate && !!endDate,
+    });
+    const drillOrders = drillData?.orders ?? [];
 
     // Group data by date for chart
     const chartData = useMemo(() => {
@@ -282,6 +336,47 @@ export default function DeliveryReportPage() {
         { key: 'total', header: 'Total', width: '90px', render: (r) => <span className="font-semibold text-white">{r.total}</span> },
     ];
 
+    const obColumns: Column<OrdersBreakdownRow>[] = [
+        { key: 'label', header: 'Category', render: (r) => <span className="font-medium text-white">{r.label}</span> },
+        { key: 'count', header: 'Orders', width: '110px', render: (r) => <span className="text-purple-300 font-semibold">{r.count}</span> },
+        { key: 'qty', header: 'Qty', width: '100px', render: (r) => <span className="text-blue-300">{r.qty}</span> },
+        { key: 'value', header: 'Value', width: '140px', render: (r) => <span className="text-green-400 font-medium">₹{r.value.toLocaleString()}</span> },
+        {
+            key: 'category',
+            header: '',
+            width: '130px',
+            render: (r) => (
+                <button
+                    onClick={() => setDrillCategory({ category: r.category, label: r.label })}
+                    disabled={r.count === 0}
+                    className="px-3 py-1 text-xs rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                    View orders
+                </button>
+            ),
+        },
+    ];
+
+    const drillColumns: Column<OrderDetailRow>[] = [
+        {
+            key: 'customer_name',
+            header: 'Customer',
+            render: (r) => (
+                <div>
+                    <p className="font-medium text-white">{r.customer_name || '-'}</p>
+                    <p className="text-xs text-slate-400">{r.customer_phone || '-'}</p>
+                </div>
+            ),
+        },
+        { key: 'product_title', header: 'Product', render: (r) => r.product_title || '-' },
+        { key: 'qty', header: 'Qty', width: '60px' },
+        { key: 'price', header: 'Price', width: '90px', render: (r) => <span>₹{r.price}</span> },
+        { key: 'order_amount', header: 'Amount', width: '100px', render: (r) => <span className="text-green-400 font-medium">₹{r.order_amount}</span> },
+        { key: 'start_date', header: 'Start Date', width: '120px', render: (r) => r.start_date || '-' },
+        { key: 'order_id', header: 'Order', width: '80px' },
+        { key: 'status', header: 'Status', width: '100px', render: (r) => <span className="text-xs">{r.status === 2 ? 'Cancelled' : r.status === 1 ? 'Confirmed' : 'Pending'}</span> },
+    ];
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -297,7 +392,7 @@ export default function DeliveryReportPage() {
 
             {/* Tab bar */}
             <div className="flex gap-2 border-b border-slate-800">
-                {([['deliveries', 'Deliveries'], ['performance', 'Performance']] as const).map(([key, label]) => (
+                {([['deliveries', 'Deliveries'], ['performance', 'Performance'], ['orders', 'Orders']] as const).map(([key, label]) => (
                     <button
                         key={key}
                         onClick={() => setActiveTab(key)}
@@ -568,6 +663,67 @@ export default function DeliveryReportPage() {
                     emptyMessage="No performance data found"
                 />
             </>)}
+
+            {activeTab === 'orders' && (<>
+                {/* Stat cards */}
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="glass rounded-xl p-4">
+                        <p className="text-sm text-slate-400">Total Orders</p>
+                        <p className="text-2xl font-bold text-white">{obTotals.count}</p>
+                    </div>
+                    <div className="glass rounded-xl p-4">
+                        <p className="text-sm text-slate-400">Total Quantity</p>
+                        <p className="text-2xl font-bold text-blue-400">{obTotals.qty}</p>
+                    </div>
+                    <div className="glass rounded-xl p-4">
+                        <p className="text-sm text-slate-400">Total Value</p>
+                        <p className="text-2xl font-bold text-green-400">₹{obTotals.value.toLocaleString()}</p>
+                    </div>
+                </div>
+
+                <p className="text-xs text-slate-500">
+                    By order start date · cancelled orders excluded · click a row to see the orders behind it.
+                </p>
+
+                {/* Breakdown table */}
+                <DataTable
+                    data={obRows}
+                    columns={obColumns}
+                    loading={obLoading}
+                    pageSize={10}
+                    emptyMessage="No orders in selected period"
+                />
+            </>)}
+
+            {/* Drill-down modal: orders behind a category */}
+            {drillCategory && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+                    onClick={() => setDrillCategory(null)}
+                >
+                    <div
+                        className="glass rounded-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between p-4 border-b border-slate-800">
+                            <h2 className="text-lg font-semibold text-white">{drillCategory.label} — Orders</h2>
+                            <button onClick={() => setDrillCategory(null)} className="text-slate-400 hover:text-white">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-4 overflow-y-auto">
+                            <DataTable
+                                data={drillOrders}
+                                columns={drillColumns}
+                                loading={drillLoading}
+                                pageSize={50}
+                                searchPlaceholder="Search orders..."
+                                emptyMessage="No orders in this category"
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
