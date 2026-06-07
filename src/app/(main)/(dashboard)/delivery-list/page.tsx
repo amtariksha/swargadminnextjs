@@ -126,6 +126,7 @@ interface ShopStop {
     customer_name: string;
     customer_phone: string | null;
     route_order: number | null;
+    truck_driver_name: string | null;
     status: number; // 1 = pending, 3 = all lines resolved
     products: Array<{ pre_delivery_id: number; order_id: number; product_title: string; qty_text: string | null; delivered_qty: number; reason: string | null; status: number }>;
 }
@@ -872,6 +873,7 @@ export default function DeliveryListPage() {
                                                 </div>
                                                 <p className="text-xs text-slate-500 mt-0.5">
                                                     {shop.customer_name}{shop.customer_phone ? ` · ${shop.customer_phone}` : ''}
+                                                    {shop.truck_driver_name ? <span className="text-slate-400"> · driver: {shop.truck_driver_name}</span> : null}
                                                 </p>
                                             </div>
                                             <span className={`text-xs font-medium px-2 py-1 rounded-lg shrink-0 ${done ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-300'}`}>
