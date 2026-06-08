@@ -186,6 +186,12 @@ interface DropPointStop {
         status: number;     // 1 pending | 2 not-delivered | 3 delivered
         reason: string | null;
     }>;
+    // Truck returnables reconciliation record (photo + per-packaging-type counts).
+    returnables: {
+        photo_path: string | null;
+        counted_total: number;
+        counts: Array<{ packaging_type_id: number; name: string; qty: number }>;
+    } | null;
     photos: Array<{ id: number; image_path: string }>;
 }
 
@@ -985,6 +991,23 @@ export default function DeliveryListPage() {
                                                         target="_blank" rel="noreferrer"
                                                         className="flex items-center gap-1 text-purple-400 hover:text-purple-300">
                                                         <MapPin className="w-3 h-3" /> Marked here
+                                                    </a>
+                                                )}
+                                            </div>
+                                        )}
+                                        {stop.returnables && (
+                                            <div className="border-t border-slate-800/50 pt-2 flex items-center justify-between gap-3">
+                                                <div className="text-xs text-slate-400 min-w-0">
+                                                    <span className="text-slate-500">Returnables collected: </span>
+                                                    {stop.returnables.counts.length > 0
+                                                        ? stop.returnables.counts.map((c) => `${c.name} ×${c.qty}`).join(', ')
+                                                        : `${stop.returnables.counted_total}`}
+                                                </div>
+                                                {stop.returnables.photo_path && (
+                                                    <a href={stop.returnables.photo_path} target="_blank" rel="noreferrer"
+                                                        className="shrink-0">
+                                                        <img src={stop.returnables.photo_path} alt="returnables"
+                                                            className="w-10 h-10 rounded object-cover border border-slate-700" />
                                                     </a>
                                                 )}
                                             </div>
