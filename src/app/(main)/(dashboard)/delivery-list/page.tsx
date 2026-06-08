@@ -24,7 +24,17 @@ import {
     REASON_CATEGORIES,
     groupByDriver,
 } from '@/lib/deliveryHelpers';
-import { Calendar, RefreshCw, Plus, Truck, Edit, Check, Trash2, Download, AlertTriangle, Package, Navigation, Store, ClipboardCheck, Sun, MapPin, MessageSquareWarning } from 'lucide-react';
+import { Calendar, RefreshCw, Plus, Truck, Edit, Check, Trash2, Download, AlertTriangle, Package, Navigation, Store, ClipboardCheck, Sun, MapPin, MessageSquareWarning, ChevronDown, ChevronRight } from 'lucide-react';
+
+/** Box-outcome chip for a stock drop-point pickup line (null = pending). */
+function boxBadge(status: number | null): { label: string; cls: string } | null {
+    switch (status) {
+        case 3: return { label: 'Delivered', cls: 'bg-green-500/20 text-green-400' };
+        case 1: return { label: 'Short', cls: 'bg-amber-500/20 text-amber-300' };
+        case 2: return { label: 'Not delivered', cls: 'bg-red-500/20 text-red-300' };
+        default: return null;
+    }
+}
 import { toast } from 'sonner';
 
 // A canned non-delivery reason from /get_delivery_reason_catalog (Item 5).
@@ -144,6 +154,22 @@ interface DropPointStop {
     total_qty: number;
     order_count: number;
     products: Array<{ product_id: number; product_title: string; qty_text: string | null; total_qty: number }>;
+    // Per consolidated last-mile driver "box": that driver's product list with
+    // the truck-stage box outcome (box_status: null=pending, 3=delivered,
+    // 1=short, 2=not-delivered).
+    drivers: Array<{
+        driver_user_id: number;
+        driver_name: string;
+        products: Array<{
+            product_id: number;
+            product_title: string;
+            qty_text: string | null;
+            total_qty: number;
+            box_status: number | null;
+            box_delivered_qty: number | null;
+            box_reason: string | null;
+        }>;
+    }>;
     photos: Array<{ id: number; image_path: string }>;
 }
 
@@ -196,6 +222,13 @@ export default function DeliveryListPage() {
     // B2B "send shop to day pool" (mirrors the customer day-net flow, per shop).
     const [shopDayItem, setShopDayItem] = useState<ShopStop | null>(null);
     const [shopDaySubmitting, setShopDaySubmitting] = useState(false);
+    // Drop Points tab: which drop points are expanded to their per-driver boxes.
+    const [expandedDrops, setExpandedDrops] = useState<Set<number>>(new Set());
+    const toggleDropExpand = (id: number) => setExpandedDrops((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
 
     const { data: drivers = [] } = useDrivers();
 
@@ -862,6 +895,45 @@ export default function DeliveryListPage() {
                                                 </div>
                                             ))}
                                         </div>
+                                        {stop.drivers.length > 0 && (
+                                            <div className="border-t border-slate-800/50 pt-2">
+                                                <button onClick={() => toggleDropExpand(stop.drop_point_id)}
+                                                    className="flex items-center gap-1 text-xs text-purple-300 hover:text-purple-200">
+                                                    {expandedDrops.has(stop.drop_point_id) ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                                    {stop.drivers.length} driver box{stop.drivers.length === 1 ? '' : 'es'}
+                                                </button>
+                                                {expandedDrops.has(stop.drop_point_id) && (
+                                                    <div className="mt-2 space-y-2">
+                                                        {stop.drivers.map((drv) => (
+                                                            <div key={drv.driver_user_id} className="rounded-lg bg-slate-800/30 p-2">
+                                                                <p className="text-xs font-medium text-white mb-1">{drv.driver_name}</p>
+                                                                <div className="space-y-1">
+                                                                    {drv.products.map((p) => {
+                                                                        const badge = boxBadge(p.box_status);
+                                                                        const delivered = p.box_status === 2 ? 0 : (p.box_delivered_qty ?? p.total_qty);
+                                                                        return (
+                                                                            <div key={p.product_id} className="flex items-center justify-between gap-2 text-xs">
+                                                                                <span className="text-slate-300 truncate">
+                                                                                    {p.product_title}{p.qty_text ? <span className="text-slate-600"> × {p.qty_text}</span> : null}
+                                                                                </span>
+                                                                                <span className="flex items-center gap-2 shrink-0">
+                                                                                    <span className="text-slate-400 font-mono">{delivered}/{p.total_qty}</span>
+                                                                                    {badge && (
+                                                                                        <span className={`px-1.5 py-0.5 rounded ${badge.cls}`} title={p.box_reason ?? undefined}>
+                                                                                            {badge.label}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </span>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                         {stop.delivered_at && (
                                             <p className="text-xs text-slate-600">Delivered {stop.delivered_at}</p>
                                         )}
