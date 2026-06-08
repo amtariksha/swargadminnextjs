@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { POST, PUT } from '@/lib/api';
-import { useOpeningBalances, useLedgerAccounts } from '@/hooks/useAccounting';
+import { useOpeningBalances } from '@/hooks/useAccounting';
 import { formatINR, currentFy, fyOptions } from '@/lib/accounting';
+import LedgerPicker, { type LedgerPickerValue } from '@/components/accounting/LedgerPicker';
 
 interface Row { ledger_account_id: number; ledger_name: string; debit: string; credit: string; }
 const n = (v: string) => Number(v) || 0;
@@ -12,14 +13,15 @@ const n = (v: string) => Number(v) || 0;
 export default function OpeningBalancesPage() {
     const [fy, setFy] = useState(currentFy());
     const { data, isLoading, refetch } = useOpeningBalances(fy);
-    const { data: ledgers } = useLedgerAccounts();
     const [rows, setRows] = useState<Row[]>([]);
-    const [addId, setAddId] = useState('');
+    const [toAdd, setToAdd] = useState<LedgerPickerValue | null>(null);
     const [saving, setSaving] = useState('');
 
-    // Populate the editable grid from the fetched balances (codebase convention).
+    // Populate the editable grid from the fetched balances (codebase convention:
+    // seed editable local state from fetched data).
     useEffect(() => {
         if (data?.rows) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setRows(data.rows.map((r) => ({
                 ledger_account_id: r.ledger_account_id, ledger_name: r.ledger_name,
                 debit: Number(r.debit) ? String(r.debit) : '', credit: Number(r.credit) ? String(r.credit) : '',
@@ -34,11 +36,9 @@ export default function OpeningBalancesPage() {
     const setRow = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
     const addRow = () => {
-        const id = Number(addId);
-        if (!id || rows.some((r) => r.ledger_account_id === id)) return;
-        const led = ledgers?.find((l) => l.id === id);
-        if (led) setRows((rs) => [...rs, { ledger_account_id: id, ledger_name: led.name, debit: '', credit: '' }]);
-        setAddId('');
+        if (!toAdd || rows.some((r) => r.ledger_account_id === toAdd.id)) return;
+        setRows((rs) => [...rs, { ledger_account_id: toAdd.id, ledger_name: toAdd.name, debit: '', credit: '' }]);
+        setToAdd(null);
     };
 
     const save = async () => {
@@ -108,11 +108,15 @@ export default function OpeningBalancesPage() {
             )}
 
             <div className="flex flex-wrap items-center gap-3">
-                <select value={addId} onChange={(e) => setAddId(e.target.value)} className="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white text-sm">
-                    <option value="">Add ledger…</option>
-                    {(ledgers || []).filter((l) => !rows.some((r) => r.ledger_account_id === l.id)).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                </select>
-                <button onClick={addRow} disabled={!addId} className="px-3 py-2 bg-slate-700 text-white rounded-xl text-sm disabled:opacity-50">Add</button>
+                <div className="w-72">
+                    <LedgerPicker
+                        value={toAdd?.id ?? null}
+                        onChange={setToAdd}
+                        excludeIds={rows.map((r) => r.ledger_account_id)}
+                        placeholder="Add ledger…"
+                    />
+                </div>
+                <button onClick={addRow} disabled={!toAdd} className="px-3 py-2 bg-slate-700 text-white rounded-xl text-sm disabled:opacity-50">Add</button>
                 <div className="flex-1" />
                 <button onClick={save} disabled={!!saving} className="px-4 py-2 bg-slate-700 text-white rounded-xl text-sm disabled:opacity-50">{saving === 'save' ? 'Saving…' : 'Save draft'}</button>
                 <button onClick={finalize} disabled={!balanced || !!saving} className="px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl text-sm disabled:opacity-50">{saving === 'finalize' ? 'Posting…' : 'Finalise & post'}</button>

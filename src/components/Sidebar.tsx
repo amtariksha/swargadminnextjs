@@ -229,68 +229,94 @@ const navItems: NavItem[] = [
     // entry lets a role be granted CMS access without exposing the toggle to
     // everyone — gated by the `cms` permission below.
     { name: 'CMS', href: '/admin', icon: <Globe className="w-5 h-5" />, permissionKey: 'cms' },
-    // --- Inventory --- (divider after 20 / CMS)
-    // 21
-    {
-        name: 'Inventory',
-        icon: <Warehouse className="w-5 h-5" />,
-        permissionKey: 'inventory',
-        children: [
-            { name: 'Vendors', href: '/inventory/vendors', icon: <Truck className="w-4 h-4" /> },
-            { name: 'Raw Materials', href: '/inventory/raw-materials', icon: <Boxes className="w-4 h-4" /> },
-            { name: 'Purchases', href: '/inventory/purchases', icon: <Receipt className="w-4 h-4" /> },
-            { name: 'Vendor Payments', href: '/inventory/payments', icon: <Banknote className="w-4 h-4" /> },
-            { name: 'Vendor Ledger', href: '/inventory/ledger', icon: <BookText className="w-4 h-4" /> },
-            { name: 'Purchase Report', href: '/inventory/report', icon: <BarChart3 className="w-4 h-4" /> },
-            // Phase J — bulk cost-price update shim. Drives PATCH /api/cost-prices.
-            { name: 'Cost Prices (Bulk)', href: '/inventory/cost-prices', icon: <Calculator className="w-4 h-4" /> },
-        ],
-    },
-    // --- Production --- (no divider — same block as Inventory)
-    // 22
-    {
-        name: 'Production',
-        icon: <Factory className="w-5 h-5" />,
-        permissionKey: 'production',
-        children: [
-            { name: 'Intermediates', href: '/production/intermediates', icon: <Boxes className="w-4 h-4" /> },
-            { name: 'Recipes', href: '/production/recipes', icon: <FileText className="w-4 h-4" /> },
-            { name: 'Production Records', href: '/production/runs', icon: <ClipboardList className="w-4 h-4" /> },
-            { name: 'Write-offs', href: '/production/writeoffs', icon: <Trash2 className="w-4 h-4" /> },
-            { name: 'Reports', href: '/production/reports', icon: <BarChart3 className="w-4 h-4" /> },
-        ],
-    },
     // --- Accounting (AI-Accountant: GST invoicing, ledgers, Tally) ---
-    // 23 — gated by the `accounting` permission. Records always enqueue to
-    // Tally; posting is switched per-tenant from the Tally settings page.
+    // One home for everything financial. The parent is a pure CONTAINER (no
+    // permissionKey) so inventory/production-only staff still reach their
+    // sections; gating happens per-leaf via the href segment (accounting /
+    // inventory / production). Inventory + Production were folded in here from
+    // their former top-level slots (Accounting ▸ Inventory ▸ Production).
     {
         name: 'Accounting',
         icon: <Calculator className="w-5 h-5" />,
-        permissionKey: 'accounting',
         children: [
-            { name: 'Overview', href: '/accounting', icon: <Settings className="w-4 h-4" /> },
             { name: 'Chart of Accounts', href: '/accounting/accounts', icon: <BookText className="w-4 h-4" /> },
-            { name: 'Vouchers', href: '/accounting/vouchers', icon: <FileText className="w-4 h-4" /> },
-            { name: 'Customers', href: '/accounting/customers', icon: <Users className="w-4 h-4" /> },
-            { name: 'HSN & Rates', href: '/accounting/hsn', icon: <Tags className="w-4 h-4" /> },
-            { name: 'Invoices', href: '/accounting/invoices', icon: <FileText className="w-4 h-4" /> },
-            { name: 'Ledgers', href: '/accounting/ledgers', icon: <BookText className="w-4 h-4" /> },
-            { name: 'Trial Balance', href: '/accounting/reports/trial-balance', icon: <Calculator className="w-4 h-4" /> },
-            { name: 'Balance Sheet', href: '/accounting/reports/balance-sheet', icon: <BarChart3 className="w-4 h-4" /> },
-            { name: 'Profit & Loss', href: '/accounting/reports/pnl', icon: <TrendingUp className="w-4 h-4" /> },
-            { name: 'Day Book', href: '/accounting/reports/day-book', icon: <CalendarDays className="w-4 h-4" /> },
-            { name: 'GST Returns', href: '/accounting/gst-returns', icon: <Receipt className="w-4 h-4" /> },
-            { name: 'Purchases / Bills', href: '/accounting/purchases', icon: <Receipt className="w-4 h-4" /> },
-            { name: 'Stock & Valuation', href: '/accounting/stock', icon: <Tags className="w-4 h-4" /> },
-            { name: 'Tally', href: '/accounting/tally-settings', icon: <Receipt className="w-4 h-4" /> },
-            { name: 'Tally Reconcile', href: '/accounting/reconcile', icon: <Calculator className="w-4 h-4" /> },
-            { name: 'Opening Balances', href: '/accounting/opening-balances', icon: <BookText className="w-4 h-4" /> },
-            { name: 'Bank Recon', href: '/accounting/bank-reconciliation', icon: <Banknote className="w-4 h-4" /> },
-            { name: 'B2C Consolidation', href: '/accounting/b2c-consolidation', icon: <CalendarDays className="w-4 h-4" /> },
-            { name: 'Reminders', href: '/accounting/reminders', icon: <Bell className="w-4 h-4" /> },
+            {
+                name: 'Transactions',
+                icon: <FileText className="w-4 h-4" />,
+                children: [
+                    { name: 'Vouchers', href: '/accounting/vouchers', icon: <FileText className="w-4 h-4" /> },
+                    { name: 'Invoices', href: '/accounting/invoices', icon: <FileText className="w-4 h-4" /> },
+                    { name: 'Purchases / Bills', href: '/accounting/purchases', icon: <Receipt className="w-4 h-4" /> },
+                    { name: 'Customers', href: '/accounting/customers', icon: <Users className="w-4 h-4" /> },
+                    { name: 'HSN & Rates', href: '/accounting/hsn', icon: <Tags className="w-4 h-4" /> },
+                    { name: 'B2C Consolidation', href: '/accounting/b2c-consolidation', icon: <CalendarDays className="w-4 h-4" /> },
+                ],
+            },
+            {
+                name: 'Reports',
+                icon: <BarChart3 className="w-4 h-4" />,
+                children: [
+                    { name: 'Trial Balance', href: '/accounting/reports/trial-balance', icon: <Calculator className="w-4 h-4" /> },
+                    { name: 'Balance Sheet', href: '/accounting/reports/balance-sheet', icon: <BarChart3 className="w-4 h-4" /> },
+                    { name: 'Profit & Loss', href: '/accounting/reports/pnl', icon: <TrendingUp className="w-4 h-4" /> },
+                    { name: 'Day Book', href: '/accounting/reports/day-book', icon: <CalendarDays className="w-4 h-4" /> },
+                    { name: 'GST Returns', href: '/accounting/gst-returns', icon: <Receipt className="w-4 h-4" /> },
+                    { name: 'Stock & Valuation', href: '/accounting/stock', icon: <Tags className="w-4 h-4" /> },
+                    { name: 'Ledgers', href: '/accounting/ledgers', icon: <BookText className="w-4 h-4" /> },
+                ],
+            },
+            {
+                name: 'Settings',
+                icon: <Settings className="w-4 h-4" />,
+                children: [
+                    { name: 'Overview', href: '/accounting', icon: <Settings className="w-4 h-4" /> },
+                    { name: 'Tally', href: '/accounting/tally-settings', icon: <Receipt className="w-4 h-4" /> },
+                    { name: 'Tally Reconcile', href: '/accounting/reconcile', icon: <Calculator className="w-4 h-4" /> },
+                    { name: 'Opening Balances', href: '/accounting/opening-balances', icon: <BookText className="w-4 h-4" /> },
+                    { name: 'Bank Recon', href: '/accounting/bank-reconciliation', icon: <Banknote className="w-4 h-4" /> },
+                    { name: 'Reminders', href: '/accounting/reminders', icon: <Bell className="w-4 h-4" /> },
+                ],
+            },
+            // Inventory folded in (keeps its own `inventory` gate via /inventory/* hrefs),
+            // with Production nested one level deeper (gated by /production/* hrefs).
+            {
+                name: 'Inventory',
+                icon: <Warehouse className="w-4 h-4" />,
+                children: [
+                    { name: 'Vendors', href: '/inventory/vendors', icon: <Truck className="w-4 h-4" /> },
+                    { name: 'Raw Materials', href: '/inventory/raw-materials', icon: <Boxes className="w-4 h-4" /> },
+                    { name: 'Purchases', href: '/inventory/purchases', icon: <Receipt className="w-4 h-4" /> },
+                    { name: 'Vendor Payments', href: '/inventory/payments', icon: <Banknote className="w-4 h-4" /> },
+                    { name: 'Vendor Ledger', href: '/inventory/ledger', icon: <BookText className="w-4 h-4" /> },
+                    { name: 'Purchase Report', href: '/inventory/report', icon: <BarChart3 className="w-4 h-4" /> },
+                    { name: 'Cost Prices (Bulk)', href: '/inventory/cost-prices', icon: <Calculator className="w-4 h-4" /> },
+                    {
+                        name: 'Production',
+                        icon: <Factory className="w-4 h-4" />,
+                        children: [
+                            { name: 'Intermediates', href: '/production/intermediates', icon: <Boxes className="w-4 h-4" /> },
+                            { name: 'Recipes', href: '/production/recipes', icon: <FileText className="w-4 h-4" /> },
+                            { name: 'Production Records', href: '/production/runs', icon: <ClipboardList className="w-4 h-4" /> },
+                            { name: 'Write-offs', href: '/production/writeoffs', icon: <Trash2 className="w-4 h-4" /> },
+                            { name: 'Reports', href: '/production/reports', icon: <BarChart3 className="w-4 h-4" /> },
+                        ],
+                    },
+                ],
+            },
         ],
     },
 ];
+
+/**
+ * Top-level item names that get a trailing section divider. Declarative + keyed
+ * by name (not array index) so reordering or re-parenting nav items can't shift
+ * the dividers — replaces the old fragile positional `index === N` checks.
+ */
+const DIVIDER_AFTER = new Set<string>([
+    'Dashboard', 'Delivery List', 'Performance Report', 'Users', 'Products',
+    'Transactions', 'Refunds', 'Payroll', 'Settings', 'Notifications',
+    'WhatsApp', 'CRM', 'LMS', 'Product Sync', 'CMS',
+]);
 
 interface SidebarProps {
     isOpen: boolean;
@@ -363,6 +389,17 @@ const filterNav = (
     return result;
 };
 
+/** First navigable href at/under an item — used for the collapsed icon-rail,
+ *  where a group can't expand so its icon links to its first leaf. */
+const firstLeafHref = (item: NavItem): string | undefined => {
+    if (item.href) return item.href;
+    for (const child of item.children ?? []) {
+        const h = firstLeafHref(child);
+        if (h) return h;
+    }
+    return undefined;
+};
+
 export default function Sidebar({ isOpen, onToggle, collapsed = false }: SidebarProps) {
     const pathname = usePathname();
     const { hasPermission } = useAuth();
@@ -381,33 +418,98 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
         return roleFiltered.filter((item) => item.href !== '/attributes');
     }, [hasPermission, variationsEnabled]);
 
-    const toggleExpand = (name: string) => {
+    // Expansion is keyed by the '/'-joined name PATH (e.g. "Accounting/Settings")
+    // not the bare name, so duplicate labels at different depths (two "Settings",
+    // two "Reports") expand independently.
+    const toggleExpand = (key: string) => {
         setExpandedItems(prev =>
-            prev.includes(name)
-                ? prev.filter(item => item !== name)
-                : [...prev, name]
+            prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
         );
     };
 
+    // Every href anywhere in the visible tree (recursive) — used to decide whether
+    // a prefix match is safe (don't light up a parent route when a child is active).
+    const allHrefs = useMemo(() => {
+        const acc: string[] = [];
+        const walk = (items: NavItem[]) => items.forEach((i) => {
+            if (i.href) acc.push(i.href);
+            if (i.children) walk(i.children);
+        });
+        walk(visibleNavItems);
+        return acc;
+    }, [visibleNavItems]);
+
     const isActive = (href: string) => {
         if (pathname === href) return true;
-        // For /pages, also match /pages/about, /pages/privacy, etc.
-        // For /settings, do NOT match /settings/webapp (sibling routes)
-        // Only allow prefix matching when there are no sibling routes sharing the prefix
-        const allChildHrefs = visibleNavItems.flatMap(i => i.children?.map(c => c.href) || []);
-        const hasSibling = allChildHrefs.some(h => h !== href && h?.startsWith(href + '/'));
+        const hasSibling = allHrefs.some(h => h !== href && h.startsWith(href + '/'));
         if (hasSibling) return false;
         return pathname.startsWith(href + '/');
     };
 
-    // Auto-expand the group containing the active page
+    // Auto-expand the FULL ancestor chain (Accounting ▸ Inventory ▸ Production …)
+    // of the active page.
     useEffect(() => {
-        visibleNavItems.forEach(item => {
-            if (item.children?.some(c => c.href && isActive(c.href!))) {
-                setExpandedItems(prev => prev.includes(item.name) ? prev : [...prev, item.name]);
+        const out: string[] = [];
+        const walk = (items: NavItem[], parentKey: string): boolean => {
+            let active = false;
+            for (const item of items) {
+                const key = parentKey ? `${parentKey}/${item.name}` : item.name;
+                if (item.children && item.children.length) {
+                    if (walk(item.children, key)) { out.push(key); active = true; }
+                } else if (item.href && isActive(item.href)) {
+                    active = true;
+                }
             }
-        });
-    }, [pathname, visibleNavItems]);
+            return active;
+        };
+        walk(visibleNavItems, '');
+        // Sync the open sections to the active URL (same pattern the page-level
+        // data→state effects use). Additive — user toggles are preserved.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        if (out.length) setExpandedItems(prev => Array.from(new Set([...prev, ...out])));
+    }, [pathname, visibleNavItems]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Render one nav node at `depth` under `parentKey` — recurses into children so
+    // the tree supports arbitrary nesting (the old renderer was one level deep).
+    const renderNode = (item: NavItem, depth: number, parentKey: string): React.ReactNode => {
+        const key = parentKey ? `${parentKey}/${item.name}` : item.name;
+        if (item.children && item.children.length) {
+            const expanded = expandedItems.includes(key);
+            return (
+                <div>
+                    <button
+                        onClick={() => toggleExpand(key)}
+                        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg text-slate-300 hover:bg-slate-800/50 hover:text-white transition-all duration-200"
+                    >
+                        <div className="flex items-center gap-3">
+                            {item.icon}
+                            <span className={depth === 0 ? 'font-medium' : 'text-sm font-medium'}>{item.name}</span>
+                        </div>
+                        {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                    </button>
+                    {expanded && (
+                        <ul className="ml-4 mt-1 space-y-1 border-l border-slate-800 pl-4">
+                            {item.children.map(child => (
+                                <li key={`${key}/${child.name}`}>{renderNode(child, depth + 1, key)}</li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            );
+        }
+        const active = isActive(item.href!);
+        return (
+            <Link
+                href={item.href!}
+                className={`flex items-center gap-3 px-3 ${depth === 0 ? 'py-2.5' : 'py-2'} rounded-lg transition-all duration-200 ${active
+                    ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                    : `${depth === 0 ? 'text-slate-300' : 'text-slate-400'} hover:bg-slate-800/50 hover:text-white`}`}
+            >
+                {item.icon}
+                <span className={depth === 0 ? 'font-medium' : 'text-sm'}>{item.name}</span>
+            </Link>
+        );
+    };
 
     return (
         <>
@@ -461,73 +563,17 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                 {/* Navigation */}
                 <nav className={`flex-1 overflow-y-auto py-4 ${collapsed ? 'px-2' : 'px-3'}`}>
                     <ul className="space-y-1">
-                        {visibleNavItems.map((item, index) => (
+                        {visibleNavItems.map((item) => (
                             <li key={item.name}>
-                                {item.children ? (
-                                    collapsed ? (
-                                        /* Collapsed: show first child link as icon-only */
-                                        <Link
-                                            href={item.children[0]?.href || '#'}
-                                            className={`
-                                                flex items-center justify-center p-2.5 rounded-lg
-                                                transition-all duration-200
-                                                text-slate-300 hover:bg-slate-800/50 hover:text-white
-                                            `}
-                                            title={item.name}
-                                        >
-                                            {item.icon}
-                                        </Link>
-                                    ) : (
-                                        <div>
-                                            <button
-                                                onClick={() => toggleExpand(item.name)}
-                                                className={`
-                                                    w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg
-                                                    text-slate-300 hover:bg-slate-800/50 hover:text-white
-                                                    transition-all duration-200
-                                                `}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    {item.icon}
-                                                    <span className="font-medium">{item.name}</span>
-                                                </div>
-                                                {expandedItems.includes(item.name) ? (
-                                                    <ChevronDown className="w-4 h-4" />
-                                                ) : (
-                                                    <ChevronRight className="w-4 h-4" />
-                                                )}
-                                            </button>
-                                            {expandedItems.includes(item.name) && (
-                                                <ul className="ml-4 mt-1 space-y-1 border-l border-slate-800 pl-4">
-                                                    {item.children.map(child => (
-                                                        <li key={child.href}>
-                                                            <Link
-                                                                href={child.href!}
-                                                                className={`
-                                                                    flex items-center gap-3 px-3 py-2 rounded-lg
-                                                                    transition-all duration-200
-                                                                    ${isActive(child.href!)
-                                                                        ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                                                                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'
-                                                                    }
-                                                                `}
-                                                            >
-                                                                {child.icon}
-                                                                <span className="text-sm">{child.name}</span>
-                                                            </Link>
-                                                        </li>
-                                                    ))}
-                                                </ul>
-                                            )}
-                                        </div>
-                                    )
-                                ) : collapsed ? (
+                                {collapsed ? (
+                                    /* Collapsed icon-rail: groups can't expand, so link to
+                                       the first navigable leaf at/under the item. */
                                     <Link
-                                        href={item.href!}
+                                        href={firstLeafHref(item) || '#'}
                                         className={`
                                             flex items-center justify-center p-2.5 rounded-lg
                                             transition-all duration-200
-                                            ${isActive(item.href!)
+                                            ${item.href && isActive(item.href)
                                                 ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
                                                 : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'
                                             }
@@ -537,33 +583,10 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                                         {item.icon}
                                     </Link>
                                 ) : (
-                                    <Link
-                                        href={item.href!}
-                                        className={`
-                                            flex items-center gap-3 px-3 py-2.5 rounded-lg
-                                            transition-all duration-200
-                                            ${isActive(item.href!)
-                                                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                                                : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'
-                                            }
-                                        `}
-                                    >
-                                        {item.icon}
-                                        <span className="font-medium">{item.name}</span>
-                                    </Link>
+                                    renderNode(item, 0, '')
                                 )}
-                                {/* Section dividers */}
-                                {/* Section dividers — recomputed after the five top-level
-                                    items (App Updates / Delivery Locations / Drop Points /
-                                    Notification Images / Packaging Types) moved into Settings.
-                                    Each new index = old index minus the count of removed
-                                    entries at or below the old index. */}
-                                {/* Inserting LMS at index 17 (between CRM and Archive) shifted
-                                    every subsequent divider up by 1. New divider after LMS
-                                    (17) separates it from Archive (18). */}
-                                {/* Adding Attributes at nav index 9 shifted every subsequent
-                                    divider down by 1 (old 8 → 9, old 13 → 14, etc.). */}
-                                {!collapsed && (index === 0 || index === 1 || index === 3 || index === 5 || index === 9 || index === 14 || index === 15 || index === 16 || index === 18 || index === 20 || index === 21 || index === 22 || index === 23 || index === 27 || index === 28) && (
+                                {/* Declarative section divider — see DIVIDER_AFTER. */}
+                                {!collapsed && DIVIDER_AFTER.has(item.name) && (
                                     <div className="my-3 border-t border-slate-800/50" />
                                 )}
                             </li>
