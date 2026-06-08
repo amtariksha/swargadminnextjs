@@ -151,6 +151,8 @@ interface DropPointStop {
     status: number;              // 1 = pending, 3 = delivered (mirrors delivery.status)
     delivered_at: string | null;
     truck_driver_user_id: number | null;
+    mark_lat: number | null;     // where the truck driver marked it delivered
+    mark_lng: number | null;
     total_qty: number;
     order_count: number;
     products: Array<{ product_id: number; product_title: string; qty_text: string | null; total_qty: number }>;
@@ -934,8 +936,17 @@ export default function DeliveryListPage() {
                                                 )}
                                             </div>
                                         )}
-                                        {stop.delivered_at && (
-                                            <p className="text-xs text-slate-600">Delivered {stop.delivered_at}</p>
+                                        {(stop.delivered_at || (stop.mark_lat != null && stop.mark_lng != null)) && (
+                                            <div className="flex items-center gap-3 text-xs text-slate-600">
+                                                {stop.delivered_at && <span>Delivered {stop.delivered_at}</span>}
+                                                {stop.mark_lat != null && stop.mark_lng != null && (
+                                                    <a href={`https://maps.google.com/?q=${stop.mark_lat},${stop.mark_lng}`}
+                                                        target="_blank" rel="noreferrer"
+                                                        className="flex items-center gap-1 text-purple-400 hover:text-purple-300">
+                                                        <MapPin className="w-3 h-3" /> Marked here
+                                                    </a>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 );
