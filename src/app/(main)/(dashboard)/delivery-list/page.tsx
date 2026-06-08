@@ -172,6 +172,20 @@ interface DropPointStop {
             box_reason: string | null;
         }>;
     }>;
+    // Per-customer-order lines (flat, "like customer orders"): ordered vs
+    // delivered qty (before/after), status, last-mile driver.
+    lines: Array<{
+        pre_delivery_id: number;
+        customer_name: string;
+        customer_phone: string | null;
+        driver_name: string;
+        product_title: string;
+        qty_text: string | null;
+        ordered_qty: number;
+        delivered_qty: number;
+        status: number;     // 1 pending | 2 not-delivered | 3 delivered
+        reason: string | null;
+    }>;
     photos: Array<{ id: number; image_path: string }>;
 }
 
@@ -887,15 +901,42 @@ export default function DeliveryListPage() {
                                                 {delivered ? 'Delivered' : 'Pending'}
                                             </span>
                                         </div>
-                                        <div className="border-t border-slate-800/50 pt-2 space-y-1">
-                                            {stop.products.map((p) => (
-                                                <div key={p.product_id} className="flex items-center justify-between text-sm">
-                                                    <span className="text-slate-300">{p.product_title}</span>
-                                                    <span className="text-slate-400 font-mono">
-                                                        {p.total_qty}{p.qty_text ? <span className="text-slate-600"> × {p.qty_text}</span> : null}
-                                                    </span>
+                                        {/* Flat per-customer-order lines — ordered → delivered (before/after) + status */}
+                                        <div className="border-t border-slate-800/50 pt-2">
+                                            {stop.lines.length === 0 ? (
+                                                <p className="text-xs text-slate-500">No customer lines.</p>
+                                            ) : (
+                                                <div className="space-y-1">
+                                                    {stop.lines.map((ln) => {
+                                                        const changed = ln.status !== 1 && ln.delivered_qty !== ln.ordered_qty;
+                                                        const st = ln.status === 3
+                                                            ? { label: 'Delivered', cls: 'bg-green-500/20 text-green-400' }
+                                                            : ln.status === 2
+                                                                ? { label: 'Not delivered', cls: 'bg-red-500/20 text-red-300' }
+                                                                : { label: 'Pending', cls: 'bg-amber-500/20 text-amber-300' };
+                                                        return (
+                                                            <div key={ln.pre_delivery_id} className="flex items-center justify-between gap-2 text-xs">
+                                                                <span className="text-slate-300 truncate">
+                                                                    {ln.customer_name}
+                                                                    <span className="text-slate-600"> · {ln.product_title}</span>
+                                                                    {ln.driver_name ? <span className="text-slate-600"> · {ln.driver_name}</span> : null}
+                                                                </span>
+                                                                <span className="flex items-center gap-2 shrink-0">
+                                                                    <span className={`font-mono ${changed ? 'text-amber-300' : 'text-slate-400'}`}
+                                                                        title={changed ? `ordered ${ln.ordered_qty} → delivered ${ln.delivered_qty}` : undefined}>
+                                                                        {ln.ordered_qty}{changed ? ` → ${ln.delivered_qty}` : ''}
+                                                                        {ln.qty_text ? <span className="text-slate-600"> {ln.qty_text}</span> : null}
+                                                                    </span>
+                                                                    <span className={`px-1.5 py-0.5 rounded ${st.cls}`}
+                                                                        title={ln.status === 2 && ln.reason ? ln.reason : undefined}>
+                                                                        {st.label}
+                                                                    </span>
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
-                                            ))}
+                                            )}
                                         </div>
                                         {stop.drivers.length > 0 && (
                                             <div className="border-t border-slate-800/50 pt-2">
