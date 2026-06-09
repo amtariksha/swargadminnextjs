@@ -122,8 +122,19 @@ export default buildConfig({
     // Admin
     Users,
   ],
+  // CSRF/cookie allowlist. `admin.desicowmilk.com` is the primary admin host
+  // and MUST be present or Payload rejects the login cookie (CSRF) and bounces
+  // back to /admin/login. Hard-coded so it does not depend on
+  // NEXT_PUBLIC_SERVER_URL being set in the environment.
   cors: [
     getServerSideURL(),
+    'https://admin.desicowmilk.com',
+    'https://new.swargfood.com',
+    'https://swargfood.com',
+  ].filter(Boolean),
+  csrf: [
+    getServerSideURL(),
+    'https://admin.desicowmilk.com',
     'https://new.swargfood.com',
     'https://swargfood.com',
   ].filter(Boolean),
