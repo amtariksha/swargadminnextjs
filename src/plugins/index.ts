@@ -99,7 +99,7 @@ export const plugins: Plugin[] = [
   // The R2 bucket is **shared** with the swargnodejsbackend (Feature 07
   // pickup-proof photos etc.). To keep Payload media isolated from
   // backend uploads in the same bucket, every object is prefixed with
-  // R2_MEDIA_PREFIX (default 'admin-media/'). Override the prefix via
+  // R2_MEDIA_PREFIX (default 'payload/'). Override the prefix via
   // env to point at a different folder.
   //
   // Create / reuse an R2 API token in the Cloudflare dashboard
@@ -113,7 +113,7 @@ export const plugins: Plugin[] = [
     ),
     collections: {
       media: {
-        prefix: process.env.R2_MEDIA_PREFIX || 'admin-media',
+        prefix: process.env.R2_MEDIA_PREFIX || 'payload',
       },
     },
     bucket: process.env.R2_BUCKET ?? '',

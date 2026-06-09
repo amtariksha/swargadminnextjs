@@ -18,10 +18,10 @@
 --
 -- FIX: add the missing `prefix` column. Additive, nullable, instant.
 -- Backfill existing rows to the collection's configured prefix
--- ('admin-media' — see src/plugins/index.ts R2_MEDIA_PREFIX) so that once the
+-- ('payload' — see src/plugins/index.ts R2_MEDIA_PREFIX) so that once the
 -- media files are copied into R2 under admin-media/<filename>, Payload's
 -- static handler fetches them from the right key. New uploads set
--- prefix='admin-media' automatically.
+-- prefix='payload' automatically.
 --
 -- Run on the backend Supabase project (holds the live `web` Payload schema).
 -- The `public` rollback copy may already be gone — handled conditionally.
@@ -29,7 +29,7 @@
 
 -- Live Payload schema (the one that matters).
 ALTER TABLE "web"."media" ADD COLUMN IF NOT EXISTS "prefix" varchar;
-UPDATE "web"."media" SET "prefix" = 'admin-media' WHERE "prefix" IS NULL;
+UPDATE "web"."media" SET "prefix" = 'payload' WHERE "prefix" IS NULL;
 
 -- Rollback-parachute copy — only if it still exists (won't error if dropped).
 DO $$
@@ -39,7 +39,7 @@ BEGIN
     WHERE table_schema = 'public' AND table_name = 'media'
   ) THEN
     EXECUTE 'ALTER TABLE "public"."media" ADD COLUMN IF NOT EXISTS "prefix" varchar';
-    EXECUTE 'UPDATE "public"."media" SET "prefix" = ''admin-media'' WHERE "prefix" IS NULL';
+    EXECUTE 'UPDATE "public"."media" SET "prefix" = ''payload'' WHERE "prefix" IS NULL';
   END IF;
 END $$;
 

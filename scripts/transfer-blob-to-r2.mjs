@@ -50,7 +50,7 @@ const {
   R2_BUCKET,
   R2_ACCESS_KEY_ID,
   R2_SECRET_ACCESS_KEY,
-  R2_MEDIA_PREFIX = 'admin-media',
+  R2_MEDIA_PREFIX = 'payload',
 } = process.env
 
 function requireEnv(name, val) {
