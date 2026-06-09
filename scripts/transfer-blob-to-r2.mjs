@@ -100,7 +100,12 @@ async function existsInR2(key) {
 }
 
 async function copyOne(blob) {
-  const key = `${R2_MEDIA_PREFIX}/${blob.pathname}`
+  // The R2 key must use the SUFFIXED filename Payload stored in
+  // web.media.filename — that's the last segment of blob.url
+  // (e.g. "…-aTa6I44aWylt9sRjK2QXjcRjYuw6x9.webp"), NOT blob.pathname
+  // (which is the un-suffixed original name).
+  const filename = decodeURIComponent(new URL(blob.url).pathname.split('/').pop())
+  const key = `${R2_MEDIA_PREFIX}/${filename}`
   if (await existsInR2(key)) return 'skip'
 
   const dl = await fetch(blob.url)
