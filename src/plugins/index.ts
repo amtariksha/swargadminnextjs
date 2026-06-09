@@ -114,6 +114,28 @@ export const plugins: Plugin[] = [
     collections: {
       media: {
         prefix: process.env.R2_MEDIA_PREFIX || 'payload',
+        // Bypass Payload's static-file handler entirely. With this flag the
+        // afterRead hook calls the adapter's generateURL OR our custom
+        // generateFileURL — never `/api/media/file/{filename}` (which would
+        // stream every read through the Vercel function and consume the
+        // Hobby-tier function bandwidth quota).
+        disablePayloadAccessControl: true,
+        // Resolve each Media doc's `url` to the R2 *public* URL so the
+        // browser fetches the bytes directly from Cloudflare. R2_PUBLIC_URL
+        // is the bucket's public dev/CDN URL (e.g.
+        // https://pub-7b1b9fa756b54ffea517a9b116a1af2b.r2.dev). When unset,
+        // we fall back to the S3-API endpoint (which works for buckets that
+        // allow unauthenticated GETs on the endpoint hostname — most R2
+        // setups do not, so prefer setting R2_PUBLIC_URL).
+        generateFileURL: ({ filename, prefix }: { filename: string; prefix?: string }) => {
+          const publicBase = (process.env.R2_PUBLIC_URL ?? '').replace(/\/$/, '')
+          const effectivePrefix = prefix || process.env.R2_MEDIA_PREFIX || 'payload'
+          const path = `${effectivePrefix}/${filename}`.replace(/\/+/g, '/')
+          if (publicBase) return `${publicBase}/${path}`
+          // Fallback: signed-ish S3 path. Not ideal — only works if the
+          // bucket policy allows unauthenticated GETs on the endpoint.
+          return `${process.env.R2_ENDPOINT}/${process.env.R2_BUCKET}/${path}`
+        },
       },
     },
     bucket: process.env.R2_BUCKET ?? '',
