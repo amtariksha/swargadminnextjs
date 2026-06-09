@@ -94,6 +94,18 @@ const CRON_JOBS: CronJob[] = [
             'Fires scheduled marketing campaigns whose send time has arrived. ' +
             'Runs every 5 minutes via the backend scheduler → admin panel. Requires migration 054_lms_tick_flags.sql.',
     },
+    {
+        key: 'abandoned-cart-tick',
+        name: 'Abandoned Cart Tick',
+        flagTitle: 'Abandoned Cart Tick Enabled',
+        timeTitle: null,
+        everyMinute: true,
+        description:
+            'Scans the swargfooddotcom storefront for carts inactive >1 h with <3 reminders sent ' +
+            'and fires the abandoned_cart_v1 WhatsApp template. Runs every 30 minutes via the ' +
+            'backend scheduler → storefront /api/cron/abandoned-cart. ' +
+            'Requires STOREFRONT_BASE_URL + STOREFRONT_CRON_SECRET on the backend env.',
+    },
 ];
 
 // Values that mean "off". Everything else (incl. unknown) means "on" —
