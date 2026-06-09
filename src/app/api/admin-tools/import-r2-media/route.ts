@@ -16,8 +16,13 @@
  * Idempotent: if a Media row already exists with the supplied `wpId`,
  * the existing row's id is returned and nothing else changes.
  *
- * Auth: bearer token equal to PAYLOAD_API_TOKEN (the same service-account
- * key used by the WP migration writer).
+ * Auth: any Payload user with `enableAPIKey=true`. Pass the user's API
+ * key in the `Authorization` header — Payload validates it against the
+ * user record (the same mechanism it uses for every other REST API
+ * call). Accepts both header shapes:
+ *   Authorization: users API-Key <token>
+ *   Authorization: Bearer <token>
+ * No Vercel env var required.
  */
 
 import { NextResponse } from 'next/server'
@@ -36,20 +41,31 @@ const BodySchema = z.object({
   height: z.number().int().positive().optional(),
 })
 
-function isAuthorized(req: Request): boolean {
-  const expected = process.env.PAYLOAD_API_TOKEN
-  if (!expected) return false
-  const auth = req.headers.get('authorization') || ''
-  return (
-    auth === `Bearer ${expected}` || auth === `users API-Key ${expected}`
-  )
+/**
+ * Authenticate the request against any Payload user with an API key.
+ * Accepts both `Bearer <token>` and `users API-Key <token>` headers —
+ * the latter is the canonical Payload format, but Bearer is friendlier
+ * for ad-hoc curl/cron callers.
+ */
+async function authenticate(
+  req: Request,
+  payload: Awaited<ReturnType<typeof getPayload>>,
+): Promise<{ ok: boolean }> {
+  const raw = req.headers.get('authorization') || ''
+  // Normalise Bearer → users API-Key so payload.auth() sees its native format.
+  const normalised = raw.replace(/^Bearer\s+/i, 'users API-Key ')
+  if (!normalised.startsWith('users API-Key ')) return { ok: false }
+  try {
+    const headers = new Headers(req.headers)
+    headers.set('authorization', normalised)
+    const result = await payload.auth({ headers })
+    return { ok: Boolean(result?.user) }
+  } catch {
+    return { ok: false }
+  }
 }
 
 export async function POST(req: Request): Promise<NextResponse> {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   let body: unknown
   try {
     body = await req.json()
@@ -69,6 +85,11 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   try {
     const payload = await getPayload({ config: configPromise })
+
+    const auth = await authenticate(req, payload)
+    if (!auth.ok) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     // Idempotency: skip if already imported.
     const existing = await payload.find({
