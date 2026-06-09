@@ -26,8 +26,12 @@ const orderSchema = z.object({
     user_id: z.number().min(1, 'Select a user'),
     product_id: z.number().min(1, 'Select a product'),
     // Variations (migration 030): variant_id is optional. Required when
-    // the picked product is product_type='variable'; the form-level
-    // validation enforces that via refine() below.
+    // the picked product is product_type='variable'; enforced on submit.
+    // The variant API returns ids as strings (BIGINT → "7"), so callers
+    // MUST Number()-coerce before setValue — otherwise z.number() rejects
+    // the raw string with "expected number, received string" and blocks
+    // the save. (z.coerce.number() would fix validation but widens the
+    // RHF input type to `unknown` and breaks the resolver typing.)
     variant_id: z.number().optional(),
     qty: z.number().min(1, 'Quantity must be at least 1'),
     start_date: z.string().min(1, 'Start date is required'),
@@ -104,7 +108,7 @@ export default function CreateOrderPage() {
         [variants],
     );
     const selectedVariant = useMemo<Variant | null>(
-        () => activeVariants.find((v) => v.id === selectedVariantId) || null,
+        () => activeVariants.find((v) => Number(v.id) === selectedVariantId) || null,
         [activeVariants, selectedVariantId],
     );
 
@@ -149,7 +153,7 @@ export default function CreateOrderPage() {
         const def = activeVariants.find((v) => v.is_default === 1);
         const inStock = activeVariants.find((v) => v.stock_status === 'in_stock');
         const chosen = def ?? inStock ?? activeVariants[0];
-        if (chosen) setValue('variant_id', chosen.id);
+        if (chosen) setValue('variant_id', Number(chosen.id));
     }, [isVariableProduct, activeVariants, selectedVariantId]);
 
     // Variations: when a variant is picked, its price overrides the
@@ -436,12 +440,12 @@ export default function CreateOrderPage() {
                                         v.manage_stock === 1 &&
                                         typeof v.stock_quantity === 'number' &&
                                         v.stock_quantity > 0 && v.stock_quantity < 5;
-                                    const isSelected = selectedVariantId === v.id;
+                                    const isSelected = selectedVariantId === Number(v.id);
                                     return (
                                         <button
                                             key={v.id}
                                             type="button"
-                                            onClick={() => setValue('variant_id', v.id)}
+                                            onClick={() => setValue('variant_id', Number(v.id))}
                                             className={`p-2.5 rounded-xl text-left text-sm transition-colors border ${
                                                 isSelected
                                                     ? 'bg-purple-600/20 border-purple-500/50 text-purple-200'
