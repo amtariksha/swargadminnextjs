@@ -91,31 +91,59 @@ export async function POST(req: Request): Promise<NextResponse> {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Idempotency: skip if already imported.
+    // Upsert by wpId. Earlier (failed) migration attempts may have
+    // created the doc with a Vercel-Blob-style URL pointing at files
+    // that never landed in R2 — overwrite filename/url/sizes so the
+    // doc resolves to the now-rcloned R2 path.
+    const data = {
+      filename,
+      mimeType,
+      filesize,
+      ...(width != null ? { width } : {}),
+      ...(height != null ? { height } : {}),
+      alt: alt || filename,
+      wpId,
+      // Clear stale storage state from previous attempts so
+      // generateFileURL falls back to the env-configured R2 prefix.
+      // - `prefix=null` → URL uses R2_MEDIA_PREFIX env (default 'payload')
+      // - `sizes=null` → frontend stops trying to load 404'd thumbnails
+      // - `thumbnailURL=null` → admin UI uses the original until we
+      //   import WP's resized variants properly
+      prefix: null,
+      sizes: null,
+      thumbnailURL: null,
+    }
+
     const existing = await payload.find({
       collection: 'media',
       where: { wpId: { equals: wpId } },
       limit: 1,
       depth: 0,
     })
-    if (existing.docs.length > 0) {
-      return NextResponse.json({ id: existing.docs[0].id, skipped: 'exists' })
+
+    // Low-level DB ops to bypass the upload field validator (which
+    // would otherwise demand a `file` body) and skip Payload's image-
+    // resize pipeline (WP already produced variants we serve directly
+    // from R2).
+    const db = payload.db as {
+      create: (args: unknown) => Promise<{ id: string | number }>
+      updateOne: (args: unknown) => Promise<{ id: string | number }>
     }
 
-    // Low-level DB insert: bypasses the upload validator (which would
-    // refuse a doc with no file) and skips Payload's own image-resize
-    // pipeline (we don't want or need it — WP already produced variants).
-    const created = await (payload.db as { create: (args: unknown) => Promise<{ id: string | number }> }).create({
+    if (existing.docs.length > 0) {
+      const id = existing.docs[0].id
+      const updated = await db.updateOne({
+        collection: 'media',
+        where: { id: { equals: id } },
+        data,
+        req: undefined,
+      })
+      return NextResponse.json({ id: updated?.id ?? id, updated: true })
+    }
+
+    const created = await db.create({
       collection: 'media',
-      data: {
-        filename,
-        mimeType,
-        filesize,
-        ...(width != null ? { width } : {}),
-        ...(height != null ? { height } : {}),
-        alt: alt || filename,
-        wpId,
-      },
+      data,
       req: undefined,
     })
 
