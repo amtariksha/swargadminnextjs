@@ -3,22 +3,58 @@
 .dashboard .before-dashboard {
   margin-bottom: base(1.5);
 
-  &__banner {
-    & h4 {
-      margin: 0;
-    }
+  &__hero {
+    position: relative;
+    overflow: hidden;
+    border-radius: 12px;
+    padding: base(1.25) base(1.5);
+    color: #fff;
+    background: linear-gradient(135deg, #6d28d9 0%, #a855f7 45%, #ec4899 100%);
+    box-shadow: 0 12px 32px rgba(168, 85, 247, 0.28);
   }
 
-  &__instructions {
-    list-style: decimal;
-    margin-bottom: base(0.5);
-
-    & li {
-      width: 100%;
-    }
+  &__title {
+    margin: 0 0 base(0.25);
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
   }
 
-  & a:hover {
-    opacity: 0.85;
+  &__subtitle {
+    margin: 0 0 base(0.85);
+    max-width: 60ch;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    opacity: 0.92;
+  }
+
+  &__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: base(0.5);
+  }
+
+  &__link {
+    display: inline-flex;
+    align-items: center;
+    padding: base(0.4) base(0.85);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    color: #6d28d9;
+    background: #fff;
+    transition: transform 0.12s ease, opacity 0.12s ease;
+
+    &:hover {
+      transform: translateY(-1px);
+      opacity: 1;
+    }
+
+    &--ghost {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.16);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+    }
   }
 }

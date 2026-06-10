@@ -48,7 +48,17 @@ const dirname = path.dirname(filename)
 
 export default buildConfig({
   admin: {
+    // Swarg-branded admin meta — titleSuffix shows in the browser tab,
+    // matching the custom Next.js admin panel.
+    meta: {
+      titleSuffix: ' — Swarg Admin',
+    },
     components: {
+      // Swarg brand mark replaces Payload's default logo/icon.
+      graphics: {
+        Logo: '@/components/AdminGraphics/Logo',
+        Icon: '@/components/AdminGraphics/Icon',
+      },
       beforeLogin: ['@/components/BeforeLogin'],
       beforeDashboard: ['@/components/BeforeDashboard'],
     },

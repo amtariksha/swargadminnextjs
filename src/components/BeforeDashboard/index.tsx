@@ -1,67 +1,37 @@
-import { Banner } from '@payloadcms/ui/elements/Banner'
 import React from 'react'
 
-import { SeedButton } from './SeedButton'
 import './index.scss'
 
 const baseClass = 'before-dashboard'
 
+/**
+ * Branded dashboard welcome for the Payload admin. Replaces Payload's stock
+ * "Seed your database / Getting Started docs" boilerplate with a Swarg-styled
+ * hero that bridges to the operations dashboard and the live storefront.
+ */
 const BeforeDashboard: React.FC = () => {
   return (
     <div className={baseClass}>
-      <Banner className={`${baseClass}__banner`} type="success">
-        <h4>Welcome to your dashboard!</h4>
-      </Banner>
-      Here&apos;s what to do next:
-      <ul className={`${baseClass}__instructions`}>
-        <li>
-          <SeedButton />
-          {' with a few pages, posts, and projects to jump-start your new site, then '}
-          <a href="/" target="_blank">
-            visit your website
+      <div className={`${baseClass}__hero`}>
+        <h4 className={`${baseClass}__title`}>Welcome to the Swarg content admin</h4>
+        <p className={`${baseClass}__subtitle`}>
+          Manage website content, the product catalog, and storefront settings here.
+          For daily operations — orders, deliveries, drivers — use the operations dashboard.
+        </p>
+        <div className={`${baseClass}__links`}>
+          <a className={`${baseClass}__link`} href="/dashboard">
+            Operations dashboard →
           </a>
-          {' to see the results.'}
-        </li>
-        <li>
-          {'Modify your '}
           <a
-            href="https://payloadcms.com/docs/configuration/collections"
-            rel="noopener noreferrer"
+            className={`${baseClass}__link ${baseClass}__link--ghost`}
+            href="https://new.swargfood.com"
             target="_blank"
-          >
-            collections
-          </a>
-          {' and add more '}
-          <a
-            href="https://payloadcms.com/docs/fields/overview"
             rel="noopener noreferrer"
-            target="_blank"
           >
-            fields
+            View storefront →
           </a>
-          {' as needed. If you are new to Payload, we also recommend you check out the '}
-          <a
-            href="https://payloadcms.com/docs/getting-started/what-is-payload"
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            Getting Started
-          </a>
-          {' docs.'}
-        </li>
-        <li>
-          Commit and push your changes to the repository to trigger a redeployment of your project.
-        </li>
-      </ul>
-      {'Pro Tip: This block is a '}
-      <a
-        href="https://payloadcms.com/docs/custom-components/overview"
-        rel="noopener noreferrer"
-        target="_blank"
-      >
-        custom component
-      </a>
-      , you can remove it at any time by updating your <strong>payload.config</strong>.
+        </div>
+      </div>
     </div>
   )
 }

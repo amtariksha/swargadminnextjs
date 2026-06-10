@@ -1,1 +1,79 @@
-/* Custom Payload admin styles — keeps existing app styles from leaking into Payload UI */
+/*
+ * Custom Payload admin styles — Swarg branding to echo the custom Next.js
+ * admin panel (purple→pink gradient accent on a dark UI).
+ *
+ * These are additive overrides layered on top of @payloadcms/next/css (imported
+ * before this file in (payload)/layout.tsx). Selectors target stable Payload 3
+ * classes; if a class name shifts in a future Payload version the rule is simply
+ * inert — nothing breaks.
+ */
+
+// Brand tokens (kept local so they don't leak into the rest of the app).
+:root {
+  --swarg-grad: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+  --swarg-grad-hover: linear-gradient(135deg, #9333ea 0%, #db2777 100%);
+  --swarg-accent: #a855f7;
+}
+
+/* Primary action buttons (login "Login", Save/Create, etc.) → brand gradient. */
+.btn.btn--style-primary,
+.btn--style-primary {
+  background: var(--swarg-grad);
+  border-color: transparent;
+  color: #fff;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--swarg-grad-hover);
+    border-color: transparent;
+  }
+
+  .btn__content,
+  .btn__label {
+    color: #fff;
+  }
+}
+
+/* Active sidebar nav entry → brand accent bar + tint. Covers both the
+ * `--active` BEM modifier and the plain `.active` class across Payload versions. */
+.nav__link--active,
+.nav .nav__link.active {
+  box-shadow: inset 3px 0 0 0 var(--swarg-accent);
+  font-weight: 600;
+}
+
+/* Inline links inside admin content (welcome card excluded — it owns its own). */
+.template-default a:not(.btn):not([class*='before-dashboard']):hover {
+  color: var(--swarg-accent);
+}
+
+/* Login screen polish — center & space the branded logo lockup. */
+.login__brand,
+.login .logo {
+  margin-bottom: 1.25rem;
+}
+
+/* Slightly brand-tinted focus ring on form fields for cohesion. */
+.field-type input:focus,
+.field-type textarea:focus,
+.field-type .rs__control--is-focused {
+  border-color: var(--swarg-accent);
+}
+
+/* Branded login intro (BeforeLogin component). */
+.swarg-before-login {
+  margin-bottom: 1.25rem;
+
+  &__title {
+    margin: 0 0 0.25rem;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--swarg-accent);
+  }
+
+  &__subtitle {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--theme-elevation-500);
+  }
+}
