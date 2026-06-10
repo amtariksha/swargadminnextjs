@@ -2216,6 +2216,14 @@ export interface DaytimeOrder {
     pool?: 'day_pool' | 'last_mile';
     pool_locked?: 0 | 1 | boolean;
     pool_moved_at?: string | null;
+    // Phase 7 — invoice summary for the Resend control (null until issued).
+    invoice?: {
+        id: number;
+        invoice_number: string | null;
+        pdf_url: string | null;
+        invoice_sent_email_at: string | null;
+        invoice_sent_whatsapp_at: string | null;
+    } | null;
     created_at?: string;
     updated_at?: string;
     items: DaytimeOrderItem[];

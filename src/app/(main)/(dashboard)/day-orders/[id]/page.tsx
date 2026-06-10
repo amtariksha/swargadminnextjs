@@ -7,7 +7,7 @@ import { useDaytimeOrder, useDrivers } from '@/hooks/useData';
 import DaytimeOrderForm from '@/components/DaytimeOrderForm';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { POST, PUT, ApiError } from '@/lib/api';
-import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog, CalendarClock, RefreshCw, Truck } from 'lucide-react';
+import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog, CalendarClock, RefreshCw, Truck, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PAID_STATES = ['paid', 'cash', 'wallet_deducted'];
@@ -110,6 +110,10 @@ export default function DaytimeOrderDetailPage() {
 
     const sendReminder = () =>
         runAction('reminder', () => POST(`/daytime/orders/${id}/send_reminder`), 'Payment reminder sent');
+
+    // Phase 7 — re-deliver the invoice PDF over email + WhatsApp.
+    const resendInvoice = () =>
+        runAction('resend_invoice', () => POST(`/daytime/orders/${id}/resend_invoice`), 'Invoice resent');
 
     const releaseToPool = () =>
         runAction('release',
@@ -299,6 +303,30 @@ export default function DaytimeOrderDetailPage() {
                                 </button>
                             </div>
                         ) : null}
+
+                        {/* Phase 7 — invoice delivery status + resend. */}
+                        {order.invoice && (
+                            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                                <span className="text-slate-300">
+                                    Invoice {order.invoice.invoice_number || `#${order.invoice.id}`}
+                                </span>
+                                {order.invoice.pdf_url && (
+                                    <a href={order.invoice.pdf_url} target="_blank" rel="noopener noreferrer"
+                                        className="flex items-center gap-1 text-blue-300 hover:underline">
+                                        <FileText className="w-4 h-4" /> PDF
+                                    </a>
+                                )}
+                                <span className="text-xs text-slate-500">
+                                    {order.invoice.invoice_sent_email_at ? '✓ emailed' : '— not emailed'}
+                                    {' · '}
+                                    {order.invoice.invoice_sent_whatsapp_at ? '✓ WhatsApp' : '— no WhatsApp'}
+                                </span>
+                                <button onClick={resendInvoice} disabled={busy !== null}
+                                    className="flex items-center gap-2 px-3 py-1.5 text-sm bg-slate-800/60 text-slate-200 rounded-xl hover:bg-slate-800 disabled:opacity-50">
+                                    <FileText className="w-4 h-4" /> {busy === 'resend_invoice' ? 'Resending…' : 'Resend invoice'}
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
                 {order.delivery && (
