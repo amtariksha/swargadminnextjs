@@ -111,6 +111,14 @@ const TEMPLATE_FIELDS: { title: string; description: string; placeholder: string
         description: 'Admin notification fired on every new customer signup.',
         placeholder: 'e.g. swarg_internal_notification',
     },
+    {
+        title: 'Invoice WhatsApp Template',
+        description: 'Phase 7 — sends the tax-invoice PDF to the customer when a day/website '
+            + 'order is invoiced (and via the "Resend invoice" button). Approved MSG91 template '
+            + 'should have 3 body variables: {{1}} name · {{2}} invoice # · {{3}} total, and a '
+            + 'DOCUMENT header (the PDF link). Leave blank to disable WhatsApp invoice delivery.',
+        placeholder: 'e.g. swarg_invoice_v1',
+    },
 ];
 
 // Kill-switch master toggles. Each lives in EITHER app_settings or
