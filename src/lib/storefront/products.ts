@@ -26,6 +26,13 @@ const PRODUCT_COLS = `
   p.meta_title, p.meta_description, p.meta_image, p.og_title, p.og_description,
   p.og_image, p.long_description, p.featured, p.badge_text, p.ingredients,
   p.nutrition_info, p.wp_id,
+  COALESCE(
+    (SELECT hr.gst_rate FROM app_db.product_gst_profile pgp
+       JOIN app_db.hsn_rate hr ON hr.id = pgp.hsn_rate_id
+      WHERE pgp.product_id = p.id LIMIT 1),
+    (SELECT og.default_gst_rate FROM app_db.org_gst_profile og ORDER BY og.id LIMIT 1),
+    0
+  ) AS gst_rate,
   ${TS('p.created_at')} AS created_at, ${TS('p.updated_at')} AS updated_at`
 
 /**
@@ -49,6 +56,9 @@ export function formatProductRow(p: Row): Row {
     sub_cat_id: toInt(p.sub_cat_id),
     price: toFloat(p.price),
     tax: toFloat(p.tax),
+    // Phase 6 — resolved HSN GST rate % (product.tax is vestigial/0). Drives the
+    // web's inclusive CGST/SGST breakup; matches the invoice engine's rate.
+    gst_rate: toFloat(p.gst_rate) ?? 0,
     mrp: toFloat(p.mrp),
     // `|| null` (not ??) to match formatProductData's falsy coalescing — an
     // empty string in the DB serialises as null there, so it must here too.
