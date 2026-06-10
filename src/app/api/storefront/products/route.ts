@@ -79,6 +79,9 @@ export async function GET(req: NextRequest) {
       params.push(`%${q.toLowerCase()}%`)
       where += ` AND LOWER(p.title) LIKE $${params.length}`
     }
+    if (sp.get('featured') === '1') {
+      where += ` AND p.featured = 1`
+    }
     if (locationId != null) {
       params.push(locationId)
       where += ` AND (
