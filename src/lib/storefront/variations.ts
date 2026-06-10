@@ -119,6 +119,8 @@ export function buildAttributeMatrix({
     stock_status: v.stock_status || 'in_stock',
     stock_quantity: v.stock_quantity == null ? null : Number(v.stock_quantity),
     allow_back_order: v.allow_back_order == null ? null : Number(v.allow_back_order),
+    // Per-variant shipping weight in grams (null when unset).
+    weight: numberOrNull(v.weight),
     is_default: Number(v.is_default) === 1,
     attribute_pairs: Array.isArray(v.attribute_pairs)
       ? (v.attribute_pairs as Row[]).map((p) => {

@@ -33,6 +33,15 @@ const PRODUCT_COLS = `
     (SELECT og.default_gst_rate FROM app_db.org_gst_profile og ORDER BY og.id LIMIT 1),
     0
   ) AS gst_rate,
+  -- Shipping weight (grams). app_db.product has no weight column, so we surface
+  -- a representative variant weight (default variant first). Simple products
+  -- have no variant rows → NULL → the web shipping-estimate defaults it. This
+  -- is what lets shipping-estimate read weight from the storefront API instead
+  -- of Payload public.products (Phase 9 unblock).
+  (SELECT v.weight FROM app_db.variant v
+     WHERE v.product_id = p.id AND v.is_active = 1 AND v.archived_at IS NULL
+       AND v.weight IS NOT NULL
+     ORDER BY v.is_default DESC, v.sort_order, v.id LIMIT 1) AS weight,
   ${TS('p.created_at')} AS created_at, ${TS('p.updated_at')} AS updated_at`
 
 /**
@@ -78,6 +87,8 @@ export function formatProductRow(p: Row): Row {
     stock_managed_at: p.stock_managed_at || 'variant',
     cost_price: p.cost_price != null ? toFloat(p.cost_price) : null,
     slug: p.slug || null,
+    // Shipping weight in grams (representative variant; null for simple products).
+    weight: p.weight != null ? toFloat(p.weight) : null,
     // Phase 2 — marketing / SEO
     meta_title: p.meta_title || null,
     meta_description: p.meta_description || null,
@@ -184,7 +195,7 @@ export async function loadVariantPayload(product: Row): Promise<Row | null> {
             ${TS('sale_starts_at')} AS sale_starts_at, ${TS('sale_ends_at')} AS sale_ends_at,
             cost_price, stock_quantity, manage_stock, stock_status,
             allow_back_order, ${D('back_order_next_available')} AS back_order_next_available,
-            image_url, short_description, is_default, sort_order,
+            image_url, short_description, is_default, sort_order, weight,
             is_active, archived_at
      FROM app_db.variant
      WHERE product_id = $1 AND is_active = 1 AND archived_at IS NULL
