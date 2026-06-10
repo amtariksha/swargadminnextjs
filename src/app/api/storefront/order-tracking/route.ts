@@ -73,7 +73,9 @@ export async function GET(req: NextRequest) {
           })),
         },
       },
-      { headers: { 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*' } },
+      // No CORS header on purpose: the response carries PII (address, name)
+      // and swargfooddotcom consumes this server-side only.
+      { headers: { 'Cache-Control': 'no-store' } },
     )
   } catch (error) {
     console.error('[storefront/order-tracking] error:', error)
