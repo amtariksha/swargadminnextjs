@@ -60,7 +60,9 @@ export function buildAttributeMatrix({
   for (const v of valueRows || []) {
     if (!valuesByAttr.has(v.attribute_id)) valuesByAttr.set(v.attribute_id, [])
     valuesByAttr.get(v.attribute_id)!.push({
-      value_id: v.value_id,
+      // pg returns BIGINT as a string — emit numeric ids so the storefront
+      // VariationSelector (which Number()-compares picks) matches correctly.
+      value_id: Number(v.value_id),
       value: v.value,
       slug: v.slug,
       swatch_color: v.swatch_color || null,
@@ -76,7 +78,7 @@ export function buildAttributeMatrix({
   }
 
   const attributes = [...variationDefining].sort(byKeyThenId('sort_order', 'attribute_id')).map((a) => ({
-    attribute_id: a.attribute_id,
+    attribute_id: Number(a.attribute_id),
     name: a.name,
     slug: a.slug,
     display_type: a.display_type || 'dropdown',
@@ -85,7 +87,7 @@ export function buildAttributeMatrix({
   }))
 
   const display_attributes = [...displayOnly].sort(byKeyThenId('sort_order', 'attribute_id')).map((a) => ({
-    attribute_id: a.attribute_id,
+    attribute_id: Number(a.attribute_id),
     name: a.name,
     values: valuesByAttr.get(a.attribute_id) || [],
   }))
@@ -105,7 +107,7 @@ export function buildAttributeMatrix({
   }
 
   const variants = (variantRows || []).map((v) => ({
-    variant_id: v.id,
+    variant_id: Number(v.id),
     slug: v.slug,
     sku: v.sku || null,
     qty_text: v.qty_text || null,
@@ -124,10 +126,10 @@ export function buildAttributeMatrix({
           const attrMeta = attrMetaById.get(p.attribute_id) || ({} as Row)
           const valueMeta = valueMetaById.get(valueId) || ({} as Row)
           return {
-            attribute_id: p.attribute_id,
+            attribute_id: Number(p.attribute_id),
             attribute_name: (attrMeta as Row).name || '',
             attribute_slug: (attrMeta as Row).slug || null,
-            value_id: valueId,
+            value_id: valueId == null ? null : Number(valueId),
             value: valueMeta.value || '',
             value_slug: valueMeta.slug || null,
             swatch_color: valueMeta.swatch_color || null,
