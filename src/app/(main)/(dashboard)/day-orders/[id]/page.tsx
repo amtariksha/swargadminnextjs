@@ -7,7 +7,7 @@ import { useDaytimeOrder, useDrivers } from '@/hooks/useData';
 import DaytimeOrderForm from '@/components/DaytimeOrderForm';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { POST, PUT, ApiError } from '@/lib/api';
-import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog, CalendarClock, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog, CalendarClock, RefreshCw, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PAID_STATES = ['paid', 'cash', 'wallet_deducted'];
@@ -30,6 +30,10 @@ export default function DaytimeOrderDetailPage() {
     const [confirmReassign, setConfirmReassign] = useState(false);
     // Reschedule a morning-recovery order to another delivery date.
     const [rescheduleDate, setRescheduleDate] = useState('');
+    // Phase 5 — move this day order onto the last-mile delivery list, assigned
+    // to a chosen driver. One-way: the order locks (pool_locked) once moved.
+    const [lastMileDriver, setLastMileDriver] = useState<number | ''>('');
+    const [confirmLastMile, setConfirmLastMile] = useState(false);
     // Day drivers (role 6) — who can be recorded as having delivered the order.
     const { data: drivers = [] } = useDrivers();
     const dayDrivers = drivers.filter((d) => d.role_id === 6);
@@ -118,6 +122,15 @@ export default function DaytimeOrderDetailPage() {
             () => POST(`/daytime/orders/${id}/reassign`, { delivery_user_id: reassignTo, reason: reason || undefined }),
             'Delivery reassigned')
             .then(() => { setConfirmReassign(false); setReason(''); });
+
+    // Phase 5 — transfer this day order onto the last-mile delivery list,
+    // assigned to lastMileDriver. Backend creates the orders row(s) + the
+    // assignment; the order locks (one-way) afterward.
+    const moveToLastMile = () =>
+        runAction('lastmile',
+            () => POST(`/admin/orders/move-to-last-mile`, { daytime_order_id: Number(id), driver_id: lastMileDriver }),
+            'Moved to the last-mile delivery list')
+            .then(() => { setConfirmLastMile(false); setLastMileDriver(''); });
 
     const saveReschedule = () =>
         runAction('reschedule',
@@ -264,6 +277,28 @@ export default function DaytimeOrderDetailPage() {
                                 </button>
                             )}
                         </div>
+
+                        {/* Phase 5 — move to the last-mile delivery list (one-way). */}
+                        {order.pool === 'last_mile' || order.pool_locked ? (
+                            <div className="mt-3 flex items-center gap-2 px-3 py-2 text-sm rounded-xl bg-blue-500/15 text-blue-300 w-fit">
+                                <Truck className="w-4 h-4" /> On the last-mile delivery list (locked)
+                            </div>
+                        ) : order.delivery?.status !== 'claimed' && order.delivery?.status !== 'delivered' ? (
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                                <select value={lastMileDriver}
+                                    onChange={(e) => setLastMileDriver(e.target.value ? Number(e.target.value) : '')}
+                                    className="px-3 py-2 text-sm bg-slate-900/50 border border-slate-700/50 rounded-xl text-white">
+                                    <option value="">Last-mile driver…</option>
+                                    {drivers.map((d) => (
+                                        <option key={d.user_id} value={d.user_id}>{d.name}</option>
+                                    ))}
+                                </select>
+                                <button onClick={() => setConfirmLastMile(true)} disabled={busy !== null || lastMileDriver === ''}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-xl hover:bg-indigo-500/30 disabled:opacity-50">
+                                    <Truck className="w-4 h-4" /> {busy === 'lastmile' ? 'Moving…' : 'Move to last-mile list'}
+                                </button>
+                            </div>
+                        ) : null}
                     </div>
                 )}
                 {order.delivery && (
@@ -388,6 +423,16 @@ export default function DaytimeOrderDetailPage() {
                 onCancel={() => setConfirmReassign(false)}
                 confirmText="Reassign"
                 isLoading={busy === 'reassign'}
+            />
+
+            <ConfirmDialog
+                isOpen={confirmLastMile}
+                title="Move to last-mile list"
+                message={`Move order #${order.order_no} onto the last-mile delivery list, assigned to ${drivers.find((d) => d.user_id === lastMileDriver)?.name || 'the selected driver'}? It will be created as a regular delivery order and picked up by the next list generation. This is one-way — the order can't be moved back to the day pool afterward.`}
+                onConfirm={moveToLastMile}
+                onCancel={() => setConfirmLastMile(false)}
+                confirmText="Move to last-mile"
+                isLoading={busy === 'lastmile'}
             />
 
             <ConfirmDialog

@@ -2211,6 +2211,11 @@ export interface DaytimeOrder {
     payment_short_url?: string | null;
     razorpay_payment_id?: string | null;
     paid_at?: string | null;
+    // Phase 5 — fulfilment pool. 'last_mile' / pool_locked=1 once the order has
+    // been transferred onto the last-mile delivery list (one-way).
+    pool?: 'day_pool' | 'last_mile';
+    pool_locked?: 0 | 1 | boolean;
+    pool_moved_at?: string | null;
     created_at?: string;
     updated_at?: string;
     items: DaytimeOrderItem[];
