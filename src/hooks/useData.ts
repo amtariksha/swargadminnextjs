@@ -130,6 +130,13 @@ export interface Category {
     photo?: string;
     status: number;
     created_at: string;
+    // Phase 2 — SEO / web fields (migration 079).
+    slug?: string | null;
+    description?: string | null;
+    banner_image?: string | null;   // bare R2 filename
+    meta_title?: string | null;
+    meta_description?: string | null;
+    is_active?: number;
 }
 
 export function useCategories() {
@@ -151,6 +158,12 @@ export interface Subcategory {
     photo?: string;
     status: number;
     created_at: string;
+    // Phase 2 — SEO / web fields (migration 079).
+    slug?: string | null;
+    description?: string | null;
+    banner_image?: string | null;   // bare R2 filename
+    meta_title?: string | null;
+    meta_description?: string | null;
 }
 
 export function useSubcategories() {

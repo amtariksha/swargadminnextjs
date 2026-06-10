@@ -6,6 +6,7 @@ import { useSubcategories, useCategories, Subcategory } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import R2ImagePicker from '@/components/products/R2ImagePicker';
 import { Plus, Layers, Trash2, Edit, Image as ImageIcon, Upload, X } from 'lucide-react';
 import { POST } from '@/lib/api';
 import { IMAGE_BASE_URL } from '@/config/tenant';
@@ -21,13 +22,17 @@ interface SubcatWithImage extends Subcategory {
     updated_at?: string;
 }
 
+const emptyForm = { title: '', cat_id: '', preferences: '0', slug: '', description: '', meta_title: '', meta_description: '' };
+
 export default function SubcategoriesPage() {
     const { data: subcategories = [], isLoading, refetch } = useSubcategories();
     const { data: categories = [] } = useCategories();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editItem, setEditItem] = useState<SubcatWithImage | null>(null);
     const [deleteItem, setDeleteItem] = useState<SubcatWithImage | null>(null);
-    const [formData, setFormData] = useState({ title: '', cat_id: '', preferences: '0' });
+    const [formData, setFormData] = useState(emptyForm);
+    // Phase 2 — banner image (bare R2 filename, single).
+    const [bannerImage, setBannerImage] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [uploadImage, setUploadImage] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -35,7 +40,8 @@ export default function SubcategoriesPage() {
 
     const openAdd = () => {
         setEditItem(null);
-        setFormData({ title: '', cat_id: '', preferences: '0' });
+        setFormData(emptyForm);
+        setBannerImage([]);
         setUploadImage(null);
         setImagePreview(null);
         setIsModalOpen(true);
@@ -47,7 +53,12 @@ export default function SubcategoriesPage() {
             title: item.title,
             cat_id: String(item.cat_id || item.category_id || ''),
             preferences: String(item.preferences ?? 0),
+            slug: item.slug || '',
+            description: item.description || '',
+            meta_title: item.meta_title || '',
+            meta_description: item.meta_description || '',
         });
+        setBannerImage(item.banner_image ? [item.banner_image] : []);
         setUploadImage(null);
         setImagePreview(null);
         setIsModalOpen(true);
@@ -82,6 +93,11 @@ export default function SubcategoriesPage() {
                     title: formData.title.trim(),
                     cat_id: Number(formData.cat_id),
                     preferences: parseInt(formData.preferences) || 0,
+                    slug: formData.slug.trim(),
+                    description: formData.description,
+                    banner_image: bannerImage[0] || null,
+                    meta_title: formData.meta_title,
+                    meta_description: formData.meta_description,
                 });
                 if (uploadImage) {
                     const fd = new FormData();
@@ -95,6 +111,11 @@ export default function SubcategoriesPage() {
                 const res = await POST<{ response: number; message?: string; id?: number }>('/add_sub_cat', {
                     title: formData.title.trim(),
                     cat_id: Number(formData.cat_id),
+                    slug: formData.slug.trim() || undefined,
+                    description: formData.description || undefined,
+                    banner_image: bannerImage[0] || undefined,
+                    meta_title: formData.meta_title || undefined,
+                    meta_description: formData.meta_description || undefined,
                 });
                 const resData = res.data || res as unknown as { response: number; message?: string; id?: number };
                 if (resData.response === 201) {
@@ -218,6 +239,41 @@ export default function SubcategoriesPage() {
                             </div>
                         </>
                     )}
+
+                    {/* Phase 2 — SEO & web (storefront) */}
+                    <div className="border-t border-slate-800/50 pt-4 space-y-4">
+                        <p className="text-sm font-semibold text-white">SEO &amp; Web (storefront)</p>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Slug — URL identifier</label>
+                            <input type="text" value={formData.slug}
+                                onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                                placeholder="auto-generated from title if blank"
+                                className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Description (web)</label>
+                            <textarea value={formData.description} rows={3}
+                                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Meta title</label>
+                            <input type="text" value={formData.meta_title}
+                                onChange={(e) => setFormData({ ...formData, meta_title: e.target.value })}
+                                placeholder="Defaults to subcategory title"
+                                className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Meta description</label>
+                            <textarea value={formData.meta_description} rows={2}
+                                onChange={(e) => setFormData({ ...formData, meta_description: e.target.value })}
+                                className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Banner image (web)</label>
+                            <R2ImagePicker value={bannerImage} onChange={setBannerImage} max={1} />
+                        </div>
+                    </div>
 
                     {/* Image section */}
                     <div>
