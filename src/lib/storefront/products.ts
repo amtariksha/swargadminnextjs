@@ -60,8 +60,10 @@ export function formatProductRow(p: Row): Row {
     updated_at: p.updated_at ?? null,
     is_active: toFlag(p.is_active),
     sub_cat_title: p.sub_cat_title ?? null,
+    sub_cat_slug: p.sub_cat_slug ?? null,
     cat_id: toInt(p.cat_id),
     cat_title: p.cat_title ?? null,
+    cat_slug: p.cat_slug ?? null,
     product_type: p.product_type || 'simple',
     stock_managed_at: p.stock_managed_at || 'variant',
     cost_price: p.cost_price != null ? toFloat(p.cost_price) : null,
@@ -90,7 +92,12 @@ export function formatProductRow(p: Row): Row {
 /** Port of resolveProduct — numeric :slug = id; slug; legacy title fallback. */
 export async function resolveProduct(slugOrId: string): Promise<Row | null> {
   if (!slugOrId) return null
-  const base = `SELECT ${PRODUCT_COLS} FROM app_db.product p`
+  const base = `SELECT ${PRODUCT_COLS},
+                       sc.title AS sub_cat_title, sc.slug AS sub_cat_slug,
+                       sc.cat_id, c.title AS cat_title, c.slug AS cat_slug
+                FROM app_db.product p
+                LEFT JOIN app_db.subcategory sc ON sc.id = p.sub_cat_id
+                LEFT JOIN app_db.category c ON c.id = sc.cat_id`
   const visible = `p.is_active = 1 AND COALESCE(p.web_visible, 1) = 1`
   if (/^\d+$/.test(slugOrId)) {
     const rows = await sfQuery(`${base} WHERE p.id = $1 AND ${visible}`, [parseInt(slugOrId, 10)])

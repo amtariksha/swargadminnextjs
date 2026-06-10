@@ -74,7 +74,7 @@ export async function GET(
           variants: payload ? payload.variants : [],
         },
       },
-      { headers: { 'Cache-Control': CACHE } },
+      { headers: { 'Cache-Control': CACHE, 'Access-Control-Allow-Origin': '*' } },
     )
   } catch (error) {
     console.error('[storefront/products/:slug] error:', error)

@@ -17,7 +17,7 @@ export async function GET() {
     )
     return NextResponse.json(
       { response: 200, data: rows.map((r) => ({ id: toInt(r.id), title: r.title })) },
-      { headers: { 'Cache-Control': CACHE } },
+      { headers: { 'Cache-Control': CACHE, 'Access-Control-Allow-Origin': '*' } },
     )
   } catch (error) {
     console.error('[storefront/delivery-locations] error:', error)

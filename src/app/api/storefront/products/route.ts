@@ -89,7 +89,8 @@ export async function GET(req: NextRequest) {
     }
 
     const products = await sfQuery(
-      `SELECT ${PRODUCT_COLS}, sc.title AS sub_cat_title, sc.cat_id, c.title AS cat_title
+      `SELECT ${PRODUCT_COLS}, sc.title AS sub_cat_title, sc.slug AS sub_cat_slug,
+              sc.cat_id, c.title AS cat_title, c.slug AS cat_slug
        FROM app_db.product p
        LEFT JOIN app_db.subcategory sc ON sc.id = p.sub_cat_id
        LEFT JOIN app_db.category c ON c.id = sc.cat_id
@@ -140,7 +141,7 @@ export async function GET(req: NextRequest) {
           filters: { attribute_value_ids: attrValueIds, sub_cat_id: subCatId, cat_id: catId, q, location: locationId },
         },
       },
-      { headers: { 'Cache-Control': CACHE } },
+      { headers: { 'Cache-Control': CACHE, 'Access-Control-Allow-Origin': '*' } },
     )
   } catch (error) {
     console.error('[storefront/products] list error:', error)

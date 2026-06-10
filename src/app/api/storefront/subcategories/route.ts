@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    return NextResponse.json({ response: 200, data }, { headers: { 'Cache-Control': CACHE } })
+    return NextResponse.json({ response: 200, data }, { headers: { 'Cache-Control': CACHE, 'Access-Control-Allow-Origin': '*' } })
   } catch (error) {
     console.error('[storefront/subcategories] error:', error)
     return NextResponse.json(
