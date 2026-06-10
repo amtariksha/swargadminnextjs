@@ -5,6 +5,13 @@ import { useRouter } from 'next/navigation';
 import { useDaytimeSalesReport, useDaytimeIncentives } from '@/hooks/useData';
 import { ArrowLeft, BarChart3 } from 'lucide-react';
 
+// channel_tag → human label (Phase 1 lead-source tracking, migration 077).
+const SOURCE_LABELS: Record<string, string> = {
+    app: 'Customer App',
+    website: 'Website (swargfood.com)',
+    day: 'Admin / Day entry',
+};
+
 const StatCard = ({ label, value }: { label: string; value: string }) => (
     <div className="glass rounded-xl p-4">
         <p className="text-xs text-slate-400">{label}</p>
@@ -80,6 +87,33 @@ export default function DaytimeReportsPage() {
                                     <td className="py-1.5 text-slate-300">{r.payment_status.replace(/_/g, ' ')}</td>
                                     <td className="text-slate-300">{r.count}</td>
                                     <td className="text-right text-white">₹{r.total.toFixed(2)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </div>
+
+            {/* Lead-source breakdown (channel_tag) */}
+            <div className="glass rounded-xl p-5">
+                <h3 className="text-sm font-semibold text-white mb-3">Sales by Source</h3>
+                {reportLoading ? (
+                    <p className="text-slate-500 text-sm">Loading…</p>
+                ) : !report?.source_breakdown?.length ? (
+                    <p className="text-slate-500 text-sm">No orders in range</p>
+                ) : (
+                    <table className="w-full text-sm">
+                        <thead><tr className="text-slate-400 text-left">
+                            <th className="py-1.5">Source</th><th>Orders</th>
+                            <th className="text-right">Paid</th><th className="text-right">Total</th>
+                        </tr></thead>
+                        <tbody>
+                            {report.source_breakdown.map((r) => (
+                                <tr key={r.channel_tag} className="border-t border-slate-800/50">
+                                    <td className="py-1.5 text-slate-300">{SOURCE_LABELS[r.channel_tag] ?? r.channel_tag}</td>
+                                    <td className="text-slate-300">{r.count}</td>
+                                    <td className="text-right text-white">₹{r.paid_total.toFixed(2)}</td>
+                                    <td className="text-right text-slate-300">₹{r.total.toFixed(2)}</td>
                                 </tr>
                             ))}
                         </tbody>

@@ -2231,6 +2231,9 @@ export interface DaytimeSalesReport {
         unpaid_orders: number;
     };
     payment_breakdown: { payment_status: string; count: number; total: number }[];
+    // Lead-source breakdown (channel_tag: 'app' | 'website' | 'day'). Phase 1 of
+    // the swargfood.com unification — see migration 077_order_channel_tag.sql.
+    source_breakdown: { channel_tag: string; count: number; paid_total: number; total: number }[];
     per_exec: {
         exec_id: number;
         exec_name?: string;
