@@ -10,10 +10,30 @@ import { useIntermediates } from '@/hooks/useProduction';
 import FormField, { FormSection, inputClassName, selectClassName, textareaClassName, dateInputClassName, fieldNumber, fieldDate, fieldSelect, fieldText, fieldWide } from '@/components/FormField';
 import ImageUpload from '@/components/ImageUpload';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import DeliveryLocationMultiSelect from '@/components/products/DeliveryLocationMultiSelect';
+import RelatedProductsMultiSelect from '@/components/products/RelatedProductsMultiSelect';
+import R2ImagePicker from '@/components/products/R2ImagePicker';
+import { plainTextToLexical, lexicalToPlainText } from '@/lib/lexical';
 import { IMAGE_BASE_URL } from '@/config/tenant';
 import { ArrowLeft, Save, Trash2, Upload, X, Layers } from 'lucide-react';
 import { toast } from 'sonner';
 import { POST } from '@/lib/api';
+
+// Build the fixed nutrition_info object from the form's string fields; returns
+// null when every field is blank (so the column stores NULL, not {}).
+const buildNutrition = (n: Record<string, string>): Record<string, unknown> | null => {
+    const num = (v?: string) => {
+        const f = parseFloat(v || '');
+        return Number.isFinite(f) ? f : undefined;
+    };
+    const out: Record<string, unknown> = {};
+    if (n.servingSize) out.servingSize = n.servingSize;
+    for (const k of ['calories', 'protein', 'fat', 'carbs', 'fiber'] as const) {
+        const v = num(n[k]);
+        if (v != null) out[k] = v;
+    }
+    return Object.keys(out).length > 0 ? out : null;
+};
 
 const productSchema = z.object({
     title: z.string().min(1, 'Title is required'),
@@ -54,6 +74,14 @@ const productSchema = z.object({
     product_type: z.enum(['simple', 'variable']).optional(),
     stock_managed_at: z.enum(['variant', 'parent']).optional(),
     cost_price: z.number().min(0).optional(),
+    // Phase 2 — marketing / SEO text fields (complex fields live in useState).
+    meta_title: z.string().optional(),
+    meta_description: z.string().optional(),
+    og_title: z.string().optional(),
+    og_description: z.string().optional(),
+    badge_text: z.string().optional(),
+    wp_id: z.string().optional(),
+    featured: z.number().optional(),
 });
 
 type ProductFormData = z.infer<typeof productSchema>;
@@ -71,6 +99,15 @@ export default function EditProductPage() {
     const [deleteImageId, setDeleteImageId] = useState<number | null>(null);
     const [deleteProductConfirm, setDeleteProductConfirm] = useState(false);
     const sliderFileRef = useRef<HTMLInputElement>(null);
+    // Phase 2 — marketing fields not managed by react-hook-form.
+    const [metaImage, setMetaImage] = useState<string[]>([]);
+    const [ogImage, setOgImage] = useState<string[]>([]);
+    const [gallery, setGallery] = useState<string[]>([]);
+    const [relatedIds, setRelatedIds] = useState<number[]>([]);
+    const [deliveryLocationIds, setDeliveryLocationIds] = useState<number[]>([]);
+    const [longDescription, setLongDescription] = useState('');
+    const [ingredients, setIngredients] = useState('');
+    const [nutrition, setNutrition] = useState<Record<string, string>>({});
 
     const { register, handleSubmit, reset, watch, formState: { errors } } = useForm<ProductFormData>({
         resolver: zodResolver(productSchema),
@@ -119,6 +156,30 @@ export default function EditProductPage() {
                 product_type: product.product_type || 'simple',
                 stock_managed_at: product.stock_managed_at || 'variant',
                 cost_price: product.cost_price ?? undefined,
+                meta_title: product.meta_title || '',
+                meta_description: product.meta_description || '',
+                og_title: product.og_title || '',
+                og_description: product.og_description || '',
+                badge_text: product.badge_text || '',
+                wp_id: product.wp_id || '',
+                featured: product.featured ?? 0,
+            });
+            // Phase 2 — complex marketing fields (not RHF-managed).
+            setMetaImage(product.meta_image ? [product.meta_image] : []);
+            setOgImage(product.og_image ? [product.og_image] : []);
+            setGallery(Array.isArray(product.gallery) ? product.gallery : []);
+            setRelatedIds(Array.isArray(product.related_product_ids) ? product.related_product_ids : []);
+            setDeliveryLocationIds(Array.isArray(product.delivery_locations) ? product.delivery_locations : []);
+            setLongDescription(lexicalToPlainText(product.long_description));
+            setIngredients(lexicalToPlainText(product.ingredients));
+            const ni = product.nutrition_info || {};
+            setNutrition({
+                servingSize: ni.servingSize != null ? String(ni.servingSize) : '',
+                calories: ni.calories != null ? String(ni.calories) : '',
+                protein: ni.protein != null ? String(ni.protein) : '',
+                fat: ni.fat != null ? String(ni.fat) : '',
+                carbs: ni.carbs != null ? String(ni.carbs) : '',
+                fiber: ni.fiber != null ? String(ni.fiber) : '',
             });
         }
         // `variationsEnabled` is intentionally a dep: it resolves from an async
@@ -161,6 +222,17 @@ export default function EditProductPage() {
                 allow_back_order: backOrder ? 1 : 0,
                 back_order_next_available: backOrder ? data.back_order_next_available : null,
                 cost_price: data.cost_price != null && data.cost_price !== 0 ? data.cost_price : null,
+                // Phase 2 — marketing fields. Text/featured come via ...data;
+                // override featured to 0/1 and attach the useState-managed ones.
+                featured: data.featured ? 1 : 0,
+                meta_image: metaImage[0] || null,
+                og_image: ogImage[0] || null,
+                long_description: plainTextToLexical(longDescription),
+                ingredients: plainTextToLexical(ingredients),
+                nutrition_info: buildNutrition(nutrition),
+                gallery,
+                related_product_ids: relatedIds,
+                delivery_location_ids: deliveryLocationIds,
             };
             // Variations (migration 030). Only touch product_type / stock_managed_at
             // when the variations UI is actually shown. When the tenant flag is off
@@ -462,6 +534,67 @@ export default function EditProductPage() {
                     <FormField label="Disclaimer" error={errors.disclaimer}>
                         <textarea {...register('disclaimer')} rows={2} className={textareaClassName} />
                     </FormField>
+
+                    {/* Phase 2 — Marketing & SEO */}
+                    <h3 className="text-lg font-semibold text-white pt-4 border-t border-slate-800/50">Marketing &amp; SEO</h3>
+                    <FormField label="Meta title" className={fieldWide}>
+                        <input {...register('meta_title')} className={inputClassName} placeholder="Defaults to product title" />
+                    </FormField>
+                    <FormField label="Meta description" className={fieldWide}>
+                        <textarea {...register('meta_description')} rows={2} className={textareaClassName} />
+                    </FormField>
+                    <FormField label="OG title (social share)" className={fieldWide}>
+                        <input {...register('og_title')} className={inputClassName} />
+                    </FormField>
+                    <FormField label="OG description" className={fieldWide}>
+                        <textarea {...register('og_description')} rows={2} className={textareaClassName} />
+                    </FormField>
+                    <div className="flex flex-wrap gap-6">
+                        <FormField label="Meta image"><R2ImagePicker value={metaImage} onChange={setMetaImage} max={1} /></FormField>
+                        <FormField label="OG image"><R2ImagePicker value={ogImage} onChange={setOgImage} max={1} /></FormField>
+                    </div>
+                    <div className="flex flex-wrap gap-4">
+                        <FormField label="Featured on website" className={fieldSelect}>
+                            <select {...register('featured', { valueAsNumber: true })} className={selectClassName}>
+                                <option value={0}>No</option>
+                                <option value={1}>Yes</option>
+                            </select>
+                        </FormField>
+                        <FormField label="Badge text" className={fieldText}>
+                            <input {...register('badge_text')} className={inputClassName} placeholder="e.g. Bestseller" />
+                        </FormField>
+                        <FormField label="Legacy WP id (audit)" className={fieldText}>
+                            <input {...register('wp_id')} className={inputClassName} />
+                        </FormField>
+                    </div>
+
+                    {/* Phase 2 — Web content */}
+                    <h3 className="text-lg font-semibold text-white pt-4 border-t border-slate-800/50">Web content</h3>
+                    <FormField label="Long description" hint="Rendered as rich text on swargfood.com. Plain text for now — one paragraph per line; a full editor is a later upgrade.">
+                        <textarea value={longDescription} onChange={(e) => setLongDescription(e.target.value)} rows={5} className={textareaClassName} />
+                    </FormField>
+                    <FormField label="Ingredients" hint="One item / paragraph per line.">
+                        <textarea value={ingredients} onChange={(e) => setIngredients(e.target.value)} rows={3} className={textareaClassName} />
+                    </FormField>
+                    <FormField label="Nutrition (per serving)">
+                        <div className="flex flex-wrap gap-3">
+                            {([['servingSize', 'Serving size'], ['calories', 'Calories'], ['protein', 'Protein (g)'], ['fat', 'Fat (g)'], ['carbs', 'Carbs (g)'], ['fiber', 'Fiber (g)']] as const).map(([key, lbl]) => (
+                                <input
+                                    key={key}
+                                    value={nutrition[key] || ''}
+                                    onChange={(e) => setNutrition((n) => ({ ...n, [key]: e.target.value }))}
+                                    placeholder={lbl}
+                                    className={`${inputClassName} w-40`}
+                                />
+                            ))}
+                        </div>
+                    </FormField>
+                    <FormField label="Gallery images"><R2ImagePicker value={gallery} onChange={setGallery} /></FormField>
+                    <FormField label="Related products"><RelatedProductsMultiSelect value={relatedIds} onChange={setRelatedIds} excludeId={Number(id)} /></FormField>
+
+                    {/* Phase 2 — Shippable to (web location gating) */}
+                    <h3 className="text-lg font-semibold text-white pt-4 border-t border-slate-800/50">Shippable to (website)</h3>
+                    <DeliveryLocationMultiSelect value={deliveryLocationIds} onChange={setDeliveryLocationIds} />
 
                     <div className="flex gap-3 pt-4 border-t border-slate-800/50">
                         <button type="button" onClick={() => setDeleteProductConfirm(true)}

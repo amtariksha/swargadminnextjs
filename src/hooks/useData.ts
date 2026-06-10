@@ -218,6 +218,29 @@ export interface Product {
     status?: number;
     category_id?: number;
     subcategory_id?: number;
+    // Phase 2 — marketing / SEO (additive; the web storefront consumes these).
+    meta_title?: string | null;
+    meta_description?: string | null;
+    meta_image?: string | null;          // bare R2 filename
+    og_title?: string | null;
+    og_description?: string | null;
+    og_image?: string | null;            // bare R2 filename
+    long_description?: unknown;          // Payload Lexical JSON
+    ingredients?: unknown;               // Payload Lexical JSON
+    nutrition_info?: {
+        servingSize?: string;
+        calories?: number;
+        protein?: number;
+        fat?: number;
+        carbs?: number;
+        fiber?: number;
+    } | null;
+    featured?: number;
+    badge_text?: string | null;
+    wp_id?: string | null;
+    gallery?: string[];                  // bare R2 filenames
+    related_product_ids?: number[];
+    delivery_locations?: number[];       // available_delivery_location ids
 }
 
 /**
