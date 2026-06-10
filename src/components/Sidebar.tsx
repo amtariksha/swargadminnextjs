@@ -221,9 +221,6 @@ const navItems: NavItem[] = [
     // 17-18
     { name: 'Admin Users', href: '/admin-users', icon: <Users className="w-5 h-5" /> },
     { name: 'Roles & Permissions', href: '/roles', icon: <Settings className="w-5 h-5" /> },
-    // Stock-sync UI: links MySQL ops products with Payload web products so
-    // stock is managed in one place (the existing /products screen).
-    { name: 'Product Sync', href: '/product-sync', icon: <Package className="w-5 h-5" />, permissionKey: 'product-sync' },
     // --- CMS --- (Payload, mounted at /admin via Next route group (payload))
     // The Topbar Operations↔CMS toggle uses the same route. Adding a sidebar
     // entry lets a role be granted CMS access without exposing the toggle to
@@ -315,7 +312,7 @@ const navItems: NavItem[] = [
 const DIVIDER_AFTER = new Set<string>([
     'Dashboard', 'Delivery List', 'Performance Report', 'Users', 'Products',
     'Transactions', 'Refunds', 'Payroll', 'Settings', 'Notifications',
-    'WhatsApp', 'CRM', 'LMS', 'Product Sync', 'CMS',
+    'WhatsApp', 'CRM', 'LMS', 'CMS',
 ]);
 
 interface SidebarProps {
@@ -342,7 +339,7 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'subcategories', 'delivery-list', 'delivery-report', 'transactions',
     'banners', 'testimonials', 'pincodes', 'settings', 'notifications',
     'admin-users', 'roles', 'production-delivery', 'cms', 'whatsapp',
-    'product-sync', 'crm', 'inventory', 'production', 'refunds', 'payroll',
+    'crm', 'inventory', 'production', 'refunds', 'payroll',
     'app-updates', 'drop-points', 'broadcast', 'packaging', 'day-orders',
     'lms',
     // AI-Accountant section (GST invoicing, ledgers, Tally sync, bank recon).
