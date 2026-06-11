@@ -7,18 +7,15 @@ import { fileURLToPath } from 'url'
 
 // Collections
 import { CartSessions } from './collections/CartSessions'
-import { Areas } from './collections/Areas'
 import { Categories } from './collections/Categories'
 import { Conversations } from './collections/Conversations'
 import { Coupons } from './collections/Coupons'
 import { Customers } from './collections/Customers'
 import { FAQs } from './collections/FAQs'
-import { InstagramPosts } from './collections/InstagramPosts'
 import { Media } from './collections/Media'
 import { Orders } from './collections/Orders'
 import { Pages } from './collections/Pages'
 import { Posts } from './collections/Posts'
-import { PressMentions } from './collections/PressMentions'
 import { Products } from './collections/Products'
 import { Recipes } from './collections/Recipes'
 import { Reviews } from './collections/Reviews'
@@ -129,9 +126,6 @@ export default buildConfig({
     TeamMembers,
     StoreLocations,
     FAQs,
-    Areas,
-    InstagramPosts,
-    PressMentions,
     // Communication
     Conversations,
     Subscribers,

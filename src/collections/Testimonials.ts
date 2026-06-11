@@ -2,7 +2,6 @@ import type { CollectionConfig } from 'payload'
 
 import { anyone } from '../access/anyone'
 import { authenticated } from '../access/authenticated'
-import { revalidateFrontend, revalidateFrontendDelete } from '../hooks/revalidateFrontend'
 
 export const Testimonials: CollectionConfig = {
   slug: 'testimonials',
@@ -72,9 +71,5 @@ export const Testimonials: CollectionConfig = {
       admin: { hidden: true, description: 'Legacy WordPress ID for migration idempotency.' },
     },
   ],
-  hooks: {
-    afterChange: [revalidateFrontend('/')],
-    afterDelete: [revalidateFrontendDelete('/')],
-  },
   timestamps: true,
 }

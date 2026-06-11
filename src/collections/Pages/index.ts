@@ -7,13 +7,10 @@ import { CallToAction } from '../../blocks/CallToAction/config'
 import { Content } from '../../blocks/Content/config'
 import { FAQAccordion } from '../../blocks/FAQAccordion/config'
 import { FormBlock } from '../../blocks/Form/config'
-import { InstagramGrid } from '../../blocks/InstagramGrid/config'
 import { MediaBlock } from '../../blocks/MediaBlock/config'
 import { StoreLocator } from '../../blocks/StoreLocator/config'
 import { TeamGrid } from '../../blocks/TeamGrid/config'
 import { TestimonialsSlider } from '../../blocks/TestimonialsSlider/config'
-import { Timeline } from '../../blocks/Timeline/config'
-import { Video } from '../../blocks/Video/config'
 import { hero } from '@/heros/config'
 import { slugField } from 'payload'
 import { populatePublishedAt } from '../../hooks/populatePublishedAt'
@@ -89,9 +86,6 @@ export const Pages: CollectionConfig<'pages'> = {
                 TestimonialsSlider,
                 StoreLocator,
                 TeamGrid,
-                Video,
-                Timeline,
-                InstagramGrid,
               ],
               required: true,
               admin: {
