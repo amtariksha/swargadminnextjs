@@ -7,6 +7,10 @@ export const Products: CollectionConfig = {
     useAsTitle: 'title',
     defaultColumns: ['title', 'price', 'stockQty', 'shippability', 'platformVisibility', 'inStock'],
     group: 'Commerce',
+    // Managed in the custom ops admin (/products → node). Hidden from the Payload
+    // nav to declutter Commerce; still registered so relationships, the REST API,
+    // and storefront reads keep working. Reachable by direct URL if ever needed.
+    hidden: true,
   },
   access: {
     read: () => true, // Public read for storefront

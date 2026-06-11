@@ -8,6 +8,11 @@ export const Customers: CollectionConfig = {
     useAsTitle: 'name',
     defaultColumns: ['name', 'phone', 'email', 'zone', 'createdAt'],
     group: 'Commerce',
+    // Customers are managed in the custom ops admin (/users, /accounting → node).
+    // Still read/written by the storefront reviews flow and referenced by
+    // Reviews/Orders/CartSessions, so it stays registered — just hidden from the
+    // nav to declutter Commerce.
+    hidden: true,
   },
   // Customer records contain PII (phone, email, addresses). The previous
   // `read: () => true` left them readable by anonymous callers via the

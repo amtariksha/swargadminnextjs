@@ -6,6 +6,9 @@ export const TaxRates: CollectionConfig = {
   admin: {
     useAsTitle: 'taxName',
     group: 'Commerce',
+    // Vestigial — GST is HSN-based in the node backend, not these Payload rows.
+    // Kept only because Products.taxRate relates to it; hidden from the nav.
+    hidden: true,
   },
   access: {
     read: () => true,

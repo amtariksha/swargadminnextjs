@@ -6,6 +6,10 @@ export const SubCategories: CollectionConfig = {
   admin: {
     useAsTitle: 'title',
     group: 'Commerce',
+    // Managed in the custom ops admin (/subcategories → node). Hidden from the
+    // Payload nav to declutter Commerce; still registered so the Products
+    // relationship and the REST API keep working.
+    hidden: true,
   },
   access: {
     read: () => true,

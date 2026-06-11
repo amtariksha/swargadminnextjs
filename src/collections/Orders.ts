@@ -8,6 +8,11 @@ export const Orders: CollectionConfig = {
     useAsTitle: 'orderNumber',
     defaultColumns: ['orderNumber', 'status', 'total', 'paymentMethod', 'createdAt'],
     group: 'Commerce',
+    // Live orders are managed in the custom ops admin (/orders, /day-orders →
+    // node). This Payload collection holds only legacy pre-Phase-4 orders and is
+    // still read by the Razorpay webhook + order-tracking fallback, so it stays
+    // registered — just hidden from the nav to declutter Commerce.
+    hidden: true,
   },
   // Order records contain PII + payment metadata. Previously
   // `read: () => true` left them readable by anonymous callers via the

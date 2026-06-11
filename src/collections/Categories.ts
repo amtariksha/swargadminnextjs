@@ -15,6 +15,10 @@ export const Categories: CollectionConfig = {
   admin: {
     useAsTitle: 'title',
     group: 'Commerce',
+    // Managed in the custom ops admin (/categories → node). Hidden from the
+    // Payload nav to declutter Commerce; still registered so relationships and
+    // the REST API keep working. Reachable by direct URL if ever needed.
+    hidden: true,
   },
   fields: [
     { name: 'mysqlId', type: 'number', unique: true, index: true, admin: { description: 'ID from Swarg MySQL' } },
