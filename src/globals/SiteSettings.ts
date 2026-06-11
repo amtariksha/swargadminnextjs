@@ -17,6 +17,22 @@ export const SiteSettings: GlobalConfig = {
     { name: 'contactEmail', type: 'email', defaultValue: 'contact@swargfood.com' },
     { name: 'contactPhone', type: 'text', defaultValue: '+91-7996196111' },
     { name: 'whatsappNumber', type: 'text', defaultValue: '917996196111' },
+    {
+      name: 'foundingYear',
+      type: 'number',
+      defaultValue: 2011,
+      admin: { description: 'Used in Organization schema and heritage copy.' },
+    },
+    {
+      name: 'fssaiLicense',
+      type: 'text',
+      admin: { description: 'FSSAI license number — shown in the website footer and /quality page.' },
+    },
+    {
+      name: 'gbpUrl',
+      type: 'text',
+      admin: { description: 'Google Business Profile URL (for Organization schema sameAs).' },
+    },
     { name: 'registeredAddress', type: 'textarea', defaultValue: 'Survey no 29, 2nd block, Vaddarapalya, JP Nagar 8th Phase, Gottigere, Bengaluru – 560083' },
     {
       name: 'socialLinks',
