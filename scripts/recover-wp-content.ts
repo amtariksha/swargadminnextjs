@@ -48,12 +48,19 @@ const UPLOADS_DIR =
 
 // In-scope items (clean canonical slug → WP source id). Everything else in WP
 // is now a code route on swargfooddotcom and is intentionally NOT recovered.
-const POSTS: Array<{ wpId: number; slug: string }> = [
-  { wpId: 2632, slug: 'forest-grazing-v-s-grass-fed' },
+// `aliases` = other slugs the same logical doc exists under (variant dupes the
+// wpId / -wp-N candidate query wouldn't otherwise catch).
+interface Item {
+  wpId: number
+  slug: string
+  aliases?: string[]
+}
+const POSTS: Item[] = [
+  { wpId: 2632, slug: 'forest-grazing-v-s-grass-fed', aliases: ['forest-grazing-vs-grass-fed'] },
   { wpId: 3461, slug: 'raw-vs-pasteurized-milk' },
   { wpId: 777, slug: 'swargs-full-moon-ghee' },
 ]
-const PAGES: Array<{ wpId: number; slug: string }> = [
+const PAGES: Item[] = [
   { wpId: 211, slug: 'about' },
   { wpId: 3, slug: 'privacy-policy' },
   { wpId: 120, slug: 'terms-and-conditions' },
@@ -160,13 +167,13 @@ async function uploadMedia(
 async function findCandidates(
   payload: AnyPayload,
   collection: 'posts' | 'pages',
-  slug: string,
-  wpId: number,
+  item: Item,
 ) {
+  const slugs = [item.slug, `${item.slug}-wp-${item.wpId}`, ...(item.aliases || [])]
   const res = await payload.find({
     collection,
     where: {
-      or: [{ slug: { in: [slug, `${slug}-wp-${wpId}`] } }, { wpId: { equals: String(wpId) } }],
+      or: [{ slug: { in: slugs } }, { wpId: { equals: String(item.wpId) } }],
     },
     limit: 50,
     depth: 0,
@@ -177,11 +184,7 @@ async function findCandidates(
   return res.docs as Array<{ id: string | number; slug?: string; wpId?: string }>
 }
 
-async function recover(
-  payload: AnyPayload,
-  collection: 'posts' | 'pages',
-  item: { wpId: number; slug: string },
-) {
+async function recover(payload: AnyPayload, collection: 'posts' | 'pages', item: Item) {
   const { title, content, date } = wpPost(item.wpId)
   console.log(`\n[${collection}] ${item.slug}  (wpId ${item.wpId}) — "${title}"`)
 
@@ -214,7 +217,7 @@ async function recover(
   }
 
   // Resolve canonical doc + duplicates.
-  const cands = await findCandidates(payload, collection, item.slug, item.wpId)
+  const cands = await findCandidates(payload, collection, item)
   const canonical =
     cands.find((d) => d.slug === item.slug) ||
     cands.find((d) => d.slug === `${item.slug}-wp-${item.wpId}`) ||
