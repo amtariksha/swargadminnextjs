@@ -153,8 +153,13 @@ interface DropPointStop {
     truck_driver_user_id: number | null;
     mark_lat: number | null;     // where the truck driver marked it delivered
     mark_lng: number | null;
+    // Supply routing (migration 083): the warehouse feeding this stop + mode.
+    warehouse_name: string | null;
+    supply_mode: 'truck' | 'factory_pickup' | null;
+    supply_truck_driver_name: string | null;
     total_qty: number;
     order_count: number;
+    customer_count: number;
     products: Array<{ product_id: number; product_title: string; qty_text: string | null; total_qty: number }>;
     // Per consolidated last-mile driver "box": that driver's product list with
     // the truck-stage box outcome (box_status: null=pending, 3=delivered,
@@ -182,6 +187,10 @@ interface DropPointStop {
         product_title: string;
         qty_text: string | null;
         ordered_qty: number;
+        // generated_qty = the list-cron schedule; marked_qty = the driver's
+        // delivered value (null until marked); delivered_qty = final (compat).
+        generated_qty: number;
+        marked_qty: number | null;
         delivered_qty: number;
         status: number;     // 1 pending | 2 not-delivered | 3 delivered
         reason: string | null;
@@ -888,88 +897,115 @@ export default function DeliveryListPage() {
                             assigned to a drop point yet, or the delivery list hasn&apos;t been generated.
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        // One COLLAPSED line per drop point; chevron expands to the flat
+                        // delivery list (driver shown per row) + driver boxes + returnables.
+                        <div className="glass rounded-xl divide-y divide-slate-800/50">
                             {dropPointStops.map((stop) => {
                                 const delivered = stop.status === 3;
+                                const expanded = expandedDrops.has(stop.drop_point_id);
                                 return (
-                                    <div key={stop.drop_point_id} className="glass rounded-xl p-5 space-y-3">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs font-mono text-slate-500">#{stop.route_order}</span>
-                                                    <h2 className="text-white font-semibold">{stop.title}</h2>
-                                                </div>
-                                                <p className="text-xs text-slate-500 mt-0.5">
-                                                    {stop.order_count} customer{stop.order_count === 1 ? '' : 's'} · {stop.total_qty} total qty
-                                                </p>
-                                            </div>
-                                            <span className={`text-xs font-medium px-2 py-1 rounded-lg shrink-0 ${delivered
-                                                ? 'bg-green-500/20 text-green-400'
-                                                : 'bg-amber-500/20 text-amber-300'
-                                                }`}>
-                                                {delivered ? 'Delivered' : 'Pending'}
-                                            </span>
-                                        </div>
-                                        {/* Flat per-customer-order lines — ordered → delivered (before/after) + status */}
-                                        <div className="border-t border-slate-800/50 pt-2">
-                                            {stop.lines.length === 0 ? (
-                                                <p className="text-xs text-slate-500">No customer lines.</p>
-                                            ) : (
-                                                <div className="space-y-1">
-                                                    {stop.lines.map((ln) => {
-                                                        const changed = ln.status !== 1 && ln.delivered_qty !== ln.ordered_qty;
-                                                        const st = ln.status === 3
-                                                            ? { label: 'Delivered', cls: 'bg-green-500/20 text-green-400' }
-                                                            : ln.status === 2
-                                                                ? { label: 'Not delivered', cls: 'bg-red-500/20 text-red-300' }
-                                                                : { label: 'Pending', cls: 'bg-amber-500/20 text-amber-300' };
-                                                        return (
-                                                            <div key={ln.pre_delivery_id} className="flex items-center justify-between gap-2 text-xs">
-                                                                <span className="text-slate-300 truncate">
-                                                                    {ln.customer_name}
-                                                                    <span className="text-slate-600"> · {ln.product_title}</span>
-                                                                    {ln.driver_name ? <span className="text-slate-600"> · {ln.driver_name}</span> : null}
-                                                                </span>
-                                                                <span className="flex items-center gap-2 shrink-0">
-                                                                    <span className={`font-mono ${changed ? 'text-amber-300' : 'text-slate-400'}`}
-                                                                        title={changed ? `ordered ${ln.ordered_qty} → delivered ${ln.delivered_qty}` : undefined}>
-                                                                        {ln.ordered_qty}{changed ? ` → ${ln.delivered_qty}` : ''}
-                                                                        {ln.qty_text ? <span className="text-slate-600"> {ln.qty_text}</span> : null}
-                                                                    </span>
-                                                                    <span className={`px-1.5 py-0.5 rounded ${st.cls}`}
-                                                                        title={ln.status === 2 && ln.reason ? ln.reason : undefined}>
-                                                                        {st.label}
-                                                                    </span>
-                                                                </span>
-                                                            </div>
-                                                        );
-                                                    })}
-                                                </div>
+                                    <div key={stop.drop_point_id}>
+                                        {/* Collapsed single line */}
+                                        <button onClick={() => toggleDropExpand(stop.drop_point_id)}
+                                            className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-800/30">
+                                            {expanded ? <ChevronDown className="w-4 h-4 text-purple-300 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />}
+                                            <span className="text-xs font-mono text-slate-500 w-8 shrink-0">#{stop.route_order}</span>
+                                            <span className="text-white font-medium truncate min-w-[120px]">{stop.title}</span>
+                                            {stop.supply_mode && (
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded shrink-0 ${stop.supply_mode === 'factory_pickup'
+                                                    ? 'bg-amber-500/15 text-amber-300' : 'bg-blue-500/15 text-blue-300'}`}
+                                                    title={stop.warehouse_name ? `Warehouse: ${stop.warehouse_name}` : undefined}>
+                                                    {stop.supply_mode === 'factory_pickup'
+                                                        ? 'Dairy pickup'
+                                                        : `Truck${stop.supply_truck_driver_name ? ` · ${stop.supply_truck_driver_name}` : ''}`}
+                                                </span>
                                             )}
-                                        </div>
-                                        {stop.drivers.length > 0 && (
-                                            <div className="border-t border-slate-800/50 pt-2">
-                                                <button onClick={() => toggleDropExpand(stop.drop_point_id)}
-                                                    className="flex items-center gap-1 text-xs text-purple-300 hover:text-purple-200">
-                                                    {expandedDrops.has(stop.drop_point_id) ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                                                    {stop.drivers.length} driver box{stop.drivers.length === 1 ? '' : 'es'}
-                                                </button>
-                                                {expandedDrops.has(stop.drop_point_id) && (
-                                                    <div className="mt-2 space-y-2">
+                                            <span className="flex items-center gap-4 ml-auto shrink-0 text-xs">
+                                                <span className="text-slate-400">
+                                                    <strong className="text-white">{stop.customer_count || stop.order_count}</strong> customers
+                                                </span>
+                                                <span className="text-slate-400">
+                                                    <strong className="text-purple-300">{stop.total_qty}</strong> qty
+                                                </span>
+                                                <span className="text-slate-500 hidden md:inline">
+                                                    {stop.delivered_at ? `Dropped ${stop.delivered_at}` : '—'}
+                                                </span>
+                                                {stop.mark_lat != null && stop.mark_lng != null && (
+                                                    <a href={`https://maps.google.com/?q=${stop.mark_lat},${stop.mark_lng}`}
+                                                        target="_blank" rel="noreferrer"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                        className="flex items-center gap-1 text-purple-400 hover:text-purple-300"
+                                                        title="Where the truck driver marked this drop">
+                                                        <MapPin className="w-3.5 h-3.5" />
+                                                    </a>
+                                                )}
+                                                <span className={`font-medium px-2 py-1 rounded-lg ${delivered
+                                                    ? 'bg-green-500/20 text-green-400'
+                                                    : 'bg-amber-500/20 text-amber-300'}`}>
+                                                    {delivered ? 'Delivered' : 'Pending'}
+                                                </span>
+                                            </span>
+                                        </button>
+
+                                        {/* Expanded detail */}
+                                        {expanded && (
+                                            <div className="px-4 pb-4 pl-11 space-y-3">
+                                                {/* Flat delivery list — route/driver shown per row */}
+                                                {stop.lines.length === 0 ? (
+                                                    <p className="text-xs text-slate-500">No customer lines.</p>
+                                                ) : (
+                                                    <div className="space-y-1">
+                                                        {stop.lines.map((ln) => {
+                                                            const gen = ln.generated_qty ?? ln.ordered_qty;
+                                                            const marked = ln.marked_qty ?? (ln.status === 2 ? 0 : null);
+                                                            const changed = marked != null && marked !== gen;
+                                                            const st = ln.status === 3
+                                                                ? { label: 'Delivered', cls: 'bg-green-500/20 text-green-400' }
+                                                                : ln.status === 2
+                                                                    ? { label: 'Not delivered', cls: 'bg-red-500/20 text-red-300' }
+                                                                    : { label: 'Pending', cls: 'bg-amber-500/20 text-amber-300' };
+                                                            return (
+                                                                <div key={ln.pre_delivery_id} className="flex items-center justify-between gap-2 text-xs">
+                                                                    <span className="text-slate-300 truncate">
+                                                                        <span className="text-slate-500">{ln.driver_name || 'Unassigned'} · </span>
+                                                                        {ln.customer_name}
+                                                                        <span className="text-slate-600"> · {ln.product_title}</span>
+                                                                    </span>
+                                                                    <span className="flex items-center gap-2 shrink-0">
+                                                                        <span className={`font-mono ${changed ? 'text-amber-300' : 'text-slate-400'}`}
+                                                                            title={changed ? `generated ${gen} → driver marked ${marked}` : `generated ${gen}`}>
+                                                                            {gen}{marked != null && marked !== gen ? ` → ${marked}` : ''}
+                                                                            {ln.qty_text ? <span className="text-slate-600"> {ln.qty_text}</span> : null}
+                                                                        </span>
+                                                                        <span className={`px-1.5 py-0.5 rounded ${st.cls}`}
+                                                                            title={ln.status === 2 && ln.reason ? ln.reason : undefined}>
+                                                                            {st.label}
+                                                                        </span>
+                                                                    </span>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+
+                                                {/* Per-driver truck boxes */}
+                                                {stop.drivers.length > 0 && (
+                                                    <div className="border-t border-slate-800/50 pt-2 space-y-2">
+                                                        <p className="text-[11px] uppercase text-slate-500">Driver boxes (truck handoff)</p>
                                                         {stop.drivers.map((drv) => (
                                                             <div key={drv.driver_user_id} className="rounded-lg bg-slate-800/30 p-2">
                                                                 <p className="text-xs font-medium text-white mb-1">{drv.driver_name}</p>
                                                                 <div className="space-y-1">
                                                                     {drv.products.map((p) => {
                                                                         const badge = boxBadge(p.box_status);
-                                                                        const delivered = p.box_status === 2 ? 0 : (p.box_delivered_qty ?? p.total_qty);
+                                                                        const boxDelivered = p.box_status === 2 ? 0 : (p.box_delivered_qty ?? p.total_qty);
                                                                         return (
                                                                             <div key={p.product_id} className="flex items-center justify-between gap-2 text-xs">
                                                                                 <span className="text-slate-300 truncate">
                                                                                     {p.product_title}{p.qty_text ? <span className="text-slate-600"> × {p.qty_text}</span> : null}
                                                                                 </span>
                                                                                 <span className="flex items-center gap-2 shrink-0">
-                                                                                    <span className="text-slate-400 font-mono">{delivered}/{p.total_qty}</span>
+                                                                                    <span className="text-slate-400 font-mono">{boxDelivered}/{p.total_qty}</span>
                                                                                     {badge && (
                                                                                         <span className={`px-1.5 py-0.5 rounded ${badge.cls}`} title={p.box_reason ?? undefined}>
                                                                                             {badge.label}
@@ -984,34 +1020,24 @@ export default function DeliveryListPage() {
                                                         ))}
                                                     </div>
                                                 )}
-                                            </div>
-                                        )}
-                                        {(stop.delivered_at || (stop.mark_lat != null && stop.mark_lng != null)) && (
-                                            <div className="flex items-center gap-3 text-xs text-slate-600">
-                                                {stop.delivered_at && <span>Delivered {stop.delivered_at}</span>}
-                                                {stop.mark_lat != null && stop.mark_lng != null && (
-                                                    <a href={`https://maps.google.com/?q=${stop.mark_lat},${stop.mark_lng}`}
-                                                        target="_blank" rel="noreferrer"
-                                                        className="flex items-center gap-1 text-purple-400 hover:text-purple-300">
-                                                        <MapPin className="w-3 h-3" /> Marked here
-                                                    </a>
-                                                )}
-                                            </div>
-                                        )}
-                                        {stop.returnables && (
-                                            <div className="border-t border-slate-800/50 pt-2 flex items-center justify-between gap-3">
-                                                <div className="text-xs text-slate-400 min-w-0">
-                                                    <span className="text-slate-500">Returnables collected: </span>
-                                                    {stop.returnables.counts.length > 0
-                                                        ? stop.returnables.counts.map((c) => `${c.name} ×${c.qty}`).join(', ')
-                                                        : `${stop.returnables.counted_total}`}
-                                                </div>
-                                                {stop.returnables.photo_path && (
-                                                    <a href={stop.returnables.photo_path} target="_blank" rel="noreferrer"
-                                                        className="shrink-0">
-                                                        <img src={stop.returnables.photo_path} alt="returnables"
-                                                            className="w-10 h-10 rounded object-cover border border-slate-700" />
-                                                    </a>
+
+                                                {/* Returnables reconciliation */}
+                                                {stop.returnables && (
+                                                    <div className="border-t border-slate-800/50 pt-2 flex items-center justify-between gap-3">
+                                                        <div className="text-xs text-slate-400 min-w-0">
+                                                            <span className="text-slate-500">Returnables collected: </span>
+                                                            {stop.returnables.counts.length > 0
+                                                                ? stop.returnables.counts.map((c) => `${c.name} ×${c.qty}`).join(', ')
+                                                                : `${stop.returnables.counted_total}`}
+                                                        </div>
+                                                        {stop.returnables.photo_path && (
+                                                            <a href={stop.returnables.photo_path} target="_blank" rel="noreferrer"
+                                                                className="shrink-0">
+                                                                <img src={stop.returnables.photo_path} alt="returnables"
+                                                                    className="w-10 h-10 rounded object-cover border border-slate-700" />
+                                                            </a>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
                                         )}

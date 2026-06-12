@@ -24,6 +24,7 @@ import {
     useDeleteWarehouse,
     type Warehouse,
 } from '@/hooks/useCurrencyWarehouse';
+import { useDrivers } from '@/hooks/useData';
 import { ApiError } from '@/lib/api';
 
 type FormState = {
@@ -36,15 +37,21 @@ type FormState = {
     lng: string;
     is_active: boolean;
     is_primary: boolean;
+    supply_mode: 'truck' | 'factory_pickup';
+    truck_driver_user_id: string;
 };
 
 const EMPTY_FORM: FormState = {
     code: '', name: '', address: '', city: '', pincode: '',
     lat: '', lng: '', is_active: true, is_primary: false,
+    supply_mode: 'truck', truck_driver_user_id: '',
 };
 
 export default function WarehousesPage() {
     const { data: warehouses = [], isLoading } = useWarehouses();
+    // Truck-driver candidates for the supply selector (role 5 = Truck).
+    const { data: allDrivers = [] } = useDrivers();
+    const truckDrivers = allDrivers.filter((d) => d.role_id === 5 || /truck/i.test(d.role_label || ''));
     const createMut = useCreateWarehouse();
     const updateMut = useUpdateWarehouse();
     const deleteMut = useDeleteWarehouse();
@@ -72,6 +79,8 @@ export default function WarehousesPage() {
             lng: w.lng != null ? String(w.lng) : '',
             is_active: w.is_active === 1,
             is_primary: w.is_primary === 1,
+            supply_mode: w.supply_mode === 'factory_pickup' ? 'factory_pickup' : 'truck',
+            truck_driver_user_id: w.truck_driver_user_id != null ? String(w.truck_driver_user_id) : '',
         });
         setIsOpen(true);
     };
@@ -87,6 +96,9 @@ export default function WarehousesPage() {
             lng: form.lng ? parseFloat(form.lng) : null,
             is_active: form.is_active ? 1 : 0,
             is_primary: form.is_primary ? 1 : 0,
+            supply_mode: form.supply_mode,
+            truck_driver_user_id: form.supply_mode === 'truck' && form.truck_driver_user_id
+                ? Number(form.truck_driver_user_id) : null,
         };
         try {
             if (editItem) {
@@ -141,6 +153,7 @@ export default function WarehousesPage() {
                             <th className="px-4 py-3 font-medium">Name</th>
                             <th className="px-4 py-3 font-medium">City</th>
                             <th className="px-4 py-3 font-medium">Pincode</th>
+                            <th className="px-4 py-3 font-medium">Supply</th>
                             <th className="px-4 py-3 font-medium">Status</th>
                             <th className="px-4 py-3 font-medium">Primary</th>
                             <th className="px-4 py-3 font-medium w-24"></th>
@@ -148,10 +161,10 @@ export default function WarehousesPage() {
                     </thead>
                     <tbody>
                         {isLoading && (
-                            <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-500">Loading…</td></tr>
+                            <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">Loading…</td></tr>
                         )}
                         {!isLoading && warehouses.length === 0 && (
-                            <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-500">No warehouses. Add the first one.</td></tr>
+                            <tr><td colSpan={8} className="px-4 py-12 text-center text-slate-500">No warehouses. Add the first one.</td></tr>
                         )}
                         {warehouses.map((w) => (
                             <tr key={w.id} className="border-b border-slate-800/30 hover:bg-slate-800/30">
@@ -159,6 +172,13 @@ export default function WarehousesPage() {
                                 <td className="px-4 py-3 text-slate-300">{w.name}</td>
                                 <td className="px-4 py-3 text-slate-400">{w.city || '—'}</td>
                                 <td className="px-4 py-3 text-slate-400">{w.pincode || '—'}</td>
+                                <td className="px-4 py-3 text-xs">
+                                    {w.supply_mode === 'factory_pickup'
+                                        ? <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">Dairy pickup</span>
+                                        : <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">
+                                            Truck{w.truck_driver_name ? ` · ${w.truck_driver_name}` : ''}
+                                        </span>}
+                                </td>
                                 <td className="px-4 py-3 text-xs">
                                     {w.is_active === 1
                                         ? <span className="text-emerald-400">Active</span>
@@ -240,6 +260,33 @@ export default function WarehousesPage() {
                                 onChange={(e) => setForm({ ...form, lng: e.target.value })}
                                 className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white" />
                         </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Supply Mode</label>
+                            <select value={form.supply_mode}
+                                onChange={(e) => setForm({ ...form, supply_mode: e.target.value as FormState['supply_mode'] })}
+                                className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white">
+                                <option value="truck">Truck driver drop</option>
+                                <option value="factory_pickup">Pickup from factory (dairy pickup)</option>
+                            </select>
+                        </div>
+                        {form.supply_mode === 'truck' && (
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Truck Driver</label>
+                                <select value={form.truck_driver_user_id}
+                                    onChange={(e) => setForm({ ...form, truck_driver_user_id: e.target.value })}
+                                    className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white">
+                                    <option value="">— unassigned —</option>
+                                    {truckDrivers.map((d) => (
+                                        <option key={d.user_id} value={d.user_id}>{d.name}</option>
+                                    ))}
+                                </select>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    A second truck later = add another warehouse with its own driver.
+                                </p>
+                            </div>
+                        )}
                     </div>
                     <div className="flex items-center gap-4">
                         <label className="inline-flex items-center gap-2 text-sm text-slate-300">

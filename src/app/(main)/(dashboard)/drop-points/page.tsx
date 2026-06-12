@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useDropPoints, DropPoint } from '@/hooks/useData';
+import { useWarehouses } from '@/hooks/useCurrencyWarehouse';
 import DataTable, { Column } from '@/components/DataTable';
 import { Plus, X, MapPin, Trash2 } from 'lucide-react';
 import { POST } from '@/lib/api';
@@ -14,6 +15,7 @@ const MAX_PHOTOS = 5;
 export default function DropPointsPage() {
     const queryClient = useQueryClient();
     const { data: dropPoints = [], isLoading } = useDropPoints();
+    const { data: warehouses = [] } = useWarehouses();
 
     const [showModal, setShowModal] = useState(false);
     const [editId, setEditId] = useState<number | null>(null);
@@ -25,6 +27,7 @@ export default function DropPointsPage() {
     const [lng, setLng] = useState('');
     const [routeOrder, setRouteOrder] = useState('');
     const [notes, setNotes] = useState('');
+    const [warehouseId, setWarehouseId] = useState('');
 
     const current = editId != null ? dropPoints.find((d) => d.id === editId) : null;
     const photos = current?.photos || [];
@@ -36,6 +39,7 @@ export default function DropPointsPage() {
         setLng('');
         setRouteOrder('');
         setNotes('');
+        setWarehouseId('');
         setShowModal(true);
     };
 
@@ -46,6 +50,7 @@ export default function DropPointsPage() {
         setLng(dp.lng != null ? String(dp.lng) : '');
         setRouteOrder(String(dp.route_order ?? ''));
         setNotes(dp.notes || '');
+        setWarehouseId(dp.warehouse_id != null ? String(dp.warehouse_id) : '');
         setShowModal(true);
     };
 
@@ -59,6 +64,7 @@ export default function DropPointsPage() {
                 lng: lng.trim() === '' ? null : lng.trim(),
                 route_order: routeOrder.trim() === '' ? null : routeOrder.trim(),
                 notes,
+                warehouse_id: warehouseId === '' ? null : Number(warehouseId),
             };
             if (editId != null) {
                 await POST('/update_drop_point', { id: editId, ...payload });
@@ -256,6 +262,25 @@ export default function DropPointsPage() {
                                     rows={2}
                                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
                                 />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Warehouse (supply)</label>
+                                <select
+                                    value={warehouseId}
+                                    onChange={(e) => setWarehouseId(e.target.value)}
+                                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                                >
+                                    <option value="">— unassigned —</option>
+                                    {warehouses.map((w) => (
+                                        <option key={w.id} value={w.id}>
+                                            {w.name} ({w.supply_mode === 'factory_pickup' ? 'Dairy pickup' : `Truck${w.truck_driver_name ? ` · ${w.truck_driver_name}` : ''}`})
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Decides how this stop is stocked — truck driver drop vs pickup from the factory.
+                                    Configure warehouses under Settings → Warehouses.
+                                </p>
                             </div>
                             <button
                                 type="submit"

@@ -112,6 +112,12 @@ export interface DropPoint {
     lng: number | null;
     route_order: number;
     notes: string | null;
+    // Supply routing (migration 083): which warehouse feeds this stop and how
+    // that warehouse is stocked (truck route vs factory/dairy pickup).
+    warehouse_id?: number | null;
+    warehouse_name?: string | null;
+    warehouse_supply_mode?: 'truck' | 'factory_pickup' | null;
+    warehouse_truck_driver_name?: string | null;
     photos: DropPointPhoto[];
     driver_count: number;
     created_at?: string;

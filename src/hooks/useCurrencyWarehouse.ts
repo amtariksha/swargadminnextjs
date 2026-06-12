@@ -33,6 +33,11 @@ export interface Warehouse {
     lng: number | null;
     is_active: number;
     is_primary: number;
+    // Supply routing (migration 083): how drop points fed by this warehouse
+    // are stocked — by a truck route (with its driver) or factory pickup.
+    supply_mode?: 'truck' | 'factory_pickup';
+    truck_driver_user_id?: number | null;
+    truck_driver_name?: string | null;
     created_at?: string;
     updated_at?: string;
 }
