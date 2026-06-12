@@ -227,7 +227,20 @@ export default function OrdersPage() {
             key: 'view', header: 'View', width: '60px',
             render: (o) => <button onClick={(e) => { e.stopPropagation(); router.push(`/orders/${o.id}`); }} className="p-1.5 hover:bg-slate-800/50 rounded-lg"><Eye className="w-4 h-4 text-purple-400" /></button>,
         },
-        { key: 'id', header: 'ID', width: '95px', render: (o) => <CopyableCell value={o.id} label="Order ID" /> },
+        {
+            key: 'id', header: 'ID', width: '125px',
+            render: (o) => (
+                <div className="flex items-center gap-1.5">
+                    <CopyableCell value={o.id} label="Order ID" />
+                    {o.daytime_order_id != null && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 whitespace-nowrap"
+                            title={`Transferred from day order #${o.daytime_order_id}`}>
+                            Day #{o.daytime_order_id}
+                        </span>
+                    )}
+                </div>
+            ),
+        },
         { key: 'trasation_id', header: 'Txn ID', width: '80px', render: (o) => <span className="text-xs text-slate-400">{o.trasation_id || '-'}</span> },
         { key: 'title', header: 'Product', width: '180px' },
         {
@@ -345,6 +358,7 @@ export default function OrdersPage() {
                 the loaded set and confuse the operator. */}
             <DataTable data={filteredOrders} columns={columns} loading={isLoading} pageSize={50}
                 searchable={false}
+                rowClassName={(o) => o.daytime_order_id != null ? 'bg-amber-500/10' : ''}
                 onRowClick={(o) => router.push(`/orders/${o.id}`)} />
         </div>
     );

@@ -125,10 +125,23 @@ export default function DayOrdersPage() {
         {
             key: 'claimed_by',
             header: 'Claimed by',
-            width: '130px',
-            render: (o) => o.delivery?.claimed_by_name
-                ? <span className="text-slate-300">{o.delivery.claimed_by_name}</span>
-                : <span className="text-slate-500">—</span>,
+            width: '170px',
+            render: (o) => {
+                // Transferred to the morning/last-mile list — show where it went
+                // and which morning driver carries it now.
+                if (o.pool === 'last_mile') {
+                    return (
+                        <span className="text-[11px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 inline-block leading-snug"
+                            title={o.pool_moved_at ? `Moved ${o.pool_moved_at}` : undefined}>
+                            Shifted to morning delivery
+                            {o.last_mile_driver_name ? ` · ${o.last_mile_driver_name}` : ''}
+                        </span>
+                    );
+                }
+                return o.delivery?.claimed_by_name
+                    ? <span className="text-slate-300">{o.delivery.claimed_by_name}</span>
+                    : <span className="text-slate-500">—</span>;
+            },
         },
         {
             key: 'delivered_at',

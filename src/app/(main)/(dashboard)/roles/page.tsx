@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRoles, useCreateRole, useUpdateRole, Role } from '@/hooks/useAdminUsers';
 import { DELIVERY_PERMISSIONS } from '@/lib/deliveryPermissions';
+import { isDeliveryOnlyRole } from '@/lib/roles';
 import DataTable, { Column } from '@/components/DataTable';
 import { Plus, Shield, Edit, X, Check, Lock } from 'lucide-react';
 import { toast } from 'sonner';
@@ -278,6 +279,15 @@ export default function RolesPage() {
                                 />
                             </div>
 
+                            {isDeliveryOnlyRole({ role_id: editingRole?.id, role_title: formData.title }) ? (
+                                <div className="px-4 py-3 rounded-xl bg-slate-800/40 border border-slate-700/50">
+                                    <p className="text-sm text-slate-300">Driver roles access the delivery app only.</p>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Admin-panel page permissions don&apos;t apply — manage app capabilities
+                                        below, or per-driver on the <span className="text-slate-300">/drivers</span> page.
+                                    </p>
+                                </div>
+                            ) : (
                             <div>
                                 <label className="block text-sm text-slate-400 mb-3">Page Permissions</label>
                                 <div className="grid grid-cols-2 gap-2">
@@ -303,6 +313,7 @@ export default function RolesPage() {
                                     Leave empty for full access. Selected: {formData.permissions.length} pages
                                 </p>
                             </div>
+                            )}
 
                             <div>
                                 <label className="block text-sm text-slate-400 mb-1">Delivery App Permissions</label>

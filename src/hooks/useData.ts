@@ -18,6 +18,11 @@ export interface User {
     // unassigned). Powers the /users driver filter + tenure columns.
     first_order_date?: string | null;
     last_driver_id?: number | null;
+    // Customer-source badges (rule-based, getAllUsers): the signup channel
+    // ('app' | 'day' | 'website') + where the user has actually ordered.
+    channel_tag?: string | null;
+    has_day_orders?: boolean;
+    has_app_orders?: boolean;
 }
 
 export function useUsers() {
@@ -2216,6 +2221,9 @@ export interface DaytimeOrder {
     pool?: 'day_pool' | 'last_mile';
     pool_locked?: 0 | 1 | boolean;
     pool_moved_at?: string | null;
+    // The morning driver assigned to the transferred order(s) — resolved by
+    // listDaytimeOrders for pool='last_mile' rows (null otherwise).
+    last_mile_driver_name?: string | null;
     // Phase 7 — invoice summary for the Resend control (null until issued).
     invoice?: {
         id: number;

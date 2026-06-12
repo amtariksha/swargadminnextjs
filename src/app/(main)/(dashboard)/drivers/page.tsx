@@ -189,20 +189,43 @@ export default function DriversPage() {
             },
         },
         {
-            key: 'email',
-            header: 'Email',
-            width: '250px',
-            render: (item) => (
-                <span className="text-slate-300">{item.email || '-'}</span>
-            ),
-        },
-        {
             key: 'phone',
             header: 'Phone',
             width: '150px',
             render: (item) => (
                 <span className="text-slate-300">{item.phone || '-'}</span>
             ),
+        },
+        {
+            key: 'drop_point_id',
+            header: 'Drop Point',
+            width: '160px',
+            render: (item) => {
+                if (item.drop_point_id == null) return <span className="text-slate-600 text-sm">—</span>;
+                const dp = dropPoints.find((p) => p.id === item.drop_point_id);
+                return <span className="text-sm text-slate-300">{dp?.title || `#${item.drop_point_id}`}</span>;
+            },
+        },
+        {
+            key: 'delivery_permissions',
+            header: 'App Access',
+            width: '220px',
+            render: (item) => {
+                const caps = item.delivery_permissions || [];
+                if (caps.length === 0) return <span className="text-slate-600 text-sm">role default</span>;
+                return (
+                    <div className="flex flex-wrap gap-1">
+                        {caps.map((cap) => {
+                            const def = DELIVERY_PERMISSIONS.find((p) => p.key === cap);
+                            return (
+                                <span key={cap} className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300">
+                                    {def?.label || cap}
+                                </span>
+                            );
+                        })}
+                    </div>
+                );
+            },
         },
         {
             key: 'updated_at',

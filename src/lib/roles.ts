@@ -19,11 +19,21 @@
  * lowercased title to the set below. No backend change required.
  */
 
-const DELIVERY_ONLY_ROLE_TITLES = new Set<string>([
-    'driver', // existing role used by the Flutter swargdeliveryapp users
-]);
+/**
+ * Seeded delivery-only role ids: 4 = last-mile, 5 = truck, 6 = day driver.
+ * Mirrors the backend's src/middleware/driverWall.js — keep the two in sync.
+ */
+export const DELIVERY_ONLY_ROLE_IDS = new Set<number>([4, 5, 6]);
+
+/**
+ * Custom delivery-only roles created via /roles match by title: any flavour of
+ * "driver" (Day Driver, Last-mile Driver, Truck Driver, Collection Driver, the
+ * legacy bare "DRIVER") plus Production Supervisor.
+ */
+export const DELIVERY_ONLY_TITLE_REGEX = /driver|production supervisor/i;
 
 interface RoleLike {
+    role_id?: number | string | null;
     role_title?: string | null;
 }
 
@@ -32,8 +42,11 @@ interface RoleLike {
  * a holder of ONLY this role should not be allowed into the admin panel.
  */
 export const isDeliveryOnlyRole = (role: RoleLike | undefined | null): boolean => {
-    if (!role?.role_title) return false;
-    return DELIVERY_ONLY_ROLE_TITLES.has(role.role_title.trim().toLowerCase());
+    if (!role) return false;
+    const id = Number(role.role_id);
+    if (Number.isFinite(id) && DELIVERY_ONLY_ROLE_IDS.has(id)) return true;
+    if (!role.role_title) return false;
+    return DELIVERY_ONLY_TITLE_REGEX.test(role.role_title);
 };
 
 interface UserWithRoles {

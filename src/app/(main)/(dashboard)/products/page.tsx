@@ -97,6 +97,41 @@ export default function ProductsPage() {
             ),
         },
         {
+            key: 'product_type', header: 'Type', width: '90px',
+            render: (item) => (
+                <span className={`text-xs px-2 py-0.5 rounded ${item.product_type === 'variable' ? 'bg-purple-500/20 text-purple-300' : 'bg-slate-700/40 text-slate-400'}`}>
+                    {item.product_type === 'variable' ? 'Variable' : 'Simple'}
+                </span>
+            ),
+        },
+        {
+            key: 'delivery_window', header: 'Delivery Window', width: '120px',
+            render: (item) => {
+                const labels: Record<number, { text: string; cls: string }> = {
+                    1: { text: 'Morning', cls: 'bg-blue-500/20 text-blue-300' },
+                    2: { text: 'Day', cls: 'bg-amber-500/20 text-amber-300' },
+                    3: { text: 'Both', cls: 'bg-emerald-500/20 text-emerald-300' },
+                };
+                const w = labels[item.delivery_window ?? 1] ?? labels[1];
+                return <span className={`text-xs px-2 py-0.5 rounded ${w.cls}`}>{w.text}</span>;
+            },
+        },
+        {
+            key: 'web_visible', header: 'Web', width: '70px',
+            render: (item) => (
+                <span className={`text-xs ${item.web_visible ? 'text-green-400' : 'text-slate-600'}`}
+                    title={item.web_visible ? 'Shown on new.swargfood.com' : 'Not shown on new.swargfood.com'}>
+                    {item.web_visible ? '✓' : '—'}
+                </span>
+            ),
+        },
+        {
+            key: 'back_order_next_available', header: 'Back-order', width: '110px',
+            render: (item) => item.allow_back_order
+                ? <span className="text-xs text-amber-300">{item.back_order_next_available ? formatApiDate(item.back_order_next_available, 'dd-MM-yyyy') : 'enabled'}</span>
+                : <span className="text-xs text-slate-600">—</span>,
+        },
+        {
             key: 'stock_qty', header: 'Stock', width: '80px',
             render: (item) => (
                 <button onClick={(e) => { e.stopPropagation(); setQuickEditModal({ product: item, type: 'stock_qty', value: String(item.stock_qty ?? 0) }); }}

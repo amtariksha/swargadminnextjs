@@ -587,41 +587,44 @@ export default function DeliveryListPage() {
         // the value is highlighted so the edit is immediately visible.
         // 0 = "skip this delivery"; rendered amber + struck through so the
         // intent is unambiguous to anyone scanning the list.
-        // Use `??` not `||` so 0 isn't silently treated as "no override".
-        // "Qty" = the ORIGINAL ordered qty from orders.qty. This column is
-        // immutable from this screen — admin edits and driver marks land in
-        // "Del Qty" below, never overwrite the customer's stated order.
+        // "Qty" = the GENERATED qty: what the list cron scheduled for today
+        // (delivery.delivered_qty — Laravel parity: driver marks never touch
+        // it; only the admin Qty-Edit modal deliberately changes it). Falls
+        // back to orders.qty for rows predating the generated value. A small
+        // ordered-qty hint shows when the schedule differs from the order.
         { key: 'qty', header: 'Qty', width: colW('qty', '70px', '100px'),
-            render: (item) => <span className="font-semibold">{item.qty}</span> },
-        // "Del Qty" = the effective delivered qty:
-        //   1. driver-marked qty (mark_delivered_qty) if present;
-        //   2. else admin scheduled-override (delivered_qty) when it differs
-        //      from the original ordered qty;
-        //   3. else dash — nothing has changed and nothing is marked yet.
-        // Highlighted red when it differs from the original ordered qty (the
-        // customer got — or is scheduled for — something different from what
-        // they ordered). Amber strike-through when zero (skipped today).
+            render: (item) => {
+                const generated = item.delivered_qty ?? item.qty;
+                const edited = typeof item.delivered_qty === 'number' && item.delivered_qty !== item.qty;
+                return (
+                    <span className="font-semibold" title={edited ? `Ordered ${item.qty} — schedule edited` : undefined}>
+                        {generated}
+                        {edited && <span className="text-slate-500 font-normal text-xs"> ({item.qty})</span>}
+                    </span>
+                );
+            } },
+        // "Del Qty" = what the last-mile driver actually delivered (the SOD
+        // mark). Dash until marked; explicit 0 for a not-delivered row. Red
+        // when it differs from the generated qty above; amber strike when 0.
         { key: 'mark_delivered_qty', header: 'Del Qty', width: colW('mark_delivered_qty', '80px', '120px'),
             render: (item) => {
-                const adminEdited = typeof item.delivered_qty === 'number' && item.delivered_qty !== item.qty;
-                const effective = item.mark_delivered_qty ?? (adminEdited ? item.delivered_qty : null);
+                const generated = item.delivered_qty ?? item.qty;
+                const effective = item.mark_delivered_qty ?? (item.status === 2 ? 0 : null);
                 if (effective === null || effective === undefined) {
                     return <span className="text-slate-500">-</span>;
                 }
                 const isZero = effective === 0;
-                const isDiff = effective !== item.qty;
+                const isDiff = effective !== generated;
                 const cls = isZero
                     ? 'text-amber-400 line-through font-medium'
                     : isDiff
                         ? 'text-red-400 font-medium'
                         : 'font-medium';
                 const tip = isZero
-                    ? `Skipped today (ordered ${item.qty})`
-                    : item.mark_delivered_qty == null && adminEdited
-                        ? `Scheduled override — admin edited from ${item.qty}`
-                        : isDiff
-                            ? `Ordered ${item.qty}`
-                            : undefined;
+                    ? `Not delivered (scheduled ${generated})`
+                    : isDiff
+                        ? `Scheduled ${generated}`
+                        : undefined;
                 return <span className={cls} title={tip}>{effective}</span>;
             } },
         { key: 'delivery_boy_name', header: 'Driver', width: colW('delivery_boy_name', '150px', '250px'), render: (item) => <span>{item.delivery_boy_name || 'Unassigned'}</span> },

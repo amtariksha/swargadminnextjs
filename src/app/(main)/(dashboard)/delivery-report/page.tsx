@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { GET } from '@/lib/api';
 import { useDrivers } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
-import { format, subDays } from 'date-fns';
+import { format, subDays, addDays, differenceInCalendarDays, parseISO } from 'date-fns';
 import { Calendar, BarChart3, RefreshCw, User, TrendingUp, Search, ChevronDown, X } from 'lucide-react';
 
 import { formatApiDate, apiDateMs } from '@/lib/dateUtils';
@@ -117,6 +117,18 @@ export default function DeliveryReportPage() {
     const [drillCategory, setDrillCategory] = useState<{ category: string; label: string } | null>(null);
     const [startDate, setStartDate] = useState(weekAgo);
     const [endDate, setEndDate] = useState(today);
+
+    // ◀ / ▶ shift the whole range by its own length (inclusive), so the new
+    // window is adjacent to the old one: 5/6→12/6 then ◀ gives 28/5→4/6
+    // (new window ENDS the day before the old start).
+    const shiftRange = (direction: 1 | -1) => {
+        if (!startDate || !endDate) return;
+        const start = parseISO(startDate);
+        const end = parseISO(endDate);
+        const spanDays = Math.abs(differenceInCalendarDays(end, start)) + 1;
+        setStartDate(format(addDays(start, direction * spanDays), 'yyyy-MM-dd'));
+        setEndDate(format(addDays(end, direction * spanDays), 'yyyy-MM-dd'));
+    };
     const [selectedDriver, setSelectedDriver] = useState<number | ''>('');
     const [selectedProduct, setSelectedProduct] = useState<string>('');
     const [chartType, setChartType] = useState<'count' | 'quantity' | 'amount'>('count');
@@ -413,6 +425,13 @@ export default function DeliveryReportPage() {
             <div className="flex flex-wrap items-center gap-4">
                 <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-slate-400" />
+                    <button
+                        onClick={() => shiftRange(-1)}
+                        title="Previous period (shift back by the range length)"
+                        className="px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-slate-300 hover:text-white hover:bg-slate-700/50"
+                    >
+                        ◀
+                    </button>
                     <input
                         type="date"
                         value={startDate}
@@ -426,6 +445,13 @@ export default function DeliveryReportPage() {
                         onChange={(e) => setEndDate(e.target.value)}
                         className="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white"
                     />
+                    <button
+                        onClick={() => shiftRange(1)}
+                        title="Next period (shift forward by the range length)"
+                        className="px-2 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-slate-300 hover:text-white hover:bg-slate-700/50"
+                    >
+                        ▶
+                    </button>
                 </div>
                 {/* Searchable Driver Dropdown */}
                 <div ref={driverDropdownRef} className="relative min-w-[220px]">

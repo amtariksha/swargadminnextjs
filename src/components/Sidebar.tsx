@@ -7,6 +7,7 @@ import { BRANDING } from '@/config/tenant';
 import { useAuth } from '@/lib/auth';
 import { useFeatureFlag } from '@/hooks/useData';
 import {
+    Activity,
     LayoutDashboard,
     CalendarDays,
     Users,
@@ -118,6 +119,7 @@ const navItems: NavItem[] = [
         icon: <Settings className="w-5 h-5" />,
         children: [
             { name: 'General', href: '/settings', icon: <Settings className="w-4 h-4" /> },
+            { name: 'Server Health', href: '/settings/server-health', icon: <Activity className="w-4 h-4" /> },
             { name: 'Automation', href: '/settings/automation', icon: <Clock className="w-4 h-4" /> },
             { name: 'Notifications & Templates', href: '/settings/notifications', icon: <Bell className="w-4 h-4" /> },
             { name: 'Notification Mapping', href: '/settings/notification-maps', icon: <Workflow className="w-4 h-4" /> },

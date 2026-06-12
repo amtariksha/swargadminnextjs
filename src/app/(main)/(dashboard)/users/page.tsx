@@ -18,6 +18,18 @@ export default function UsersPage() {
     const { data: users = [], isLoading } = useUsers();
     const { data: drivers = [] } = useDrivers();
     const [driverFilter, setDriverFilter] = useState<string>(DRIVER_FILTER_ALL);
+    const [sourceFilter, setSourceFilter] = useState<string>('all');
+
+    // Rule-based source label: where the customer actually orders wins over
+    // the signup channel; both → "App + Day".
+    const sourceOf = (u: User): 'app' | 'day' | 'both' | 'web' | 'none' => {
+        if (u.has_app_orders && u.has_day_orders) return 'both';
+        if (u.has_day_orders) return 'day';
+        if (u.has_app_orders) return 'app';
+        if (u.channel_tag === 'website') return 'web';
+        if (u.channel_tag === 'day') return 'day';
+        return u.channel_tag === 'app' ? 'app' : 'none';
+    };
 
     // Customers only (rows with no admin/driver role assignment).
     const customersOnly = useMemo(
@@ -33,13 +45,23 @@ export default function UsersPage() {
     // order assignment is that driver (matches the user-picked "currently
     // serving" semantic).
     const filteredUsers = useMemo(() => {
-        if (driverFilter === DRIVER_FILTER_ALL) return customersOnly;
+        let base = customersOnly;
+        if (sourceFilter !== 'all') {
+            base = base.filter((u) => {
+                const s = sourceOf(u);
+                return sourceFilter === 'day' ? (s === 'day' || s === 'both')
+                    : sourceFilter === 'app' ? (s === 'app' || s === 'both')
+                    : s === sourceFilter;
+            });
+        }
+        if (driverFilter === DRIVER_FILTER_ALL) return base;
         if (driverFilter === DRIVER_FILTER_UNASSIGNED) {
-            return customersOnly.filter((u) => u.last_driver_id == null);
+            return base.filter((u) => u.last_driver_id == null);
         }
         const id = Number(driverFilter);
-        return customersOnly.filter((u) => u.last_driver_id === id);
-    }, [customersOnly, driverFilter]);
+        return base.filter((u) => u.last_driver_id === id);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [customersOnly, driverFilter, sourceFilter]);
 
     // Look-up of driver_user_id → label, so the column can show the name
     // alongside the id without a per-row lookup.
@@ -109,6 +131,23 @@ export default function UsersPage() {
             key: 'name',
             header: 'Name',
             width: '180px',
+        },
+        {
+            key: 'channel_tag',
+            header: 'Source',
+            width: '100px',
+            render: (item) => {
+                const s = sourceOf(item);
+                const style: Record<string, { text: string; cls: string }> = {
+                    app: { text: 'App', cls: 'bg-blue-500/20 text-blue-300' },
+                    day: { text: 'Day', cls: 'bg-amber-500/20 text-amber-300' },
+                    both: { text: 'App + Day', cls: 'bg-purple-500/20 text-purple-300' },
+                    web: { text: 'Web', cls: 'bg-emerald-500/20 text-emerald-300' },
+                    none: { text: '—', cls: 'text-slate-600' },
+                };
+                const v = style[s];
+                return <span className={`text-xs px-2 py-0.5 rounded ${v.cls}`}>{v.text}</span>;
+            },
         },
         {
             key: 'email',
@@ -253,6 +292,17 @@ export default function UsersPage() {
                             {d.role_label ? `${d.name} — ${d.role_label}` : d.name}
                         </option>
                     ))}
+                </select>
+                <select
+                    value={sourceFilter}
+                    onChange={(e) => setSourceFilter(e.target.value)}
+                    className="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white text-sm min-w-[160px] focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                >
+                    <option value="all">All sources</option>
+                    <option value="app">App users</option>
+                    <option value="day">Day-order users</option>
+                    <option value="both">App + Day</option>
+                    <option value="web">Web</option>
                 </select>
             </div>
 
