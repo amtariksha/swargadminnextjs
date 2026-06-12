@@ -21,6 +21,9 @@
  *      (/mnt/work/backups/swargfood-wp-archive/wp-content/uploads)
  */
 
+// MUST be first — patches @next/env interop before the config chain loads it.
+import './wp-recovery/fix-next-env'
+
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
@@ -34,6 +37,13 @@ import { htmlToLexical } from './wp-recovery/html-to-lexical'
 // Config
 // ---------------------------------------------------------------------------
 const DRY_RUN = !process.argv.includes('--commit')
+// Skip image uploads when R2 upload creds aren't available (e.g. Vercel
+// "sensitive" vars pull blank) — recovers text+dedup safely without creating
+// broken local-disk media. Re-run with creds present to attach images (idempotent).
+const R2_OK = Boolean(
+  process.env.R2_BUCKET && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY,
+)
+const SKIP_IMAGES = process.argv.includes('--skip-images') || !R2_OK
 const ONLY = (process.argv.find((a) => a.startsWith('--only='))?.split('=')[1] || 'all') as
   | 'all'
   | 'posts'
@@ -131,6 +141,10 @@ async function uploadMedia(
   const fname = basename(rel)
   const mimetype = MIME[extname(fname).toLowerCase()] || 'application/octet-stream'
 
+  if (SKIP_IMAGES) {
+    mediaCache.set(attId, null)
+    return null
+  }
   if (DRY_RUN) {
     mediaCache.set(attId, `DRY:${attId}`)
     return `DRY:${attId}`
@@ -156,6 +170,7 @@ async function uploadMedia(
     data: { alt: altBase } as never,
     file: { name: fname, data, mimetype, size: data.byteLength },
     overrideAccess: true,
+    context: { disableRevalidate: true },
   })
   mediaCache.set(attId, doc.id)
   return doc.id
@@ -233,15 +248,29 @@ async function recover(payload: AnyPayload, collection: 'posts' | 'pages', item:
 
   if (DRY_RUN) return
 
+  // disableRevalidate: the collections' revalidatePath hooks need the Next.js
+  // static-generation store, which doesn't exist in this standalone script.
+  const ctx = { disableRevalidate: true }
   // Delete dups first (frees the clean slug), then upsert canonical.
   for (const d of dups) {
-    await payload.delete({ collection, id: d.id, overrideAccess: true })
+    await payload.delete({ collection, id: d.id, overrideAccess: true, context: ctx })
   }
   if (canonical) {
-    await payload.update({ collection, id: canonical.id, data: base as never, overrideAccess: true })
+    await payload.update({
+      collection,
+      id: canonical.id,
+      data: base as never,
+      overrideAccess: true,
+      context: ctx,
+    })
     console.log(`    ✓ updated id ${canonical.id}`)
   } else {
-    const created = await payload.create({ collection, data: base as never, overrideAccess: true })
+    const created = await payload.create({
+      collection,
+      data: base as never,
+      overrideAccess: true,
+      context: ctx,
+    })
     console.log(`    ✓ created id ${created.id}`)
   }
 }
@@ -252,6 +281,12 @@ async function main() {
     `\n=== WP content recovery — ${DRY_RUN ? 'DRY RUN (no writes)' : 'COMMIT (writing to Payload)'} — scope: ${ONLY} ===`,
   )
   console.log(`WP container: ${WP_CONTAINER}  uploads: ${UPLOADS_DIR}`)
+  if (SKIP_IMAGES) {
+    console.log(
+      '⚠ IMAGES SKIPPED — R2 upload creds absent (or --skip-images). Text + dedup only;\n' +
+        '  re-run with R2_BUCKET/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY set to attach images.',
+    )
+  }
 
   const payload = await getPayload({ config })
 
