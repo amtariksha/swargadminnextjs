@@ -63,6 +63,16 @@ export default function UsersPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [customersOnly, driverFilter, sourceFilter]);
 
+    // Newest customers first (by created date) for the table view.
+    const sortedUsers = useMemo(
+        () => [...filteredUsers].sort((a, b) => {
+            const da = parseApiDate(a.created_at)?.getTime() ?? 0;
+            const db = parseApiDate(b.created_at)?.getTime() ?? 0;
+            return db - da;
+        }),
+        [filteredUsers],
+    );
+
     // Look-up of driver_user_id → label, so the column can show the name
     // alongside the id without a per-row lookup.
     const driverLabelById = useMemo(() => {
@@ -307,7 +317,7 @@ export default function UsersPage() {
             </div>
 
             <DataTable
-                data={filteredUsers}
+                data={sortedUsers}
                 columns={columns}
                 loading={isLoading}
                 pageSize={50}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useDrivers, useDropPoints, Driver, DRIVER_ROLES } from '@/hooks/useData';
 import { DELIVERY_PERMISSIONS } from '@/lib/deliveryPermissions';
 import DataTable, { Column } from '@/components/DataTable';
@@ -18,6 +18,13 @@ export default function DriversPage() {
     // arg → backend filters to active only.
     const { data: drivers = [], isLoading } = useDrivers({ includeInactive: true });
     const { data: dropPoints = [] } = useDropPoints();
+    // Show active drivers first, then inactive (stable order within each group).
+    const sortedDrivers = useMemo(
+        () => [...drivers].sort(
+            (a, b) => ((b.is_active ?? 1) === 1 ? 1 : 0) - ((a.is_active ?? 1) === 1 ? 1 : 0),
+        ),
+        [drivers],
+    );
     const [showModal, setShowModal] = useState(false);
     const [isAddMode, setIsAddMode] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -262,7 +269,7 @@ export default function DriversPage() {
             </div>
 
             <DataTable
-                data={drivers}
+                data={sortedDrivers}
                 columns={columns}
                 loading={isLoading}
                 pageSize={50}

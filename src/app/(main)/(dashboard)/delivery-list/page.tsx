@@ -950,11 +950,44 @@ export default function DeliveryListPage() {
                                         {/* Expanded detail */}
                                         {expanded && (
                                             <div className="px-4 pb-4 pl-11 space-y-3">
-                                                {/* Flat delivery list — route/driver shown per row */}
+                                                {/* Per-driver truck boxes (truck handoff) — shown FIRST, before the customer lines */}
+                                                {stop.drivers.length > 0 && (
+                                                    <div className="space-y-2">
+                                                        <p className="text-[11px] uppercase text-slate-500">Driver boxes (truck handoff)</p>
+                                                        {stop.drivers.map((drv) => (
+                                                            <div key={drv.driver_user_id} className="rounded-lg bg-slate-800/30 p-2">
+                                                                <p className="text-xs font-medium text-white mb-1">{drv.driver_name}</p>
+                                                                <div className="space-y-1">
+                                                                    {drv.products.map((p) => {
+                                                                        const badge = boxBadge(p.box_status);
+                                                                        const boxDelivered = p.box_status === 2 ? 0 : (p.box_delivered_qty ?? p.total_qty);
+                                                                        return (
+                                                                            <div key={p.product_id} className="flex items-center justify-between gap-2 text-xs">
+                                                                                <span className="text-slate-300 truncate">
+                                                                                    {p.product_title}{p.qty_text ? <span className="text-slate-600"> × {p.qty_text}</span> : null}
+                                                                                </span>
+                                                                                <span className="flex items-center gap-2 shrink-0">
+                                                                                    <span className="text-slate-400 font-mono">{boxDelivered}/{p.total_qty}</span>
+                                                                                    {badge && (
+                                                                                        <span className={`px-1.5 py-0.5 rounded ${badge.cls}`} title={p.box_reason ?? undefined}>
+                                                                                            {badge.label}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </span>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Customer line items — shown AFTER the truck-handoff boxes */}
                                                 {stop.lines.length === 0 ? (
                                                     <p className="text-xs text-slate-500">No customer lines.</p>
                                                 ) : (
-                                                    <div className="space-y-1">
+                                                    <div className={`space-y-1 ${stop.drivers.length > 0 ? 'border-t border-slate-800/50 pt-2' : ''}`}>
                                                         {stop.lines.map((ln) => {
                                                             const gen = ln.generated_qty ?? ln.ordered_qty;
                                                             const marked = ln.marked_qty ?? (ln.status === 2 ? 0 : null);
@@ -985,39 +1018,6 @@ export default function DeliveryListPage() {
                                                                 </div>
                                                             );
                                                         })}
-                                                    </div>
-                                                )}
-
-                                                {/* Per-driver truck boxes */}
-                                                {stop.drivers.length > 0 && (
-                                                    <div className="border-t border-slate-800/50 pt-2 space-y-2">
-                                                        <p className="text-[11px] uppercase text-slate-500">Driver boxes (truck handoff)</p>
-                                                        {stop.drivers.map((drv) => (
-                                                            <div key={drv.driver_user_id} className="rounded-lg bg-slate-800/30 p-2">
-                                                                <p className="text-xs font-medium text-white mb-1">{drv.driver_name}</p>
-                                                                <div className="space-y-1">
-                                                                    {drv.products.map((p) => {
-                                                                        const badge = boxBadge(p.box_status);
-                                                                        const boxDelivered = p.box_status === 2 ? 0 : (p.box_delivered_qty ?? p.total_qty);
-                                                                        return (
-                                                                            <div key={p.product_id} className="flex items-center justify-between gap-2 text-xs">
-                                                                                <span className="text-slate-300 truncate">
-                                                                                    {p.product_title}{p.qty_text ? <span className="text-slate-600"> × {p.qty_text}</span> : null}
-                                                                                </span>
-                                                                                <span className="flex items-center gap-2 shrink-0">
-                                                                                    <span className="text-slate-400 font-mono">{boxDelivered}/{p.total_qty}</span>
-                                                                                    {badge && (
-                                                                                        <span className={`px-1.5 py-0.5 rounded ${badge.cls}`} title={p.box_reason ?? undefined}>
-                                                                                            {badge.label}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </span>
-                                                                            </div>
-                                                                        );
-                                                                    })}
-                                                                </div>
-                                                            </div>
-                                                        ))}
                                                     </div>
                                                 )}
 
