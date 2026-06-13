@@ -1,8 +1,10 @@
 'use client';
 
-// Recovery report — money owed back to us, two kinds:
+// Recovery report — money owed back to us, three kinds:
 //   under_billed     — delivered but charged ₹0 (the order_amount=0 bug)
 //   duplicate_credit — one Razorpay payment credited 2×+ (double recharge)
+//   zero_debit       — historical ₹0 per-delivery debits with no SOD row,
+//                      seeded precisely from migration 084 (the 188 extracted ids)
 // "Recover" posts a wallet debit for the outstanding amount (server-computed,
 // idempotent). Backend: GET /get_report/recovery, POST /recovery/charge.
 
@@ -12,10 +14,17 @@ import { toast } from 'sonner';
 import { IndianRupee, RefreshCw, Download, AlertTriangle, Receipt } from 'lucide-react';
 import { useRecoveryReport, useRecoveryCharge, useRecoveryResolve, type RecoveryRow } from '@/hooks/useData';
 
-type Filter = 'owed' | 'under_billed' | 'duplicate' | 'active' | 'recoverable' | 'recovered' | 'resolved';
+type Filter = 'owed' | 'under_billed' | 'duplicate' | 'zero_debit' | 'active' | 'recoverable' | 'recovered' | 'resolved';
 
 const inr = (n: number) => `₹${(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const rowKey = (r: RecoveryRow) => `${r.kind}:${r.order_id ?? r.payment_id}`;
+
+// Human label for what's being recovered (confirm dialogs + toasts).
+const describe = (r: RecoveryRow) => {
+    if (r.kind === 'duplicate_credit') return `the duplicate recharge on ${r.payment_id}`;
+    if (r.kind === 'zero_debit') return `the ₹0 deliveries on order #${r.order_id}`;
+    return `the under-billed deliveries on order #${r.order_id}`;
+};
 
 export default function RecoveryPage() {
     const { data, isLoading, isFetching, refetch } = useRecoveryReport();
@@ -39,6 +48,7 @@ export default function RecoveryPage() {
             else if (!isOwed) return false;
             if (filter === 'under_billed' && r.kind !== 'under_billed') return false;
             if (filter === 'duplicate' && r.kind !== 'duplicate_credit') return false;
+            if (filter === 'zero_debit' && r.kind !== 'zero_debit') return false;
             if (filter === 'active' && r.order_status !== 1) return false;
             if (filter === 'recoverable' && r.current_wallet < r.recoverable) return false;
             if (q && !(`${r.name ?? ''}`.toLowerCase().includes(q)
@@ -51,17 +61,16 @@ export default function RecoveryPage() {
 
     const handleRecover = async (r: RecoveryRow) => {
         const goesNegative = r.current_wallet < r.recoverable;
-        const what = r.kind === 'duplicate_credit'
-            ? `the duplicate recharge on ${r.payment_id}`
-            : `the under-billed deliveries on order #${r.order_id}`;
-        const msg = `Debit ${inr(r.recoverable)} from ${r.name || 'customer'} (wallet ${inr(r.current_wallet)}) for ${what}.`
+        const msg = `Debit ${inr(r.recoverable)} from ${r.name || 'customer'} (wallet ${inr(r.current_wallet)}) for ${describe(r)}.`
             + (goesNegative ? `\n\n⚠ Wallet will go NEGATIVE to ${inr(r.current_wallet - r.recoverable)}.` : '')
             + `\n\nProceed?`;
         if (!window.confirm(msg)) return;
         setPendingKey(rowKey(r));
         try {
             await chargeMutation.mutateAsync(
-                r.kind === 'duplicate_credit' ? { payment_id: r.payment_id ?? undefined } : { order_id: r.order_id ?? undefined },
+                r.kind === 'duplicate_credit'
+                    ? { kind: r.kind, payment_id: r.payment_id ?? undefined }
+                    : { kind: r.kind, order_id: r.order_id ?? undefined },
             );
             toast.success(`Recovered ${inr(r.recoverable)} from ${r.name || 'customer'}`);
         } catch (e) {
@@ -78,11 +87,8 @@ export default function RecoveryPage() {
 
     // Mark a row "already recovered" — removes it from owed WITHOUT a wallet debit.
     const handleMarkRecovered = async (r: RecoveryRow) => {
-        const what = r.kind === 'duplicate_credit'
-            ? `the duplicate recharge on ${r.payment_id}`
-            : `the under-billed deliveries on order #${r.order_id}`;
         const ok = window.confirm(
-            `Mark ${what} as ALREADY RECOVERED?\n\n`
+            `Mark ${describe(r)} as ALREADY RECOVERED?\n\n`
             + `This only removes it from the owed list — it does NOT debit the wallet. `
             + `Use it when the ${inr(r.recoverable)} was already clawed back outside the system `
             + `(manual debit, refund accepted, offline settlement).`,
@@ -132,6 +138,7 @@ export default function RecoveryPage() {
         { key: 'owed', label: 'All owed' },
         { key: 'under_billed', label: 'Under-billed' },
         { key: 'duplicate', label: 'Double recharge' },
+        { key: 'zero_debit', label: '₹0 deliveries' },
         { key: 'active', label: 'Active orders' },
         { key: 'recoverable', label: 'Recoverable now (wallet covers)' },
         { key: 'recovered', label: 'Already recovered' },
@@ -144,8 +151,9 @@ export default function RecoveryPage() {
                 <div className="flex-1">
                     <h1 className="text-2xl font-bold text-white">Recovery</h1>
                     <p className="text-slate-400 text-sm">
-                        Money owed back: under-billed (₹0-debit) deliveries and double Razorpay recharges.
-                        &quot;Recover&quot; posts a wallet debit for the outstanding amount (idempotent).
+                        Money owed back: under-billed deliveries, double Razorpay recharges, and the
+                        historical ₹0-deduction deliveries. &quot;Recover&quot; posts a wallet debit for
+                        the outstanding amount (idempotent).
                     </p>
                 </div>
                 <button onClick={exportCsv} disabled={!filtered.length}
@@ -159,7 +167,7 @@ export default function RecoveryPage() {
             </div>
 
             {summary && (
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
                     <div className="glass rounded-xl p-4">
                         <div className="flex items-center gap-2 text-amber-300 text-sm mb-1"><IndianRupee className="w-4 h-4" /> Total recoverable</div>
                         <div className="text-2xl font-bold text-white">{inr(summary.total_recoverable)}</div>
@@ -174,6 +182,11 @@ export default function RecoveryPage() {
                         <div className="text-sm text-slate-400 mb-1">Double recharges</div>
                         <div className="text-2xl font-bold text-white">{inr(summary.duplicate_total)}</div>
                         <div className="text-xs text-slate-500 mt-1">{summary.duplicate_payments} payments</div>
+                    </div>
+                    <div className="glass rounded-xl p-4">
+                        <div className="text-sm text-slate-400 mb-1">₹0 deliveries</div>
+                        <div className="text-2xl font-bold text-white">{inr(summary.zero_debit_total ?? 0)}</div>
+                        <div className="text-xs text-slate-500 mt-1">{summary.zero_debit_orders ?? 0} orders</div>
                     </div>
                     <div className="glass rounded-xl p-4">
                         <div className="text-sm text-slate-400 mb-1">Already recovered</div>
@@ -231,8 +244,11 @@ export default function RecoveryPage() {
                                             </td>
                                             <td className="px-3 py-2.5">
                                                 <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${isDup
-                                                    ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}`}>
-                                                    {isDup ? 'Double recharge' : 'Under-billed'}
+                                                    ? 'bg-rose-500/20 text-rose-300'
+                                                    : r.kind === 'zero_debit'
+                                                        ? 'bg-sky-500/20 text-sky-300'
+                                                        : 'bg-amber-500/20 text-amber-300'}`}>
+                                                    {isDup ? 'Double recharge' : r.kind === 'zero_debit' ? '₹0 deliveries' : 'Under-billed'}
                                                 </span>
                                                 {r.kind === 'under_billed' && (
                                                     <span className={`ml-1 text-[11px] ${r.order_status === 1 ? 'text-emerald-400' : 'text-slate-500'}`}>
@@ -248,7 +264,9 @@ export default function RecoveryPage() {
                                                 <div className="text-xs text-slate-500">
                                                     {isDup
                                                         ? `total credited ${inr(r.total_credited ?? 0)}`
-                                                        : `${r.units_delivered ?? 0} units · should ${inr(r.should_have_billed ?? 0)} / charged ${inr(r.actually_debited ?? 0)}`}
+                                                        : r.kind === 'zero_debit'
+                                                            ? `${r.units_delivered ?? 0} pending ₹0 deliveries · recover ${inr(r.recoverable)}`
+                                                            : `${r.units_delivered ?? 0} units · should ${inr(r.should_have_billed ?? 0)} / charged ${inr(r.actually_debited ?? 0)}`}
                                                 </div>
                                             </td>
                                             <td className="px-3 py-2.5 text-right font-semibold text-amber-300">{inr(r.recoverable)}</td>

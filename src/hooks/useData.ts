@@ -1752,7 +1752,7 @@ export function useUpdateTransactionDescriptions() {
 }
 
 // ── Recovery report (money owed back: under-billed orders + double recharges) ─
-export type RecoveryKind = 'under_billed' | 'duplicate_credit';
+export type RecoveryKind = 'under_billed' | 'duplicate_credit' | 'zero_debit';
 
 export interface RecoveryRow {
     kind: RecoveryKind;
@@ -1797,6 +1797,8 @@ export interface RecoverySummary {
     active_owed_orders: number;
     duplicate_payments: number;
     duplicate_total: number;
+    zero_debit_orders?: number;
+    zero_debit_total?: number;
     resolved_rows?: number;
 }
 
@@ -1813,7 +1815,7 @@ export function useRecoveryReport() {
 export function useRecoveryCharge() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (ref: { order_id?: number; payment_id?: string }) =>
+        mutationFn: async (ref: { kind?: RecoveryKind; order_id?: number; payment_id?: string }) =>
             POST('/recovery/charge', ref),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['recovery-report'] });
