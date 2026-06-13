@@ -1764,6 +1764,9 @@ export interface RecoveryRow {
     current_wallet: number;
     order_status: number | null;
     detail: string;
+    // Date of the relevant transaction: the under-billed wallet debit, or the
+    // duplicate credit (formatted yyyy-mm-dd; null on legacy rows).
+    txn_date: string | null;
     recovered: number;
     recoverable: number;
     // under_billed specifics (present for kind === 'under_billed')

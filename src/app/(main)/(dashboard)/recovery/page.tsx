@@ -7,8 +7,9 @@
 // idempotent). Backend: GET /get_report/recovery, POST /recovery/charge.
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { toast } from 'sonner';
-import { IndianRupee, RefreshCw, Download, AlertTriangle } from 'lucide-react';
+import { IndianRupee, RefreshCw, Download, AlertTriangle, Receipt } from 'lucide-react';
 import { useRecoveryReport, useRecoveryCharge, useRecoveryResolve, type RecoveryRow } from '@/hooks/useData';
 
 type Filter = 'owed' | 'under_billed' | 'duplicate' | 'active' | 'recoverable' | 'recovered' | 'resolved';
@@ -112,10 +113,11 @@ export default function RecoveryPage() {
     };
 
     const exportCsv = () => {
-        const headers = ['kind', 'order_id', 'payment_id', 'name', 'phone', 'detail',
+        const headers = ['kind', 'order_id', 'payment_id', 'name', 'phone', 'txn_date', 'detail',
             'status', 'recoverable', 'recovered', 'current_wallet'];
         const lines = filtered.map((r) => [
             r.kind, r.order_id ?? '', r.payment_id ?? '', JSON.stringify(r.name ?? ''), r.phone ?? '',
+            r.txn_date ?? '',
             JSON.stringify(r.detail ?? ''), r.order_status === 1 ? 'active' : (r.order_status == null ? '' : 'inactive'),
             r.recoverable, r.recovered, r.current_wallet,
         ].join(','));
@@ -200,6 +202,7 @@ export default function RecoveryPage() {
                             <tr>
                                 <th className="px-3 py-2 text-left">Customer</th>
                                 <th className="px-3 py-2 text-left">Type</th>
+                                <th className="px-3 py-2 text-left">Date</th>
                                 <th className="px-3 py-2 text-left">Detail</th>
                                 <th className="px-3 py-2 text-right">Recoverable</th>
                                 <th className="px-3 py-2 text-right">Wallet</th>
@@ -208,9 +211,9 @@ export default function RecoveryPage() {
                         </thead>
                         <tbody className="divide-y divide-slate-800/40">
                             {isLoading ? (
-                                <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-400">Loading…</td></tr>
+                                <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-400">Loading…</td></tr>
                             ) : filtered.length === 0 ? (
-                                <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-500">No items match this filter.</td></tr>
+                                <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-500">No items match this filter.</td></tr>
                             ) : (
                                 filtered.map((r) => {
                                     const goesNegative = r.current_wallet < r.recoverable;
@@ -220,6 +223,11 @@ export default function RecoveryPage() {
                                             <td className="px-3 py-2.5">
                                                 <div className="font-medium text-white">{r.name || `#${r.user_id}`}</div>
                                                 <div className="text-xs text-slate-500">{r.phone}{r.order_id ? ` · order #${r.order_id}` : ''}</div>
+                                                <Link
+                                                    href={`/transactions?user_id=${r.user_id}&from=${r.txn_date ?? '2024-01-01'}`}
+                                                    className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-purple-300 hover:text-purple-200">
+                                                    <Receipt className="w-3 h-3" /> View txns
+                                                </Link>
                                             </td>
                                             <td className="px-3 py-2.5">
                                                 <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${isDup
@@ -231,6 +239,9 @@ export default function RecoveryPage() {
                                                         {r.order_status === 1 ? 'active' : 'inactive'}
                                                     </span>
                                                 )}
+                                            </td>
+                                            <td className="px-3 py-2.5 text-slate-400 whitespace-nowrap">
+                                                {r.txn_date || '—'}
                                             </td>
                                             <td className="px-3 py-2.5 text-slate-300">
                                                 <div>{r.detail}</div>

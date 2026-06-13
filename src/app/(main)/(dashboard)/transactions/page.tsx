@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { format, subDays } from 'date-fns';
 import { apiDateMs, formatApiDate } from '@/lib/dateUtils';
 import { useTransactionsByDateRange, useUsers, useAddTransaction, useTransactionDescriptions, type UserTransaction, type User } from '@/hooks/useData';
@@ -8,12 +9,19 @@ import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import RefundModal from '@/components/RefundModal';
 import { inputClassName, selectClassName } from '@/components/FormField';
-import { CreditCard, Plus, RotateCcw, Download } from 'lucide-react';
+import { CreditCard, Plus, RotateCcw, Download, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function TransactionsPage() {
     const today = format(new Date(), 'yyyy-MM-dd');
-    const [startDate, setStartDate] = useState(format(subDays(new Date(), 7), 'yyyy-MM-dd'));
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    // Deep-link from the Recovery page: ?user_id=&from= scopes the list to one
+    // customer and widens the date range back to the linked date.
+    const linkedUserId = searchParams.get('user_id');
+    const linkedFrom = searchParams.get('from');
+    const [userFilter, setUserFilter] = useState<number | null>(linkedUserId ? Number(linkedUserId) : null);
+    const [startDate, setStartDate] = useState(linkedFrom || format(subDays(new Date(), 7), 'yyyy-MM-dd'));
     const [endDate, setEndDate] = useState(today);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showRefundModal, setShowRefundModal] = useState<UserTransaction | null>(null);
@@ -33,9 +41,25 @@ export default function TransactionsPage() {
     );
 
     const sortedTxns = useMemo(() =>
-        [...transactions].sort((a, b) => apiDateMs(b.created_at) - apiDateMs(a.created_at)),
-        [transactions]
+        [...transactions]
+            .filter((t) => userFilter == null || t.user_id === userFilter)
+            .sort((a, b) => apiDateMs(b.created_at) - apiDateMs(a.created_at)),
+        [transactions, userFilter]
     );
+
+    // Name/phone of the scoped customer (from the filtered rows or the users list).
+    const filteredCustomer = useMemo(() => {
+        if (userFilter == null) return null;
+        const fromTxn = transactions.find((t) => t.user_id === userFilter);
+        if (fromTxn?.name) return { name: fromTxn.name, phone: fromTxn.phone };
+        const u = users.find((u: User) => u.id === userFilter);
+        return u ? { name: u.name, phone: u.phone } : { name: `#${userFilter}`, phone: undefined };
+    }, [userFilter, transactions, users]);
+
+    const clearUserFilter = () => {
+        setUserFilter(null);
+        router.replace('/transactions');
+    };
 
     const totalCredit = sortedTxns.filter(t => t.type === 1).reduce((s, t) => s + t.amount, 0);
     const totalDebit = sortedTxns.filter(t => t.type === 2).reduce((s, t) => s + t.amount, 0);
@@ -166,6 +190,20 @@ export default function TransactionsPage() {
                     </button>
                 </div>
             </div>
+
+            {filteredCustomer && (
+                <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-purple-500/10 border border-purple-500/30">
+                    <p className="text-sm text-purple-200">
+                        Showing transactions for <span className="font-semibold text-white">{filteredCustomer.name}</span>
+                        {filteredCustomer.phone ? <span className="text-purple-300"> · {filteredCustomer.phone}</span> : null}
+                        <span className="text-purple-300/70"> — from {formatApiDate(startDate, 'dd-MM-yyyy')}</span>
+                    </p>
+                    <button onClick={clearUserFilter}
+                        className="flex items-center gap-1 text-sm text-purple-300 hover:text-white">
+                        <X className="w-4 h-4" /> Clear
+                    </button>
+                </div>
+            )}
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="glass rounded-xl p-4">
