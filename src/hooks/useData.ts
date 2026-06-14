@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { GET, POST, PUT, DELETE } from '@/lib/api';
+import { uploadViaPresign } from '@/lib/uploads';
 import { wfetch } from '@/lib/whatsapp/wfetch';
 
 // Users
@@ -929,6 +930,18 @@ export function useUploadProductImage() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (data: FormData) => {
+            // Direct-to-R2 first; fall back to legacy multipart on any miss.
+            const file = data.get('image');
+            if (file instanceof File) {
+                const r2 = await uploadViaPresign(file, 'product');
+                if (r2) {
+                    return POST('/product/upload_image', {
+                        id: data.get('id') ?? data.get('product_id'),
+                        image_type: data.get('image_type') ?? 1,
+                        image: r2.filename,
+                    });
+                }
+            }
             return POST('/product/upload_image', data);
         },
         onSuccess: (_data, variables) => {
@@ -996,6 +1009,18 @@ export function useUploadCategoryImage() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (data: FormData) => {
+            // Direct-to-R2 first; fall back to legacy multipart on any miss.
+            const file = data.get('image');
+            if (file instanceof File) {
+                const r2 = await uploadViaPresign(file, 'category');
+                if (r2) {
+                    return POST('/cat/upload_image', {
+                        id: data.get('id'),
+                        image_type: data.get('image_type') ?? 1,
+                        image: r2.filename,
+                    });
+                }
+            }
             return POST('/cat/upload_image', data);
         },
         onSuccess: () => {
@@ -1056,6 +1081,18 @@ export function useUploadSubcategoryImage() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (data: FormData) => {
+            // Direct-to-R2 first; fall back to legacy multipart on any miss.
+            const file = data.get('image');
+            if (file instanceof File) {
+                const r2 = await uploadViaPresign(file, 'category');
+                if (r2) {
+                    return POST('/sub_cat/upload_image', {
+                        id: data.get('id'),
+                        image_type: data.get('image_type') ?? 1,
+                        image: r2.filename,
+                    });
+                }
+            }
             return POST('/sub_cat/upload_image', data);
         },
         onSuccess: () => {
