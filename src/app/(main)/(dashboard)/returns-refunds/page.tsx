@@ -11,6 +11,7 @@ import {
     RefundMode,
 } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
+import { PodImage } from '@/components/PodImage';
 import { RotateCcw, ImageOff, Check } from 'lucide-react';
 import { ApiError } from '@/lib/api-error';
 import { toast } from 'sonner';
@@ -126,19 +127,13 @@ export default function ReturnsRefundsPage() {
             sortable: false,
             render: (item) =>
                 item.pickup_photo_url ? (
-                    <a
-                        href={item.pickup_photo_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block"
-                    >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                            src={item.pickup_photo_url}
+                    <span className="inline-block">
+                        <PodImage
+                            refValue={item.pickup_photo_url}
                             alt={`Pickup photo for return ${item.id}`}
                             className="w-12 h-12 rounded-lg object-cover border border-slate-700/50 hover:ring-2 hover:ring-purple-500/50"
                         />
-                    </a>
+                    </span>
                 ) : (
                     <div
                         className="w-12 h-12 rounded-lg bg-slate-800/50 border border-slate-700/50 flex items-center justify-center"

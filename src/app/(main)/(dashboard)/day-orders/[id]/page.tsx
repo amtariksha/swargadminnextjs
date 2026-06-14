@@ -6,6 +6,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useDaytimeOrder, useDrivers } from '@/hooks/useData';
 import DaytimeOrderForm from '@/components/DaytimeOrderForm';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { PodImage } from '@/components/PodImage';
 import { POST, PUT, ApiError } from '@/lib/api';
 import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog, CalendarClock, RefreshCw, Truck, FileText } from 'lucide-react';
 import { toast } from 'sonner';
@@ -344,12 +345,10 @@ export default function DaytimeOrderDetailPage() {
                             <p className="text-amber-400/80">Note: {order.delivery.admin_note}</p>
                         )}
                         {order.delivery.proof_photo_url && (
-                            <a href={order.delivery.proof_photo_url} target="_blank" rel="noreferrer"
-                                className="inline-block mt-1">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={order.delivery.proof_photo_url} alt="Proof of delivery"
+                            <span className="inline-block mt-1">
+                                <PodImage refValue={order.delivery.proof_photo_url}
                                     className="w-20 h-20 rounded-lg object-cover border border-slate-700 hover:ring-2 hover:ring-purple-500/50" />
-                            </a>
+                            </span>
                         )}
                     </div>
                 )}

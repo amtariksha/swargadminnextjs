@@ -9,6 +9,7 @@ import { ApiError } from '@/lib/api-error';
 import { useDrivers } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import DriverGroupTable from '@/components/DriverGroupTable';
+import { PodImage } from '@/components/PodImage';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import {
     type DeliveryItem,
@@ -1031,11 +1032,10 @@ export default function DeliveryListPage() {
                                                                 : `${stop.returnables.counted_total}`}
                                                         </div>
                                                         {stop.returnables.photo_path && (
-                                                            <a href={stop.returnables.photo_path} target="_blank" rel="noreferrer"
-                                                                className="shrink-0">
-                                                                <img src={stop.returnables.photo_path} alt="returnables"
+                                                            <span className="shrink-0">
+                                                                <PodImage refValue={stop.returnables.photo_path} alt="returnables"
                                                                     className="w-10 h-10 rounded object-cover border border-slate-700" />
-                                                            </a>
+                                                            </span>
                                                         )}
                                                     </div>
                                                 )}

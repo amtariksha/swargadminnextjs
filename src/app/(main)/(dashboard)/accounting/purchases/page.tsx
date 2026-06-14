@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { GET, PUT, POST } from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import { PodLink } from '@/components/PodImage';
 import { CheckCircle2, XCircle, Edit, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -248,8 +249,8 @@ export default function AccountingPurchasesPage() {
                 <p className="text-xs text-slate-400 mb-1 flex items-center gap-1"><ImageIcon className="w-3.5 h-3.5" /> Photos</p>
                 <div className="flex flex-wrap gap-2">
                   {detail.photos.map((p, i) => (
-                    <a key={i} href={p} target="_blank" rel="noreferrer"
-                      className="text-xs text-blue-400 underline">Photo {i + 1}</a>
+                    <PodLink key={i} refValue={p}
+                      className="text-xs text-blue-400 underline">Photo {i + 1}</PodLink>
                   ))}
                 </div>
               </div>

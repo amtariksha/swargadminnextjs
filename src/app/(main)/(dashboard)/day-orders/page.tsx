@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useDaytimeOrders, DaytimeOrder } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import DateWithTodayButton from '@/components/DateWithTodayButton';
+import { PodImage } from '@/components/PodImage';
 import { Sun, Plus, BarChart3, Link2, MapPin } from 'lucide-react';
 
 const ORDER_STATUS_STYLE: Record<string, string> = {
@@ -171,12 +172,10 @@ export default function DayOrdersPage() {
             width: '80px',
             render: (o) => o.delivery?.proof_photo_url
                 ? (
-                    <a href={o.delivery.proof_photo_url} target="_blank" rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()} className="inline-block">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={o.delivery.proof_photo_url} alt="Proof of delivery"
+                    <span onClick={(e) => e.stopPropagation()} className="inline-block">
+                        <PodImage refValue={o.delivery.proof_photo_url}
                             className="w-9 h-9 rounded object-cover border border-slate-700 hover:ring-2 hover:ring-purple-500/50" />
-                    </a>
+                    </span>
                 )
                 : <span className="text-slate-500">—</span>,
         },
