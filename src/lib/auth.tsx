@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { POST } from '@/lib/api';
-import { userIsAdminPanelEligible } from '@/lib/roles';
+import { userIsAdminPanelEligible, PRODUCTION_DELIVERY_ALLOWLIST } from '@/lib/roles';
 
 /**
  * Permission key reserved for the driver-facing /production-delivery page.
@@ -56,6 +56,14 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const computePermissions = (admin: AdminUser | null) => {
+    // TEMPORARY: allowlisted backup-page users (Raushan/Lokesh) are pinned to
+    // production-delivery ONLY — never full admin, even though their role
+    // carries empty permissions (which normally means full access). This keeps
+    // the "let them reach the backup page" grant from leaking the whole panel.
+    // Remove with the roles.ts allowlist once the delivery-app packing view ships.
+    if (admin && PRODUCTION_DELIVERY_ALLOWLIST.has(Number(admin.id))) {
+        return { permissions: [PRODUCTION_DELIVERY_PERMISSION], hasFullAccess: false };
+    }
     if (!admin?.role || admin.role.length === 0) {
         return { permissions: [], hasFullAccess: true };
     }

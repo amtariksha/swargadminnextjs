@@ -50,8 +50,21 @@ export const isDeliveryOnlyRole = (role: RoleLike | undefined | null): boolean =
 };
 
 interface UserWithRoles {
+    id?: number | string | null;
     role?: RoleLike[];
 }
+
+/**
+ * TEMPORARY allowlist — specific delivery-only users who must reach the admin
+ * `/production-delivery` backup page because the packing view doesn't exist in
+ * the delivery app yet. They are pinned to production-delivery ONLY (see
+ * `computePermissions` in auth.tsx) — they never get full admin even though
+ * their role carries empty permissions.
+ *   1964 = Raushan, 1965 = Lokesh
+ * REMOVE this set (and the auth.tsx pinning) once the delivery-app packing view
+ * ships and these users move back to the app.
+ */
+export const PRODUCTION_DELIVERY_ALLOWLIST = new Set<number>([1964, 1965]);
 
 /**
  * True when the user has at least one role that is NOT delivery-only.
@@ -60,6 +73,7 @@ interface UserWithRoles {
  * for legacy super-admin accounts pre-RBAC).
  */
 export const userIsAdminPanelEligible = (user: UserWithRoles | null | undefined): boolean => {
+    if (user && PRODUCTION_DELIVERY_ALLOWLIST.has(Number(user.id))) return true; // TEMP allowlist
     const roles = user?.role ?? [];
     if (roles.length === 0) return true;
     return roles.some((r) => !isDeliveryOnlyRole(r));
