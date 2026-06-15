@@ -298,9 +298,18 @@ export default function DeliveryListPage() {
     // one with driver info — see src/lib/deliveryHelpers.ts.
     const uniqueItems = useMemo(() => dedupeDeliveryItems(rawItems), [rawItems]);
 
-    // Tab 1: filtered orders
+    // B2B shops are TRUCK-delivered (Shops tab), so they stay OFF the customer-
+    // orders + milk-route (routewise / dairy) views. The PACKING list, however,
+    // must total B2B + B2C so production packs everything — so packing keeps
+    // using `uniqueItems` while these three views use the B2C-only subset.
+    const b2cItems = useMemo(
+        () => uniqueItems.filter(item => !(item as DeliveryItem).is_b2b),
+        [uniqueItems],
+    );
+
+    // Tab 1: filtered orders (B2C only — B2B shops live on the Shops tab)
     const deliveryItems = useMemo(() => {
-        let result = uniqueItems;
+        let result = b2cItems;
         if (selectedDriver) result = result.filter(item => item.order_assign_user === selectedDriver || item.delivery_boy_id === selectedDriver);
         if (filters.delivered) result = result.filter(item => item.status === 3);
         if (filters.not_delivered) result = result.filter(item => item.status !== 3);
@@ -315,16 +324,16 @@ export default function DeliveryListPage() {
             return item.mark_delivered_qty !== live;
         });
         return result;
-    }, [uniqueItems, selectedDriver, filters]);
+    }, [b2cItems, selectedDriver, filters]);
 
-    // Tab 2: routewise products (excludes dairy pickup drivers)
-    const routewiseGroups = useMemo(() => groupByDriver(uniqueItems as DeliveryItem[], false), [uniqueItems]);
+    // Tab 2: routewise products (B2C only — excludes dairy pickup drivers)
+    const routewiseGroups = useMemo(() => groupByDriver(b2cItems as DeliveryItem[], false), [b2cItems]);
 
-    // Tab 3: packing list (aggregated by product)
+    // Tab 3: packing list — B2B + B2C total products (pack everything)
     const packingProducts = useMemo(() => aggregateProducts(uniqueItems as DeliveryItem[]), [uniqueItems]);
 
-    // Tab 4: dairy pickup (only dairy pickup drivers)
-    const dairyGroups = useMemo(() => groupByDriver(uniqueItems as DeliveryItem[], true), [uniqueItems]);
+    // Tab 4: dairy pickup (B2C only — only dairy pickup drivers)
+    const dairyGroups = useMemo(() => groupByDriver(b2cItems as DeliveryItem[], true), [b2cItems]);
 
     // ====== Actions ======
     const handleGenerateList = async () => {

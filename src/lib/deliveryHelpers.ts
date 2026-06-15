@@ -46,6 +46,9 @@ export interface DeliveryItem {
     start_date: string;
     subscription_type: number;
     order_type: number;
+    /** True when this row is a B2B shop (truck-delivered). Kept OFF the
+     *  customer-orders / milk-route views, but INCLUDED in packing totals. */
+    is_b2b?: boolean;
     /** Transaction id for THIS delivery. For subscription orders this is
      *  the per-day wallet-debit (matched on delivery_date), not the
      *  order-level `trasation_id` (which can be months stale).  Null
