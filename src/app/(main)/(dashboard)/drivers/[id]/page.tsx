@@ -45,7 +45,7 @@ export default function DriverDetailPage() {
                 name: driver.name || '',
                 phone: driver.phone || '',
                 email: driver.email || '',
-                is_location: driver.is_location ?? 0,
+                is_location: driver.is_location ? 1 : 0,
             });
         }
     }, [driver]);
