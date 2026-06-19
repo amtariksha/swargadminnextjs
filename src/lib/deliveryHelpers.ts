@@ -37,6 +37,12 @@ export interface DeliveryItem {
     status: number;
     delivered_date: string | null;
     mark_delivered_time_stamp: string | null;
+    /** Where the driver's device was when the delivery was marked (the SOD
+     *  mark). Comes from `summary_of_delivery.lat/lng` via the delivery-list
+     *  read. Null when the driver didn't capture a location (or the row isn't
+     *  marked yet). Surfaced read-only on the admin delivery list for audit. */
+    mark_delivery_lat: number | null;
+    mark_delivery_lng: number | null;
     flat_no: string | null;
     apartment_name: string | null;
     area: string | null;

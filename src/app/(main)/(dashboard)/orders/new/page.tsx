@@ -35,6 +35,10 @@ const orderSchema = z.object({
     variant_id: z.number().optional(),
     qty: z.number().min(1, 'Quantity must be at least 1'),
     start_date: z.string().min(1, 'Start date is required'),
+    // Optional end date for recurring subscriptions (type 2/3/4). Empty =
+    // indefinite (current behaviour). Sent as "end_date" "YYYY-MM-DD";
+    // ignored for one-time orders (subscription_type==1).
+    end_date: z.string().optional(),
     subscription_type: z.number().min(1),
     status: z.number(),
     order_status: z.number(),
@@ -265,8 +269,15 @@ export default function CreateOrderPage() {
                 return;
             }
 
+            // end_date only applies to recurring subscriptions (2/3/4).
+            // For one-time orders (subscription_type==1) it's dropped so the
+            // backend never sees it. Empty string → indefinite (omit).
+            const isRecurring = data.subscription_type !== 1;
+            const endDate = isRecurring && data.end_date ? data.end_date : undefined;
+
             const orderData: Record<string, unknown> = {
                 ...data,
+                end_date: endDate,
                 qty: isWeekly ? 1 : data.qty,
                 order_amount: orderAmount,
                 // Variant price wins when a variant was picked; falls back
@@ -511,6 +522,16 @@ export default function CreateOrderPage() {
                                 className={`${dateInputClassName} cursor-pointer [&::-webkit-calendar-picker-indicator]:cursor-pointer`}
                                 onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
                         </FormField>
+                        {/* End date — optional, recurring subscriptions only.
+                            Blank = runs indefinitely. Hidden for one-time orders. */}
+                        {isSubscriptionOrder && (
+                            <FormField label="End Date" error={errors.end_date} className={fieldDate}
+                                hint="Optional — leave blank for indefinite">
+                                <input {...register('end_date')} type="date" min={getTomorrowDate()}
+                                    className={`${dateInputClassName} cursor-pointer [&::-webkit-calendar-picker-indicator]:cursor-pointer`}
+                                    onClick={(e) => (e.target as HTMLInputElement).showPicker?.()} />
+                            </FormField>
+                        )}
                     </div>
                 )}
 

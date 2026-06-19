@@ -191,6 +191,9 @@ export interface OrderDetail extends Order {
     subscription_type: number | null; // 1=One Time, 2=Weekly, 3=Daily, 4=Alternative
     selected_days_for_weekly?: string;
     start_date?: string;
+    /** Optional subscription end date (DATE, nullable). NULL = indefinite.
+     *  Applies to recurring subscription orders (subscription_type 2/3/4). */
+    end_date?: string | null;
     address_id?: number;
     wallet_amount?: number;
 }

@@ -690,6 +690,39 @@ export default function DeliveryListPage() {
             } },
         { key: 'delivered_date', header: 'Del Date', width: colW('delivered_date', '110px', '160px') },
         { key: 'mark_delivered_time_stamp', header: 'Del Time', width: colW('mark_delivered_time_stamp', '100px', '150px'), render: (item) => <span className="text-sm">{formatTime(item.mark_delivered_time_stamp)}</span> },
+        // Driver-location audit (Item 5): the GPS the driver's device captured
+        // when marking this delivery. Shows a Maps coords link when present.
+        // When the row is delivered (status 3) but no location was captured,
+        // show an amber warning badge — the mark happened with no GPS proof.
+        // NOTE: the per-driver `is_location` capture-enabled flag is NOT in the
+        // delivery-list response (backend `get_genrated_order_list` doesn't
+        // join it), so we can't gate strictly on is_location=1 here. Once the
+        // backend exposes it, this badge can narrow to is_location=1 rows only.
+        { key: 'mark_location', header: 'Location', width: '120px', sortable: false,
+            render: (item) => {
+                const hasLoc = item.mark_delivery_lat != null && item.mark_delivery_lng != null;
+                if (hasLoc) {
+                    return (
+                        <a href={`https://maps.google.com/?q=${item.mark_delivery_lat},${item.mark_delivery_lng}`}
+                            target="_blank" rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="flex items-center gap-1 text-purple-400 hover:text-purple-300 text-xs"
+                            title={`Captured at ${item.mark_delivery_lat}, ${item.mark_delivery_lng}`}>
+                            <MapPin className="w-3.5 h-3.5 shrink-0" />
+                            <span className="font-mono truncate">{Number(item.mark_delivery_lat).toFixed(4)},{Number(item.mark_delivery_lng).toFixed(4)}</span>
+                        </a>
+                    );
+                }
+                if (item.status === 3) {
+                    return (
+                        <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/20 text-amber-300 text-xs font-medium"
+                            title="Delivered, but the driver captured no GPS location for this mark">
+                            <AlertTriangle className="w-3 h-3 shrink-0" /> No location
+                        </span>
+                    );
+                }
+                return <span className="text-slate-600 text-xs">—</span>;
+            } },
         { key: 'address', header: 'Address', width: colW('address', '220px', '400px'),
             render: (item) => <span className="text-sm text-slate-300 truncate block" style={{ maxWidth: expandedCol === 'address' ? '380px' : '200px' }} title={composeAddress(item)}>{composeAddress(item)}</span> },
         { key: 'pincode', header: 'Pincode', width: colW('pincode', '100px', '140px') },
@@ -940,15 +973,21 @@ export default function DeliveryListPage() {
                                                 <span className="text-slate-500 hidden md:inline">
                                                     {stop.delivered_at ? `Dropped ${stop.delivered_at}` : '—'}
                                                 </span>
-                                                {stop.mark_lat != null && stop.mark_lng != null && (
+                                                {stop.mark_lat != null && stop.mark_lng != null ? (
                                                     <a href={`https://maps.google.com/?q=${stop.mark_lat},${stop.mark_lng}`}
                                                         target="_blank" rel="noreferrer"
                                                         onClick={(e) => e.stopPropagation()}
                                                         className="flex items-center gap-1 text-purple-400 hover:text-purple-300"
-                                                        title="Where the truck driver marked this drop">
+                                                        title={`Where the truck driver marked this drop (${stop.mark_lat}, ${stop.mark_lng})`}>
                                                         <MapPin className="w-3.5 h-3.5" />
                                                     </a>
-                                                )}
+                                                ) : delivered ? (
+                                                    // Audit (Item 5): dropped, but no GPS captured for the mark.
+                                                    <span className="flex items-center gap-1 text-amber-300"
+                                                        title="Marked delivered, but the truck driver captured no GPS location">
+                                                        <AlertTriangle className="w-3.5 h-3.5" />
+                                                    </span>
+                                                ) : null}
                                                 <span className={`font-medium px-2 py-1 rounded-lg ${delivered
                                                     ? 'bg-green-500/20 text-green-400'
                                                     : 'bg-amber-500/20 text-amber-300'}`}>

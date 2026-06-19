@@ -30,6 +30,9 @@ const orderUpdateSchema = z.object({
     status: z.number(),
     order_status: z.number(),
     start_date: z.string().optional(),
+    // Optional subscription end date (recurring 2/3/4 only). Empty = indefinite.
+    // Sent as "end_date" "YYYY-MM-DD"; ignored for one-time orders.
+    end_date: z.string().optional(),
     address_id: z.number().optional(),
 });
 
@@ -75,6 +78,12 @@ export default function OrderDetailPage() {
                 status: orderData.status ?? 0,
                 order_status: orderData.order_status ?? 0,
                 start_date: orderData.start_date || orderData.delivery_date || '',
+                // Normalize stored end_date to yyyy-MM-dd for the date input;
+                // empty when null/indefinite. Backend may return either a bare
+                // date or a timestamp, so route through formatApiDate.
+                end_date: orderData.end_date
+                    ? formatApiDate(orderData.end_date, 'yyyy-MM-dd', '')
+                    : '',
                 address_id: orderData.address_id || undefined,
             });
         }
@@ -82,7 +91,15 @@ export default function OrderDetailPage() {
 
     const onSubmit = async (data: OrderUpdateData) => {
         try {
-            await updateOrder.mutateAsync({ id: Number(id), ...data });
+            // end_date applies only to recurring subscriptions (2/3/4). For
+            // one-time orders drop it entirely. For subscriptions, send it
+            // even when empty so an operator can clear it → back to indefinite.
+            const { end_date, ...rest } = data;
+            const payload: Record<string, unknown> = { id: Number(id), ...rest };
+            if (isSubscription) {
+                payload.end_date = end_date ?? '';
+            }
+            await updateOrder.mutateAsync(payload);
             toast.success('Order updated');
         } catch (error) { toast.error(error instanceof Error ? error.message : 'Failed to update order'); }
     };
@@ -278,6 +295,14 @@ export default function OrderDetailPage() {
                     <FormField label="Start Date" error={errors.start_date} className={fieldDate}>
                         <input {...register('start_date')} type="date" className={dateInputClassName} />
                     </FormField>
+                    {/* End date — optional, recurring subscriptions only.
+                        Blank = runs indefinitely; clearing it reverts to indefinite. */}
+                    {isSubscription && (
+                        <FormField label="End Date" error={errors.end_date} className={fieldDate}
+                            hint="Optional — leave blank for indefinite">
+                            <input {...register('end_date')} type="date" className={dateInputClassName} />
+                        </FormField>
+                    )}
                     <FormField label="Status" error={errors.status} className={fieldSelect}>
                         <select {...register('status', { valueAsNumber: true })} className={selectClassName}>
                             <option value={0}>Pending</option>
