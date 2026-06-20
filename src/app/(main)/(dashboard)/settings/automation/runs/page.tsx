@@ -25,6 +25,11 @@ const JOBS: JobMeta[] = [
     { name: 'low-balance-reminder',   label: 'Low Balance Reminder',   badgeClass: 'bg-amber-500/20 text-amber-300' },
     { name: 'sales-incentive',        label: 'Daytime Sales Incentive', badgeClass: 'bg-cyan-500/20 text-cyan-300' },
     { name: 'daily-db-backup',        label: 'Daily DB Backup',        badgeClass: 'bg-emerald-500/20 text-emerald-300' },
+    { name: 'driver-nudge-download_5', label: 'Driver Nudge 05:00', badgeClass: 'bg-orange-500/20 text-orange-300' },
+    { name: 'driver-nudge-download_6', label: 'Driver Nudge 06:00', badgeClass: 'bg-orange-500/20 text-orange-300' },
+    { name: 'driver-nudge-sync_7',     label: 'Driver Nudge 07:00', badgeClass: 'bg-rose-500/20 text-rose-300' },
+    { name: 'driver-nudge-sync_730',   label: 'Driver Nudge 07:30', badgeClass: 'bg-rose-500/20 text-rose-300' },
+    { name: 'driver-nudge-sync_8',     label: 'Driver Nudge 08:00', badgeClass: 'bg-rose-500/20 text-rose-300' },
 ];
 
 /** Format a duration in ms into "Xs" or "Xm Ys" — for at-a-glance reading. */
@@ -45,6 +50,11 @@ function renderSummary(run: AutomationRun): string {
     }
     const s = run.summary as Record<string, unknown> | null;
     if (!s || typeof s !== 'object') return '—';
+
+    // Driver nudges (5 slots share this shape): { level, drivers, sent, cleared }.
+    if (run.job_name.startsWith('driver-nudge-')) {
+        return `drivers ${s.drivers ?? 0} · sent ${s.sent ?? 0} · cleared ${s.cleared ?? 0}`;
+    }
 
     switch (run.job_name) {
         case 'low-balance-reminder':

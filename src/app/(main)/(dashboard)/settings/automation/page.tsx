@@ -106,6 +106,46 @@ const CRON_JOBS: CronJob[] = [
             'backend scheduler → storefront /api/cron/abandoned-cart. ' +
             'Requires STOREFRONT_BASE_URL + STOREFRONT_CRON_SECRET on the backend env.',
     },
+    // Driver nudges (migration 088): five escalating morning slots that push a
+    // last-mile driver to start / finish their round. All five share ONE enable
+    // flag ('Driver Nudge Enabled') — toggling any one toggles the whole series.
+    {
+        key: 'driver-nudge-download_5',
+        name: 'Driver Nudge — 05:00 (start delivery)',
+        flagTitle: 'Driver Nudge Enabled',
+        timeTitle: 'Driver Nudge Time download_5',
+        description:
+            'Reminds a last-mile driver to start their round if they have not downloaded their list yet. ' +
+            'First of the escalating morning driver-nudge series (05:00 → 08:00 IST). The enable toggle is shared by all five slots.',
+    },
+    {
+        key: 'driver-nudge-download_6',
+        name: 'Driver Nudge — 06:00 (getting very late)',
+        flagTitle: 'Driver Nudge Enabled',
+        timeTitle: 'Driver Nudge Time download_6',
+        description: 'Second start-delivery nudge if the list still has not been downloaded. Shares the Driver Nudge enable flag.',
+    },
+    {
+        key: 'driver-nudge-sync_7',
+        name: 'Driver Nudge — 07:00 (complete soon)',
+        flagTitle: 'Driver Nudge Enabled',
+        timeTitle: 'Driver Nudge Time sync_7',
+        description: 'Nudges a driver with deliveries still not marked/synced to complete soon. Shares the Driver Nudge enable flag.',
+    },
+    {
+        key: 'driver-nudge-sync_730',
+        name: 'Driver Nudge — 07:30 (very late)',
+        flagTitle: 'Driver Nudge Enabled',
+        timeTitle: 'Driver Nudge Time sync_730',
+        description: 'Escalated complete-deliveries nudge for pending unsynced orders. Shares the Driver Nudge enable flag.',
+    },
+    {
+        key: 'driver-nudge-sync_8',
+        name: 'Driver Nudge — 08:00 (extremely late)',
+        flagTitle: 'Driver Nudge Enabled',
+        timeTitle: 'Driver Nudge Time sync_8',
+        description: 'Final, most-urgent complete-deliveries nudge for pending unsynced orders. Shares the Driver Nudge enable flag.',
+    },
 ];
 
 // Values that mean "off". Everything else (incl. unknown) means "on" —
