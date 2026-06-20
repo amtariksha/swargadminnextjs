@@ -9,8 +9,8 @@
  * `number | string`; use Number(...) / the helpers in @/lib/accounting before maths.
  */
 
-import { useQuery } from '@tanstack/react-query';
-import { GET } from '@/lib/api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { GET, POST } from '@/lib/api';
 
 export interface Meta {
     total?: number;
@@ -169,6 +169,8 @@ export interface InvoiceRow {
 }
 
 export interface InvoiceLine {
+    /** invoice_line_item.id — required to issue a credit/debit note against this line. */
+    invoice_line_item_id?: number | null;
     product_id?: number | null;
     description?: string | null;
     hsn_code?: string | null;
@@ -208,6 +210,44 @@ export function useInvoice(id: number | null) {
         queryKey: ['accounting', 'invoice', id],
         queryFn: async () => (await GET<InvoiceDetail>(`/accounting/invoices/${id}`)).data,
         enabled: id != null,
+    });
+}
+
+// ── Credit / Debit notes (sales-return / supplementary against a tax invoice) ──
+
+export interface IssueNoteLine {
+    invoice_line_item_id: number;
+    adjusted_qty: number;
+}
+
+export interface IssueNotePayload {
+    invoiceId: number;
+    note_type: 'credit' | 'debit';
+    items: IssueNoteLine[];
+    reason: string;
+    note_date: string;
+}
+
+/**
+ * Issue a credit or debit note against a B2B tax invoice. The backend posts a
+ * credit_note / debit_note voucher + ledger entries and returns the new note;
+ * we invalidate the source invoice so its detail reflects the adjustment.
+ */
+export function useIssueNote() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ invoiceId, ...body }: IssueNotePayload) => {
+            const res = await POST<Record<string, unknown>>(
+                `/accounting/invoices/${invoiceId}/issue-note`,
+                body as unknown as Record<string, unknown>,
+            );
+            return res.data;
+        },
+        onSuccess: (_data, vars) => {
+            qc.invalidateQueries({ queryKey: ['accounting', 'invoice', vars.invoiceId] });
+            qc.invalidateQueries({ queryKey: ['accounting', 'invoices'] });
+            qc.invalidateQueries({ queryKey: ['accounting', 'vouchers'] });
+        },
     });
 }
 

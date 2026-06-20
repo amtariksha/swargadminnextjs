@@ -9,7 +9,8 @@ import {
     formatINR, formatPercent, formatDate,
 } from '@/lib/accounting';
 import Modal from '@/components/Modal';
-import { ArrowLeft, FileDown, Ban, BookText, Loader2 } from 'lucide-react';
+import IssueNotesModal from '@/components/accounting/IssueNotesModal';
+import { ArrowLeft, FileDown, Ban, BookText, Loader2, FileMinus, FilePlus } from 'lucide-react';
 import { GET, POST } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -23,6 +24,7 @@ export default function InvoiceDetailPage() {
     const [showCancel, setShowCancel] = useState(false);
     const [cancelReason, setCancelReason] = useState('');
     const [cancelling, setCancelling] = useState(false);
+    const [noteType, setNoteType] = useState<'credit' | 'debit' | null>(null);
 
     const inv = data?.invoice;
     const lines = data?.lines || [];
@@ -72,6 +74,9 @@ export default function InvoiceDetailPage() {
 
     const totalTax = Number(inv.cgst_amount) + Number(inv.sgst_amount) + Number(inv.igst_amount);
     const isCancelled = Number(inv.status) === 2;
+    // Credit/Debit notes apply only to real B2B tax invoices (not the B2C
+    // consolidated document, document_type 3) that are still issued.
+    const canIssueNote = Number(inv.document_type) !== 3 && Number(inv.status) === 1;
 
     return (
         <div className="space-y-6">
@@ -101,6 +106,18 @@ export default function InvoiceDetailPage() {
                         className="flex items-center gap-2 px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl text-sm hover:bg-slate-700/50 disabled:opacity-50">
                         {pdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} PDF
                     </button>
+                    {canIssueNote && (
+                        <>
+                            <button onClick={() => setNoteType('credit')}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/20 border border-amber-500/30 text-amber-300 rounded-xl text-sm hover:bg-amber-500/30">
+                                <FileMinus className="w-4 h-4" /> Issue Credit Note
+                            </button>
+                            <button onClick={() => setNoteType('debit')}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 rounded-xl text-sm hover:bg-cyan-500/30">
+                                <FilePlus className="w-4 h-4" /> Issue Debit Note
+                            </button>
+                        </>
+                    )}
                     {!isCancelled && (
                         <button onClick={() => setShowCancel(true)}
                             className="flex items-center gap-2 px-4 py-2.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl text-sm hover:bg-red-500/30">
@@ -186,6 +203,18 @@ export default function InvoiceDetailPage() {
                     </div>
                 </div>
             </div>
+
+            {noteType && (
+                <IssueNotesModal
+                    isOpen={noteType !== null}
+                    onClose={() => setNoteType(null)}
+                    invoiceId={inv.id}
+                    invoiceNumber={inv.invoice_number}
+                    noteType={noteType}
+                    lines={lines}
+                    onIssued={refetch}
+                />
+            )}
 
             <Modal isOpen={showCancel} onClose={() => setShowCancel(false)} title="Cancel invoice" size="md">
                 <div className="space-y-4">
