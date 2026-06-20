@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -70,7 +70,7 @@ export default function OrderDetailPage() {
     const assignOrder = useAssignOrder();
     const deleteAssignment = useDeleteOrderAssignment();
 
-    const { register, handleSubmit, reset, formState: { errors } } = useForm<OrderUpdateData>({
+    const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<OrderUpdateData>({
         resolver: zodResolver(orderUpdateSchema),
     });
 
@@ -93,6 +93,29 @@ export default function OrderDetailPage() {
             });
         }
     }, [orderData, reset]);
+
+    // Quantity editing: keep the (read-only) Amount consistent by recomputing
+    // it = per-unit-incl-tax × qty whenever the operator changes qty — the
+    // backend update_order takes order_amount as-passed (no recompute), so the
+    // form must send the right total. Per-unit is derived from the order's
+    // snapshotted price + tax (robust to a corrupted stored order_amount).
+    // Skipped for weekly (its order_amount is per-unit; per-day qty lives in the
+    // create-form day picker). Only fires when qty actually differs from the
+    // stored value, so a custom/override amount isn't clobbered on load.
+    const qty = watch('qty');
+    const unitAmount = useMemo(() => {
+        const price = Number(orderData?.price) || 0;
+        const tax = Number(orderData?.tax) || 0;
+        return Math.round((price + (price * tax) / 100) * 100) / 100;
+    }, [orderData?.price, orderData?.tax]);
+    useEffect(() => {
+        if (!orderData || subType === 2) return;
+        const q = Number(qty) || 0;
+        const originalQty = Number(orderData.qty) || 0;
+        if (q > 0 && q !== originalQty && unitAmount > 0) {
+            setValue('order_amount', Math.round(unitAmount * q * 100) / 100);
+        }
+    }, [qty, unitAmount, subType, orderData, setValue]);
 
     const onSubmit = async (data: OrderUpdateData) => {
         try {
@@ -307,13 +330,19 @@ export default function OrderDetailPage() {
             <form onSubmit={handleSubmit(onSubmit)} className="glass rounded-xl p-6 space-y-4 max-w-5xl">
                 <h2 className="text-lg font-semibold text-white">Edit Order</h2>
                 <div className="flex flex-wrap gap-4">
+                    {/* Qty editable for one-time + daily/alternate orders.
+                        Locked for weekly (per-day qty lives in the create form)
+                        and for an already-delivered one-time order (correct a
+                        delivered order via Recovery / Credit Note, not here). */}
                     <FormField label="Quantity" error={errors.qty} className={fieldNumber}>
                         <input {...register('qty', { valueAsNumber: true })} type="number" min={1}
-                            disabled={isOneTime} className={inputClassName} />
+                            disabled={subType === 2 || isOneTimeDelivered} className={inputClassName} />
                     </FormField>
-                    <FormField label="Amount (₹)" error={errors.order_amount} className={fieldNumber}>
+                    {/* Read-only — auto-recomputed from qty (see effect above). */}
+                    <FormField label="Amount (₹)" error={errors.order_amount} className={fieldNumber}
+                        hint="Auto-calculated from quantity">
                         <input {...register('order_amount', { valueAsNumber: true })} type="number" step="0.01"
-                            disabled className={`${inputClassName} !text-slate-500`} />
+                            readOnly className={`${inputClassName} !text-slate-500`} />
                     </FormField>
                     <FormField label="Start Date" error={errors.start_date} className={fieldDate}>
                         <input {...register('start_date')} type="date" className={dateInputClassName} />
