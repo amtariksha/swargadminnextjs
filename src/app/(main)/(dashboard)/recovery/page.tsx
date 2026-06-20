@@ -34,8 +34,19 @@ export default function RecoveryPage() {
     const [search, setSearch] = useState('');
     const [pendingKey, setPendingKey] = useState<string | null>(null);
 
-    const rows = data?.rows ?? [];
+    const rows = useMemo(() => data?.rows ?? [], [data]);
     const summary = data?.summary;
+
+    // "Marked recovered (manual)" — rows resolved via "Mark recovered" (removed
+    // from the owed list WITHOUT a wallet debit; settled outside the system).
+    // Summed client-side from the resolved rows the report already returns.
+    const manualResolved = useMemo(() => {
+        const resolvedRows = rows.filter((r) => r.resolved);
+        return {
+            total: resolvedRows.reduce((s, r) => s + (r.recoverable || 0), 0),
+            count: resolvedRows.length,
+        };
+    }, [rows]);
 
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
@@ -167,7 +178,7 @@ export default function RecoveryPage() {
             </div>
 
             {summary && (
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
                     <div className="glass rounded-xl p-4">
                         <div className="flex items-center gap-2 text-amber-300 text-sm mb-1"><IndianRupee className="w-4 h-4" /> Total recoverable</div>
                         <div className="text-2xl font-bold text-white">{inr(summary.total_recoverable)}</div>
@@ -191,6 +202,12 @@ export default function RecoveryPage() {
                     <div className="glass rounded-xl p-4">
                         <div className="text-sm text-slate-400 mb-1">Already recovered</div>
                         <div className="text-2xl font-bold text-white">{inr(summary.total_recovered)}</div>
+                        <div className="text-xs text-slate-500 mt-1">via wallet debit</div>
+                    </div>
+                    <div className="glass rounded-xl p-4">
+                        <div className="text-sm text-slate-400 mb-1">Marked recovered (manual)</div>
+                        <div className="text-2xl font-bold text-white">{inr(manualResolved.total)}</div>
+                        <div className="text-xs text-slate-500 mt-1">{manualResolved.count} row{manualResolved.count === 1 ? '' : 's'} · no wallet debit</div>
                     </div>
                 </div>
             )}
