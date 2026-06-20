@@ -54,6 +54,7 @@ export default function DriversPage() {
     const [formIsLocation, setFormIsLocation] = useState(0);
     const [formDropPointId, setFormDropPointId] = useState('');
     const [formRole, setFormRole] = useState(4);
+    const [originalRole, setOriginalRole] = useState(4);
     const [editUserId, setEditUserId] = useState<number | null>(null);
     // Per-user delivery-app capability override (added on top of the role's caps).
     const [formDeliveryCaps, setFormDeliveryCaps] = useState<string[]>([]);
@@ -85,6 +86,7 @@ export default function DriversPage() {
         setFormIsLocation(driver.is_location || 0);
         setFormDropPointId(driver.drop_point_id != null ? String(driver.drop_point_id) : '');
         setFormRole(driver.role_id || 4);
+        setOriginalRole(driver.role_id || 4);
         setEditUserId(driver.user_id || driver.id);
         setFormDeliveryCaps(driver.delivery_permissions || []);
         setShowModal(true);
@@ -111,6 +113,10 @@ export default function DriversPage() {
                     // Extra delivery-app access on top of the driver's role.
                     delivery_permissions: formDeliveryCaps,
                 });
+                // Driver Type (role) change → transactional assign_role replace.
+                if (formRole !== originalRole) {
+                    await POST('/update_admin_user_role', { user_id: editUserId, role_id: formRole });
+                }
                 toast.success('User Details Updated successfully');
             }
             queryClient.invalidateQueries({ queryKey: ['drivers'] });
@@ -326,20 +332,18 @@ export default function DriversPage() {
                                     className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                                 />
                             </div>
-                            {isAddMode && (
-                                <div>
-                                    <label className="block text-sm font-medium text-slate-300 mb-1">Driver Type *</label>
-                                    <select
-                                        value={formRole}
-                                        onChange={(e) => setFormRole(Number(e.target.value))}
-                                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                    >
-                                        {DRIVER_ROLES.map((r) => (
-                                            <option key={r.id} value={r.id}>{r.label}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-1">Driver Type *</label>
+                                <select
+                                    value={formRole}
+                                    onChange={(e) => setFormRole(Number(e.target.value))}
+                                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                                >
+                                    {DRIVER_ROLES.map((r) => (
+                                        <option key={r.id} value={r.id}>{r.label}</option>
+                                    ))}
+                                </select>
+                            </div>
                             {!isAddMode && formRole === 4 && (
                                 <div>
                                     <label className="block text-sm font-medium text-slate-300 mb-1">Drop Point</label>
