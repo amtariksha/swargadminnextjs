@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
 import { ArrowLeft, Truck, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { useRoles } from '@/hooks/useAdminUsers';
 
 interface DriverDetail {
     id: number;
@@ -15,6 +16,7 @@ interface DriverDetail {
     status: number;
     is_location: number;
     wallet_amount: number;
+    role?: { id: number; role_id: number; role_title: string }[];
 }
 
 export default function DriverDetailPage() {
@@ -28,7 +30,10 @@ export default function DriverDetailPage() {
         phone: '',
         email: '',
         is_location: 0,
+        role_id: 0,
     });
+
+    const { data: roles } = useRoles();
 
     const { data: driver, isLoading } = useQuery({
         queryKey: ['driver', driverId],
@@ -46,12 +51,13 @@ export default function DriverDetailPage() {
                 phone: driver.phone || '',
                 email: driver.email || '',
                 is_location: driver.is_location ? 1 : 0,
+                role_id: driver.role?.[0]?.role_id ?? 0,
             });
         }
     }, [driver]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const value = e.target.name === 'is_location' ? Number(e.target.value) : e.target.value;
+        const value = (e.target.name === 'is_location' || e.target.name === 'role_id') ? Number(e.target.value) : e.target.value;
         setFormData(prev => ({ ...prev, [e.target.name]: value }));
     };
 
@@ -59,10 +65,16 @@ export default function DriverDetailPage() {
         e.preventDefault();
         setIsSubmitting(true);
         try {
+            const { role_id, ...userFields } = formData;
             await POST('/update_user', {
                 id: driverId,
-                ...formData,
+                ...userFields,
             });
+            // Role change goes through the transactional assign_role replace.
+            const currentRoleId = driver?.role?.[0]?.role_id ?? 0;
+            if (role_id && role_id !== currentRoleId) {
+                await POST('/update_admin_user_role', { user_id: Number(driverId), role_id });
+            }
             toast.success('Driver updated successfully');
             queryClient.invalidateQueries({ queryKey: ['drivers'] });
             queryClient.invalidateQueries({ queryKey: ['driver', driverId] });
@@ -126,6 +138,18 @@ export default function DriverDetailPage() {
                         type="email" name="email" value={formData.email} onChange={handleChange}
                         className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                     />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Role</label>
+                    <select
+                        name="role_id" value={formData.role_id} onChange={handleChange}
+                        className="w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                    >
+                        <option value={0} disabled>Select a role</option>
+                        {(roles || []).map((r) => (
+                            <option key={r.id} value={r.id}>{r.title}</option>
+                        ))}
+                    </select>
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-slate-300 mb-2">Driver Location Tracking</label>
