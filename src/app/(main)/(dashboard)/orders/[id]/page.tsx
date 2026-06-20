@@ -29,6 +29,10 @@ const orderUpdateSchema = z.object({
     order_amount: z.number().min(0),
     status: z.number(),
     order_status: z.number(),
+    // Editable cadence for recurring subs — daily (3) ↔ alternate (4) only.
+    // Weekly (2) needs the per-day editor on the create form, so it stays
+    // read-only here; one-time (1) is fixed.
+    subscription_type: z.number().optional(),
     start_date: z.string().optional(),
     // Optional subscription end date (recurring 2/3/4 only). Empty = indefinite.
     // Sent as "end_date" "YYYY-MM-DD"; ignored for one-time orders.
@@ -77,6 +81,7 @@ export default function OrderDetailPage() {
                 order_amount: orderData.order_amount || orderData.final_amount || 0,
                 status: orderData.status ?? 0,
                 order_status: orderData.order_status ?? 0,
+                subscription_type: subType ?? 1,
                 start_date: orderData.start_date || orderData.delivery_date || '',
                 // Normalize stored end_date to yyyy-MM-dd for the date input;
                 // empty when null/indefinite. Backend may return either a bare
@@ -94,10 +99,16 @@ export default function OrderDetailPage() {
             // end_date applies only to recurring subscriptions (2/3/4). For
             // one-time orders drop it entirely. For subscriptions, send it
             // even when empty so an operator can clear it → back to indefinite.
-            const { end_date, ...rest } = data;
+            const { end_date, subscription_type, ...rest } = data;
             const payload: Record<string, unknown> = { id: Number(id), ...rest };
             if (isSubscription) {
                 payload.end_date = end_date ?? '';
+                // Only daily (3) ↔ alternate (4) cadence is editable here.
+                // Weekly stays read-only (needs the per-day editor on create).
+                if ((subType === 3 || subType === 4) &&
+                    (subscription_type === 3 || subscription_type === 4)) {
+                    payload.subscription_type = subscription_type;
+                }
             }
             await updateOrder.mutateAsync(payload);
             toast.success('Order updated');
@@ -330,9 +341,19 @@ export default function OrderDetailPage() {
                             </select>
                         </FormField>
                     )}
-                    <FormField label="Subscription Type" className={fieldSelect}>
-                        <input value={SUB_TYPE_LABELS[subType] || 'N/A'} disabled className={`${inputClassName} !text-slate-500`} />
-                    </FormField>
+                    {isSubscription && (subType === 3 || subType === 4) ? (
+                        <FormField label="Subscription Type" className={fieldSelect}
+                            hint="Switch cadence (daily ↔ alternate). Weekly needs a new order.">
+                            <select {...register('subscription_type', { valueAsNumber: true })} className={selectClassName}>
+                                <option value={3}>Daily</option>
+                                <option value={4}>Alternative Days</option>
+                            </select>
+                        </FormField>
+                    ) : (
+                        <FormField label="Subscription Type" className={fieldSelect}>
+                            <input value={SUB_TYPE_LABELS[subType] || 'N/A'} disabled className={`${inputClassName} !text-slate-500`} />
+                        </FormField>
+                    )}
                     {addresses.length > 0 && (
                         <FormField label="Address" className={fieldText}>
                             <select {...register('address_id', { valueAsNumber: true })} className={selectClassName}>

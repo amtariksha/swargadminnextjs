@@ -75,6 +75,7 @@ const INITIAL_FILTERS = {
     not_onetime: false,
     is_back_order: false,
     undelivered_back_order: false,
+    b2b_only: false,
 };
 
 type FilterKey = keyof typeof INITIAL_FILTERS;
@@ -91,6 +92,7 @@ const FILTER_LABELS: Record<FilterKey, string> = {
     not_onetime: 'Not OneTime',
     is_back_order: 'Back-order orders',
     undelivered_back_order: 'Undelivered back-orders',
+    b2b_only: 'B2B Orders',
 };
 
 export default function OrdersPage() {
@@ -199,6 +201,11 @@ export default function OrdersPage() {
         if (filters.undelivered_back_order) {
             result = result.filter(o => o.is_back_order === 1 && !o.delivery_status);
         }
+        // B2B-only — customers with a kind='shop' drop point (truck-delivered,
+        // GST-invoiced). is_b2b comes from GET /get_order (1/0 or boolean).
+        if (filters.b2b_only) {
+            result = result.filter(o => o.is_b2b === 1 || o.is_b2b === true);
+        }
 
         return result;
     }, [orders, filters, tomorrow]);
@@ -253,7 +260,17 @@ export default function OrdersPage() {
         { key: 'status', header: 'Status', width: '90px', render: (o) => <span className="text-sm">{STATUS[o.status] || 'N/A'}</span> },
         { key: 'order_status', header: 'Order Status', width: '100px', render: (o) => <span className="text-sm">{getOrderStatus(o)}</span> },
         { key: 'subscription_type', header: 'Sub Type', width: '130px', render: (o) => <span className="text-xs">{getSubTypeLabel(o.subscription_type)}</span> },
-        { key: 'name', header: 'Name', width: '150px' },
+        {
+            key: 'name', header: 'Name', width: '170px',
+            render: (o) => (
+                <span className="inline-flex items-center gap-1.5">
+                    <span>{o.name || '-'}</span>
+                    {(o.is_b2b === 1 || o.is_b2b === true) && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 whitespace-nowrap" title="B2B — truck delivered, GST invoiced">B2B</span>
+                    )}
+                </span>
+            ),
+        },
         { key: 's_phone', header: 'Phone', width: '150px', render: (o) => <CopyableCell value={o.s_phone} label="Phone" /> },
         {
             key: 'wallet_amount', header: 'Wallet', width: '90px',

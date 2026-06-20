@@ -2,6 +2,8 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useMemo, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { GET } from '@/lib/api';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -95,6 +97,20 @@ export default function CreateOrderPage() {
     const subscriptionType = watch('subscription_type');
 
     const { data: addresses = [] } = useUserAddresses(selectedUserId || undefined);
+
+    // B2B status of the selected customer. A B2B customer (kind='shop' drop
+    // point) routes to the truck and is GST-invoiced — never assigned a
+    // last-mile driver (the backend rejects it). Used to badge the customer and
+    // hide the Delivery Partner picker below.
+    const { data: b2bStatus } = useQuery({
+        queryKey: ['customer-b2b-status', selectedUserId],
+        queryFn: async () => {
+            const r = await GET<{ is_b2b?: boolean | number }>(`/admin/customer_b2b_status/${selectedUserId}`);
+            return r.data;
+        },
+        enabled: !!selectedUserId && selectedUserId > 0,
+    });
+    const isB2bCustomer = b2bStatus?.is_b2b === true || b2bStatus?.is_b2b === 1;
 
     const selectedProduct = useMemo(() => {
         return products.find((p) => p.id === selectedProductId) || null;
@@ -302,7 +318,7 @@ export default function CreateOrderPage() {
             // chain the /add_order_assign call now that the order id
             // exists. Previously the create form punted the operator to
             // the edit page for this — saving a click per order.
-            if (driverId && newOrderId) {
+            if (driverId && newOrderId && !isB2bCustomer) {
                 try {
                     await assignOrder.mutateAsync({
                         user_id: Number(driverId),
@@ -363,7 +379,12 @@ export default function CreateOrderPage() {
                         {selectedUser ? (
                             <div className="flex items-center justify-between p-3 bg-slate-900/50 border border-slate-700/50 rounded-xl">
                                 <div>
-                                    <p className="text-white font-medium">{selectedUser.name}</p>
+                                    <p className="text-white font-medium flex items-center gap-2">
+                                        {selectedUser.name}
+                                        {isB2bCustomer && (
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300" title="B2B — truck delivered, GST invoiced">B2B</span>
+                                        )}
+                                    </p>
                                     <p className="text-xs text-slate-400">{selectedUser.phone} &middot; Wallet: ₹{selectedUser.wallet_amount}</p>
                                 </div>
                                 <button type="button" onClick={() => { setValue('user_id', 0); setUserSearch(''); }} className="text-sm text-red-400 hover:text-red-300">Change</button>
@@ -425,6 +446,18 @@ export default function CreateOrderPage() {
                         {errors.product_id && <p className="mt-1 text-xs text-red-400">{errors.product_id.message}</p>}
                     </div>
                 </div>
+
+                {/* B2B routing note — this customer's orders (incl. subscriptions)
+                    are delivered by the truck and billed by GST invoice; no
+                    last-mile driver is assigned. */}
+                {isB2bCustomer && (
+                    <div className="flex items-start gap-2 p-3 rounded-xl bg-purple-500/10 border border-purple-500/30 text-sm text-purple-200">
+                        <span className="mt-0.5">🚚</span>
+                        <span>
+                            <span className="font-medium">B2B customer.</span> This order routes to the <span className="font-medium">truck driver</span> as a shop stop and is billed by <span className="font-medium">GST invoice</span> on delivery — no delivery driver is assigned. Subscriptions (daily / alternate / weekly) are supported.
+                        </span>
+                    </div>
+                )}
 
                 {/* Variations (migration 030): variant picker for variable
                     products. Single-row chip strip — each chip shows the
@@ -670,21 +703,25 @@ export default function CreateOrderPage() {
 
                 {/* Delivery Partner — optional. When set, /add_order_assign
                     fires immediately after /add_order succeeds. Operator
-                    can leave blank and assign later from the edit page. */}
-                <FormField label="Delivery Partner" className={fieldText}>
-                    <select
-                        value={driverId}
-                        onChange={(e) => setDriverId(e.target.value === '' ? '' : Number(e.target.value))}
-                        className={selectClassName}
-                    >
-                        <option value="">— Assign later —</option>
-                        {drivers.map((d) => (
-                            <option key={d.id} value={d.id}>
-                                {d.name}{d.phone ? ` · ${d.phone}` : ''}{d.role_label ? ` · ${d.role_label}` : ''}
-                            </option>
-                        ))}
-                    </select>
-                </FormField>
+                    can leave blank and assign later from the edit page.
+                    Hidden for B2B customers: they route to the truck and the
+                    backend rejects a last-mile driver assignment. */}
+                {!isB2bCustomer && (
+                    <FormField label="Delivery Partner" className={fieldText}>
+                        <select
+                            value={driverId}
+                            onChange={(e) => setDriverId(e.target.value === '' ? '' : Number(e.target.value))}
+                            className={selectClassName}
+                        >
+                            <option value="">— Assign later —</option>
+                            {drivers.map((d) => (
+                                <option key={d.id} value={d.id}>
+                                    {d.name}{d.phone ? ` · ${d.phone}` : ''}{d.role_label ? ` · ${d.role_label}` : ''}
+                                </option>
+                            ))}
+                        </select>
+                    </FormField>
+                )}
 
                 {/* Order Summary */}
                 {selectedProduct && (
