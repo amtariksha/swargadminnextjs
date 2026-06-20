@@ -243,6 +243,17 @@ export default function OrderDetailPage() {
                     (see deliveryController.getGeneratedOrderListByDate).
                     No need to delete-then-add. The X button stays as an
                     explicit "remove all assignments" affordance. */}
+                {/* B2B orders auto-assign to the truck driver — hide the manual
+                    driver picker and show a read-only note instead. */}
+                {orderData.is_b2b ? (
+                    <div className="p-4 bg-slate-900/30 rounded-xl border border-slate-800/50">
+                        <div className="flex items-center gap-2 mb-1">
+                            <Truck className="w-4 h-4 text-purple-400" />
+                            <h3 className="text-sm font-medium text-slate-300">Delivery Partner</h3>
+                        </div>
+                        <p className="text-xs text-slate-500">Auto-assigned to truck driver (B2B)</p>
+                    </div>
+                ) : (
                 <div className="p-4 bg-slate-900/30 rounded-xl border border-slate-800/50">
                     <div className="flex items-center gap-2 mb-3">
                         <Truck className="w-4 h-4 text-purple-400" />
@@ -278,6 +289,7 @@ export default function OrderDetailPage() {
                         </button>
                     </div>
                 </div>
+                )}
             </div>
 
             {/* Edit Form */}

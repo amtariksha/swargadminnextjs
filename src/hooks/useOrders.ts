@@ -196,6 +196,9 @@ export interface OrderDetail extends Order {
     end_date?: string | null;
     address_id?: number;
     wallet_amount?: number;
+    /** B2B orders auto-assign to the truck driver — backend sends 1|0.
+     *  Treat any truthy value as B2B. */
+    is_b2b?: boolean | number;
 }
 
 export interface OrderAssignment {
