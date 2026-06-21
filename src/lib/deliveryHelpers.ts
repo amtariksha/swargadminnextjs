@@ -157,7 +157,7 @@ function liveQty(item: DeliveryItem): number {
 export const getSubscriptionLabel = (type: number | null | undefined) => {
     const types: Record<number, string> = {
         1: 'One Time Order',
-        2: 'Weekly',
+        2: 'Custom',
         3: 'Daily',
         4: 'Alternative Days',
     };

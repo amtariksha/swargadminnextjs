@@ -188,7 +188,7 @@ export interface OrderDetail extends Order {
     mrp?: number;
     tax?: number;
     order_type: number; // 1=Prepaid, 2=Postpaid, 3=Pay Now, 4=Pay Later
-    subscription_type: number | null; // 1=One Time, 2=Weekly, 3=Daily, 4=Alternative
+    subscription_type: number | null; // 1=One Time, 2=Custom (per-day), 3=Daily, 4=Alternative
     selected_days_for_weekly?: string;
     start_date?: string;
     /** Optional subscription end date (DATE, nullable). NULL = indefinite.

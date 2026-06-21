@@ -6,7 +6,7 @@ import { useUpcomingSubOrders, UpcomingSubOrder } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import { CalendarDays } from 'lucide-react';
 
-const SUB_TYPE_LABELS: Record<number, string> = { 1: 'One Time', 2: 'Weekly', 3: 'Daily', 4: 'Alternative' };
+const SUB_TYPE_LABELS: Record<number, string> = { 1: 'One Time', 2: 'Custom', 3: 'Daily', 4: 'Alternative' };
 
 export default function UpcomingSubsOrdersPage() {
     const tomorrow = format(addDays(new Date(), 1), 'yyyy-MM-dd');

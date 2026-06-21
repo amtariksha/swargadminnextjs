@@ -47,7 +47,7 @@ type OrderRow = Record<string, any>;
 
 const ORDER_TYPE: Record<number, string> = { 1: 'Prepaid', 2: 'Postpaid', 3: 'Pay Now', 4: 'Pay Later' };
 const STATUS: Record<number, string> = { 0: 'Pending', 1: 'Confirmed', 2: 'Cancelled' };
-const SUB_TYPE: Record<number, string> = { 1: 'One Time Order', 2: 'Weekly', 3: 'Monthly', 4: 'Alternative Days' };
+const SUB_TYPE: Record<number, string> = { 1: 'One Time Order', 2: 'Custom', 3: 'Daily', 4: 'Alternative Days' };
 
 function getOrderStatus(row: OrderRow): string {
     const subType = row.subscription_type;

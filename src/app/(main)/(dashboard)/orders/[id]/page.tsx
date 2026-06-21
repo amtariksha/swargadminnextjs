@@ -21,7 +21,7 @@ import { toast } from 'sonner';
 import { formatApiDate } from '@/lib/dateUtils';
 import { parseWeeklyDays } from '@/lib/weeklyDays';
 const ORDER_TYPE_LABELS: Record<number, string> = { 1: 'Prepaid', 2: 'Postpaid', 3: 'Pay Now', 4: 'Pay Later' };
-const SUB_TYPE_LABELS: Record<number, string> = { 1: 'One Time', 2: 'Weekly', 3: 'Daily', 4: 'Alternative Days' };
+const SUB_TYPE_LABELS: Record<number, string> = { 1: 'One Time', 2: 'Custom', 3: 'Daily', 4: 'Alternative Days' };
 const DAY_LABELS = ['M', 'T', 'W', 'TH', 'F', 'S', 'SU'];
 
 const orderUpdateSchema = z.object({
@@ -372,7 +372,7 @@ export default function OrderDetailPage() {
                     )}
                     {isSubscription && (subType === 3 || subType === 4) ? (
                         <FormField label="Subscription Type" className={fieldSelect}
-                            hint="Switch cadence (daily ↔ alternate). Weekly needs a new order.">
+                            hint="Switch cadence (daily ↔ alternate). Custom needs a new order.">
                             <select {...register('subscription_type', { valueAsNumber: true })} className={selectClassName}>
                                 <option value={3}>Daily</option>
                                 <option value={4}>Alternative Days</option>

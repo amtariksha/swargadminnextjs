@@ -93,7 +93,7 @@ const REASON_BUCKETS = [
 const getSubscriptionLabel = (type: number) => {
     const types: Record<number, string> = {
         1: 'One Time Order',
-        2: 'Weekly',
+        2: 'Custom',
         3: 'Daily',
         4: 'Alternative Days',
     };

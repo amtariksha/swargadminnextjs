@@ -28,7 +28,7 @@ import { toast } from 'sonner';
 
 import { formatApiDate, apiDateMs } from '@/lib/dateUtils';
 const ORDER_TYPE_LABELS: Record<number, string> = { 1: 'Prepaid', 2: 'Postpaid', 3: 'Pay Now', 4: 'Pay Later' };
-const SUB_TYPE_LABELS: Record<number, string> = { 1: 'One Time', 2: 'Weekly', 3: 'Daily', 4: 'Alternative' };
+const SUB_TYPE_LABELS: Record<number, string> = { 1: 'One Time', 2: 'Custom', 3: 'Daily', 4: 'Alternative' };
 
 export default function UserDetailPage() {
     const { id } = useParams<{ id: string }>();

@@ -577,7 +577,7 @@ export default function CreateOrderPage() {
                                 <option value={1}>One Time Order</option>
                                 {isSubscriptionProduct && (
                                     <>
-                                        <option value={2}>Weekly</option>
+                                        <option value={2}>Custom</option>
                                         <option value={3}>Daily</option>
                                         <option value={4}>Alternative Days</option>
                                     </>
