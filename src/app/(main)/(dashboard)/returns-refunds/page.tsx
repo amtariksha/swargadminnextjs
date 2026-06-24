@@ -4,6 +4,7 @@ import { useState } from 'react';
 import {
     useReturns,
     useApproveReturn,
+    useRefundReturnManually,
     useRefundMode,
     useSetRefundMode,
     PackagingReturn,
@@ -53,9 +54,19 @@ export default function ReturnsRefundsPage() {
     const { data: refundMode } = useRefundMode();
     const setRefundMode = useSetRefundMode();
     const approveReturn = useApproveReturn();
+    const refundManually = useRefundReturnManually();
     const [approvingId, setApprovingId] = useState<number | null>(null);
+    const [refundingId, setRefundingId] = useState<number | null>(null);
 
     const rows = returnsData?.rows ?? [];
+
+    // Format the IST timestamp the backend returns (formatTimestampIST) as a
+    // plain date for the "Request Date" column.
+    const fmtDate = (ts: string | null) => {
+        if (!ts) return '-';
+        const d = new Date(ts.replace(' ', 'T'));
+        return isNaN(d.getTime()) ? ts : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    };
 
     const handleSetMode = async (mode: RefundMode) => {
         if (mode === refundMode) return;
@@ -80,6 +91,22 @@ export default function ReturnsRefundsPage() {
             toast.error(error instanceof ApiError ? error.userMessage : 'Failed to approve return');
         } finally {
             setApprovingId(null);
+        }
+    };
+
+    const handleRefundManually = async (item: PackagingReturn) => {
+        if (!confirm(`Manually refund return #${item.id} to ${item.customer_name || 'the customer'}'s wallet?`)) return;
+        setRefundingId(item.id);
+        try {
+            const result = await refundManually.mutateAsync({ return_id: item.id });
+            const data = result.data;
+            toast.success(
+                `Refunded ${inr(data?.refund_amount)} — new wallet balance ${inr(data?.new_wallet_balance)}`
+            );
+        } catch (error) {
+            toast.error(error instanceof ApiError ? error.userMessage : 'Failed to refund return');
+        } finally {
+            setRefundingId(null);
         }
     };
 
@@ -110,6 +137,12 @@ export default function ReturnsRefundsPage() {
             key: 'status',
             header: 'Status',
             render: (item) => <StatusBadge status={item.status} />,
+        },
+        {
+            key: 'requested_at',
+            header: 'Request Date',
+            width: '130px',
+            render: (item) => <span className="text-slate-300">{fmtDate(item.requested_at)}</span>,
         },
         {
             key: 'refund_amount',
@@ -146,7 +179,7 @@ export default function ReturnsRefundsPage() {
         {
             key: 'actions',
             header: 'Actions',
-            width: '120px',
+            width: '150px',
             sortable: false,
             render: (item) =>
                 item.status === 'pending_approval' ? (
@@ -158,8 +191,19 @@ export default function ReturnsRefundsPage() {
                         <Check className="w-3.5 h-3.5" />
                         {approvingId === item.id ? 'Approving...' : 'Approve'}
                     </button>
-                ) : (
+                ) : item.status === 'refunded' || item.status === 'cancelled' ? (
                     <span className="text-slate-500 text-xs">-</span>
+                ) : (
+                    // Manual refund for returns still in flight (requested / picked up)
+                    // — issues the wallet credit immediately, bypassing the workflow.
+                    <button
+                        onClick={() => handleRefundManually(item)}
+                        disabled={refundingId === item.id}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-lg text-xs font-medium hover:bg-purple-500/30 disabled:opacity-50"
+                    >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        {refundingId === item.id ? 'Refunding...' : 'Refund'}
+                    </button>
                 ),
         },
     ];

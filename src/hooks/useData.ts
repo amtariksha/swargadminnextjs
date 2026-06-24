@@ -2187,6 +2187,28 @@ export function useApproveReturn() {
     });
 }
 
+/**
+ * Manually issue the wallet refund for a return at any stage (not just
+ * 'pending_approval'). Backend guards against double-refund. Mirrors
+ * useApproveReturn's cache invalidation.
+ */
+export function useRefundReturnManually() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (data: { return_id: number; note?: string }) => {
+            return POST<{ refund_amount: number; new_wallet_balance: number }>(
+                '/packaging/returns/refund_manually',
+                data
+            );
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['packaging-returns'] });
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+            queryClient.invalidateQueries({ queryKey: ['transactions'] });
+        },
+    });
+}
+
 export function useRefundMode() {
     return useQuery({
         queryKey: ['packaging-refund-mode'],
