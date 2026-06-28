@@ -36,6 +36,13 @@ interface DataTableProps<T> {
     title?: string;
     /** Optional per-row extra class names (e.g. to grey-out soft-deleted rows). */
     rowClassName?: (item: T) => string;
+    /** Stable row id accessor — enables the checkbox selection column when provided
+     *  together with selectedIds + onSelectionChange. */
+    getRowId?: (item: T) => number | string;
+    selectedIds?: Set<number | string>;
+    onSelectionChange?: (ids: Set<number | string>) => void;
+    /** Set false to hide the selection column even when getRowId is provided. */
+    selectable?: boolean;
 }
 
 export default function DataTable<T extends object>({
@@ -51,6 +58,10 @@ export default function DataTable<T extends object>({
     onExport,
     rowClassName,
     title,
+    getRowId,
+    selectedIds,
+    onSelectionChange,
+    selectable,
 }: DataTableProps<T>) {
     // `loadedPages` is the highest "page" of rows currently rendered. The
     // table grows incrementally as the operator scrolls — when the sentinel
@@ -113,6 +124,27 @@ export default function DataTable<T extends object>({
         [filteredData, visibleCount]
     );
     const hasMore = visibleCount < filteredData.length;
+
+    // Optional row selection. Select-all operates over the full FILTERED set
+    // (not just the loaded page) so it means "all current matches".
+    const selectionEnabled = selectable !== false && !!getRowId && !!selectedIds && !!onSelectionChange;
+    const allFilteredSelected =
+        selectionEnabled && filteredData.length > 0 && filteredData.every((item) => selectedIds!.has(getRowId!(item)));
+    const toggleAll = () => {
+        if (!selectionEnabled) return;
+        const next = new Set(selectedIds);
+        if (allFilteredSelected) filteredData.forEach((item) => next.delete(getRowId!(item)));
+        else filteredData.forEach((item) => next.add(getRowId!(item)));
+        onSelectionChange!(next);
+    };
+    const toggleOne = (item: T) => {
+        if (!selectionEnabled) return;
+        const id = getRowId!(item);
+        const next = new Set(selectedIds);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        onSelectionChange!(next);
+    };
 
     // Reset the load window when the dataset, search, or sort changes —
     // otherwise an operator searching for a needle would still see the
@@ -272,6 +304,17 @@ export default function DataTable<T extends object>({
                 <table className="w-full">
                     <thead>
                         <tr className="border-b border-slate-800/50">
+                            {selectionEnabled && (
+                                <th className="px-4 py-3 w-10">
+                                    <input
+                                        type="checkbox"
+                                        className="w-4 h-4 rounded accent-purple-500"
+                                        checked={allFilteredSelected}
+                                        onChange={toggleAll}
+                                        aria-label="Select all rows"
+                                    />
+                                </th>
+                            )}
                             {columns.map((column) => (
                                 <th
                                     key={String(column.key)}
@@ -305,6 +348,7 @@ export default function DataTable<T extends object>({
                         {loading ? (
                             [...Array(5)].map((_, i) => (
                                 <tr key={i}>
+                                    {selectionEnabled && <td className="px-4 py-3" />}
                                     {columns.map((col, j) => (
                                         <td key={j} className="px-4 py-3">
                                             <div className="h-4 bg-slate-800/50 rounded animate-pulse" />
@@ -315,7 +359,7 @@ export default function DataTable<T extends object>({
                         ) : paginatedData.length === 0 ? (
                             <tr>
                                 <td
-                                    colSpan={columns.length}
+                                    colSpan={columns.length + (selectionEnabled ? 1 : 0)}
                                     className="px-4 py-12 text-center text-slate-400"
                                 >
                                     {emptyMessage}
@@ -332,6 +376,17 @@ export default function DataTable<T extends object>({
                                         ${rowClassName ? rowClassName(item) : ''}
                                     `}
                                 >
+                                    {selectionEnabled && (
+                                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                            <input
+                                                type="checkbox"
+                                                className="w-4 h-4 rounded accent-purple-500"
+                                                checked={selectedIds!.has(getRowId!(item))}
+                                                onChange={() => toggleOne(item)}
+                                                aria-label="Select row"
+                                            />
+                                        </td>
+                                    )}
                                     {columns.map((column) => (
                                         <td
                                             key={String(column.key)}
@@ -352,7 +407,7 @@ export default function DataTable<T extends object>({
                             stable. */}
                         {hasMore && !loading && (
                             <tr ref={sentinelRef} aria-hidden="true">
-                                <td colSpan={columns.length} className="px-4 py-2 text-center text-xs text-slate-500">
+                                <td colSpan={columns.length + (selectionEnabled ? 1 : 0)} className="px-4 py-2 text-center text-xs text-slate-500">
                                     Loading more…
                                 </td>
                             </tr>

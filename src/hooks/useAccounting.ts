@@ -89,10 +89,15 @@ export interface CustomerDetail {
     outstanding: number;
 }
 
-export function useAccountingCustomers(filters: Record<string, string> = {}) {
+export function useAccountingCustomers(
+    filters: Record<string, string> = {},
+    options: { enabled?: boolean } = {},
+) {
     return useQuery({
         queryKey: ['accounting', 'customers', filters],
         queryFn: () => getList<AccountingCustomer>('/accounting/customers', { limit: 200, ...filters }),
+        // Lets the huge B2C section lazy-load only when its accordion is opened.
+        enabled: options.enabled ?? true,
     });
 }
 
@@ -100,6 +105,29 @@ export function useAccountingCustomer(userId: number | null) {
     return useQuery({
         queryKey: ['accounting', 'customer', userId],
         queryFn: async () => (await GET<CustomerDetail>(`/accounting/customers/${userId}`)).data,
+        enabled: userId != null,
+    });
+}
+
+// ── Per-customer B2B price overrides (Task 7) ────────────────────────────────
+
+export interface ProductPriceOffer {
+    id: number;
+    product_id: number;
+    mrp?: number | string | null;
+    price: number | string;
+    batch_start_date?: string | null;
+    batch_end_date?: string | null;
+    product_title?: string | null;
+    product_b2b_price?: number | string | null;
+    product_mrp?: number | string | null;
+}
+
+export function useCustomerPrices(userId: number | null) {
+    return useQuery({
+        queryKey: ['accounting', 'customer-prices', userId],
+        queryFn: async () =>
+            (await GET<ProductPriceOffer[]>(`/accounting/customers/${userId}/prices`)).data || [],
         enabled: userId != null,
     });
 }
