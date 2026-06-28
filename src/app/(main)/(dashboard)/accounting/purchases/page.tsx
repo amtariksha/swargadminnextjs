@@ -6,7 +6,8 @@ import { GET, PUT, POST } from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { PodLink } from '@/components/PodImage';
-import { CheckCircle2, XCircle, Edit, Image as ImageIcon } from 'lucide-react';
+import BulkPurchaseImportModal from '@/components/accounting/BulkPurchaseImportModal';
+import { CheckCircle2, XCircle, Edit, Image as ImageIcon, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
 const inputCls =
@@ -72,6 +73,7 @@ export default function AccountingPurchasesPage() {
   const [form, setForm] = useState({ qty: '', unit_price: '', gst_rate: '', supply_type: '1', hsn_code: '', invoice_no: '' });
   // Multi-select for bulk approval (only meaningful on the To-review tab).
   const [selected, setSelected] = useState<Set<number | string>>(new Set());
+  const [showImport, setShowImport] = useState(false);
   useEffect(() => { setSelected(new Set()); }, [tab]);
 
   // 'pending' tab maps to the API default (draft + reviewed) — no status param.
@@ -195,9 +197,15 @@ export default function AccountingPurchasesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Purchases / Bills</h1>
-        <p className="text-slate-400">Review raw-material purchases, then post them as Tally Purchase vouchers.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Purchases / Bills</h1>
+          <p className="text-slate-400">Review raw-material purchases, then post them as Tally Purchase vouchers.</p>
+        </div>
+        <button onClick={() => setShowImport(true)}
+          className="self-start flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium hover:from-purple-600 hover:to-pink-600">
+          <Upload className="w-5 h-5" /> Import bills
+        </button>
       </div>
 
       <div className="flex gap-2">
@@ -326,6 +334,12 @@ export default function AccountingPurchasesPage() {
           </div>
         )}
       </Modal>
+
+      <BulkPurchaseImportModal
+        isOpen={showImport}
+        onClose={() => setShowImport(false)}
+        onDone={() => queryClient.invalidateQueries({ queryKey: ['accounting', 'purchases'] })}
+      />
     </div>
   );
 }
