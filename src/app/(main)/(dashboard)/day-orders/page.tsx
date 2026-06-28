@@ -2,12 +2,14 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useDaytimeOrders, DaytimeOrder } from '@/hooks/useData';
 import DataTable, { Column } from '@/components/DataTable';
 import DateWithTodayButton from '@/components/DateWithTodayButton';
 import { PodImage } from '@/components/PodImage';
-import { Sun, Plus, BarChart3, Link2, MapPin } from 'lucide-react';
+import CateringOrderModal from '@/components/accounting/CateringOrderModal';
+import { Sun, Plus, BarChart3, Link2, MapPin, Utensils } from 'lucide-react';
 
 const ORDER_STATUS_STYLE: Record<string, string> = {
     pending: 'bg-amber-500/20 text-amber-300',
@@ -30,6 +32,8 @@ const Badge = ({ value, map }: { value: string; map: Record<string, string> }) =
 
 export default function DayOrdersPage() {
     const router = useRouter();
+    const queryClient = useQueryClient();
+    const [showCatering, setShowCatering] = useState(false);
     const [date, setDate] = useState('');
     const [orderStatus, setOrderStatus] = useState('');
     const [paymentStatus, setPaymentStatus] = useState('');
@@ -200,6 +204,10 @@ export default function DayOrdersPage() {
                         className="flex items-center gap-2 px-4 py-2 bg-slate-800/60 text-slate-200 rounded-xl font-medium hover:bg-slate-800">
                         <BarChart3 className="w-5 h-5" /> Reports
                     </Link>
+                    <button onClick={() => setShowCatering(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600/80 text-white rounded-xl font-medium hover:bg-emerald-600">
+                        <Utensils className="w-5 h-5" /> B2B / Catering
+                    </button>
                     <Link href="/day-orders/new"
                         className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 shadow-lg shadow-purple-500/25">
                         <Plus className="w-5 h-5" /> New Order
@@ -263,6 +271,12 @@ export default function DayOrdersPage() {
                 searchPlaceholder="Search by customer, phone…"
                 emptyMessage="No day-time orders"
                 onRowClick={(o) => router.push(`/day-orders/${o.id}`)}
+            />
+
+            <CateringOrderModal
+                isOpen={showCatering}
+                onClose={() => setShowCatering(false)}
+                onCreated={() => queryClient.invalidateQueries({ queryKey: ['daytime-orders'] })}
             />
         </div>
     );
