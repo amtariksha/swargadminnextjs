@@ -34,6 +34,18 @@ function LedgerInner() {
       ),
     },
     { key: 'detail', header: 'Detail' },
+    {
+      key: 'qty', header: 'Qty', width: '90px',
+      render: (item) => item.qty != null
+        ? <span className="text-slate-200">{Number(item.qty)}</span>
+        : <span className="text-slate-600">—</span>,
+    },
+    {
+      key: 'rate', header: 'Rate', width: '110px',
+      render: (item) => item.rate != null
+        ? <span className="text-slate-200">₹{Number(item.rate).toFixed(2)}</span>
+        : <span className="text-slate-600">—</span>,
+    },
     { key: 'reference', header: 'Reference', width: '140px' },
     {
       key: 'amount', header: 'Amount', width: '130px',

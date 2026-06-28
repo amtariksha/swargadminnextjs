@@ -20,6 +20,7 @@ const productSchema = z.object({
     qty_text: z.string().min(1, 'Quantity text is required (e.g., 1L, 500g)'),
     price: z.number().min(0, 'Price must be positive'),
     mrp: z.number().min(0, 'MRP must be positive'),
+    b2b_price: z.number().min(0, 'B2B price must be positive').optional(),
     tax: z.number().min(0).max(99, 'Tax must be 0-99'),
     stock_qty: z.number().min(0).max(10000),
     preferences: z.number().min(0),
@@ -212,6 +213,9 @@ export default function AddProductPage() {
                     </FormField>
                     <FormField label="MRP (₹)" error={errors.mrp} required className={fieldNumber}>
                         <input {...register('mrp', { valueAsNumber: true })} type="number" step="0.01" className={inputClassName} placeholder="Maximum retail price" />
+                    </FormField>
+                    <FormField label="B2B price (₹)" error={errors.b2b_price} className={fieldNumber}>
+                        <input {...register('b2b_price', { setValueAs: (v) => (v === '' || v == null ? undefined : Number(v)) })} type="number" step="0.01" className={inputClassName} placeholder="Default B2B price (blank = MRP)" />
                     </FormField>
                     <FormField label="Tax (%)" error={errors.tax} className={fieldNumber}>
                         <input {...register('tax', { valueAsNumber: true })} type="number" className={inputClassName} placeholder="Tax percentage" />

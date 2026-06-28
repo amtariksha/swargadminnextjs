@@ -219,6 +219,8 @@ export interface Product {
     sub_cat_id?: number;
     price: number;
     mrp?: number;
+    // Task 7 — default GST-inclusive B2B selling price (migration 092). null = use MRP.
+    b2b_price?: number | null;
     tax?: number;
     offer_text?: string;
     description?: string;
