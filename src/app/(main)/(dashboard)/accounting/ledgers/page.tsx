@@ -4,11 +4,12 @@ import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
     useCustomerLedger, useInvoices, LedgerEntry,
+    useAccountingCustomers, AccountingCustomer,
 } from '@/hooks/useAccounting';
 import {
     LEDGER_ENTRY_TYPE_LABELS, RECEIPT_MODE_OPTIONS, formatINR, formatDate,
 } from '@/lib/accounting';
-import CustomerPicker, { CustomerValue } from '@/components/CustomerPicker';
+import type { CustomerValue } from '@/components/CustomerPicker';
 import Modal from '@/components/Modal';
 import DataTable, { Column } from '@/components/DataTable';
 import { Receipt } from 'lucide-react';
@@ -44,6 +45,11 @@ function LedgersInner() {
     const { data: ledger, isLoading, refetch } = useCustomerLedger(userId);
     const [showReceipt, setShowReceipt] = useState(false);
 
+    // Pick a customer type first (default B2B), then the customer from that set.
+    const [custType, setCustType] = useState<'b2b' | 'b2c'>('b2b');
+    const { data: custData } = useAccountingCustomers({ type: custType, limit: '1000' });
+    const customers = custData?.data ?? [];
+
     const columns: Column<LedgerEntry>[] = [
         { key: 'entry_date', header: 'Date', width: '120px', render: (e) => formatDate(e.entry_date) },
         {
@@ -78,9 +84,18 @@ function LedgersInner() {
                 )}
             </div>
 
-            <div className="max-w-md">
-                <label className="block text-sm font-medium text-slate-300 mb-2">Customer</label>
-                <CustomerPicker value={customer} onChange={setCustomer} />
+            <div className="max-w-md space-y-2">
+                <label className="block text-sm font-medium text-slate-300">Customer</label>
+                <div className="inline-flex rounded-xl bg-slate-800/40 border border-slate-700/50 p-1">
+                    {(['b2b', 'b2c'] as const).map((t) => (
+                        <button key={t} type="button"
+                            onClick={() => { setCustType(t); setCustomer(null); }}
+                            className={`px-4 py-1.5 rounded-lg text-sm ${custType === t ? 'bg-purple-500/20 text-purple-300' : 'text-slate-400 hover:text-slate-200'}`}>
+                            {t.toUpperCase()}
+                        </button>
+                    ))}
+                </div>
+                <TypedCustomerPicker customers={customers} value={customer} onChange={setCustomer} />
             </div>
 
             {userId == null ? (
@@ -116,6 +131,47 @@ function LedgersInner() {
                     onClose={() => setShowReceipt(false)}
                     onSaved={() => { setShowReceipt(false); refetch(); }}
                 />
+            )}
+        </div>
+    );
+}
+
+// Searchable customer picker fed by a typed (B2B/B2C) accounting-customers list.
+// Kept local (not the shared CustomerPicker) — that one is coupled to useUsers()
+// + inline customer creation for the day-order flow.
+function TypedCustomerPicker({ customers, value, onChange }: {
+    customers: AccountingCustomer[];
+    value: CustomerValue | null;
+    onChange: (c: CustomerValue | null) => void;
+}) {
+    const [q, setQ] = useState('');
+    const [open, setOpen] = useState(false);
+    const needle = q.trim().toLowerCase();
+    const filtered = needle
+        ? customers.filter((c) => `${c.name} ${c.phone ?? ''}`.toLowerCase().includes(needle))
+        : customers;
+    return (
+        <div className="relative">
+            <input
+                value={value && !open ? `${value.name || `#${value.userId}`}${value.phone ? ` · ${value.phone}` : ''}` : q}
+                onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+                onFocus={() => setOpen(true)}
+                onBlur={() => setTimeout(() => setOpen(false), 150)}
+                placeholder="Search customer by name / phone…"
+                className={inputCls}
+            />
+            {open && (
+                <div className="absolute z-10 mt-1 w-full max-h-60 overflow-y-auto glass rounded-xl border border-slate-700/50">
+                    {filtered.slice(0, 100).map((c) => (
+                        <button key={c.user_id} type="button"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => { onChange({ userId: c.user_id, name: c.name, phone: c.phone ?? '', isNew: false }); setOpen(false); setQ(''); }}
+                            className="w-full text-left px-3 py-2 hover:bg-slate-800/50 text-sm text-slate-200">
+                            {c.name} {c.phone && <span className="text-slate-500">· {c.phone}</span>}
+                        </button>
+                    ))}
+                    {filtered.length === 0 && <div className="px-3 py-2 text-sm text-slate-500">No customers</div>}
+                </div>
             )}
         </div>
     );

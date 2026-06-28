@@ -10,7 +10,7 @@ import {
 } from '@/lib/accounting';
 import Modal from '@/components/Modal';
 import IssueNotesModal from '@/components/accounting/IssueNotesModal';
-import { ArrowLeft, FileDown, Ban, BookText, Loader2, FileMinus, FilePlus } from 'lucide-react';
+import { ArrowLeft, FileDown, Ban, BookText, Loader2, FileMinus, FilePlus, Pencil } from 'lucide-react';
 import { GET, POST } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -25,9 +25,41 @@ export default function InvoiceDetailPage() {
     const [cancelReason, setCancelReason] = useState('');
     const [cancelling, setCancelling] = useState(false);
     const [noteType, setNoteType] = useState<'credit' | 'debit' | null>(null);
+    const [repricing, setRepricing] = useState(false);
+    const [priceEdits, setPriceEdits] = useState<Record<number, string>>({});
+    const [reprcSaving, setReprcSaving] = useState(false);
 
     const inv = data?.invoice;
     const lines = data?.lines || [];
+
+    const startReprice = () => {
+        const init: Record<number, string> = {};
+        lines.forEach((l) => { if (l.product_id != null) init[Number(l.product_id)] = String(l.unit_price ?? ''); });
+        setPriceEdits(init);
+        setRepricing(true);
+    };
+
+    const saveReprice = async () => {
+        if (!inv) return;
+        const editLines = lines
+            .filter((l) => l.product_id != null)
+            .map((l) => ({ product_id: Number(l.product_id), unit_price: Number(priceEdits[Number(l.product_id)]) }))
+            .filter((x) => Number.isFinite(x.unit_price) && x.unit_price > 0);
+        if (!editLines.length) { toast.error('Enter at least one valid price'); return; }
+        setReprcSaving(true);
+        try {
+            const res = await POST(`/accounting/invoices/${inv.id}/reprice`, { lines: editLines });
+            const d = (res as { data?: { newInvoiceId?: number; newInvoiceNumber?: string } })?.data;
+            toast.success(`Saved as customer price · reissued ${d?.newInvoiceNumber ?? 'new invoice'}`);
+            setRepricing(false);
+            if (d?.newInvoiceId) router.push(`/accounting/invoices/${d.newInvoiceId}`);
+            else refetch();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to reprice');
+        } finally {
+            setReprcSaving(false);
+        }
+    };
 
     const openPdf = async () => {
         if (!inv) return;
@@ -118,6 +150,12 @@ export default function InvoiceDetailPage() {
                             </button>
                         </>
                     )}
+                    {canIssueNote && !repricing && (
+                        <button onClick={startReprice}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 rounded-xl text-sm hover:bg-emerald-500/30">
+                            <Pencil className="w-4 h-4" /> Reprice
+                        </button>
+                    )}
                     {!isCancelled && (
                         <button onClick={() => setShowCancel(true)}
                             className="flex items-center gap-2 px-4 py-2.5 bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl text-sm hover:bg-red-500/30">
@@ -172,7 +210,14 @@ export default function InvoiceDetailPage() {
                                     <td className="px-4 py-3">{l.description || <span className="text-slate-600">—</span>}</td>
                                     <td className="px-4 py-3 text-slate-400">{l.hsn_code || '—'}</td>
                                     <td className="px-4 py-3 text-right">{Number(l.qty)}</td>
-                                    <td className="px-4 py-3 text-right">{formatINR(l.unit_price)}</td>
+                                    <td className="px-4 py-3 text-right">
+                                        {repricing && l.product_id != null ? (
+                                            <input type="number" step="0.01"
+                                                value={priceEdits[Number(l.product_id)] ?? ''}
+                                                onChange={(e) => setPriceEdits((p) => ({ ...p, [Number(l.product_id)]: e.target.value }))}
+                                                className="w-24 px-2 py-1 bg-slate-900/50 border border-slate-700/50 rounded-lg text-white text-sm text-right focus:outline-none focus:ring-2 focus:ring-emerald-500/50" />
+                                        ) : formatINR(l.unit_price)}
+                                    </td>
                                     <td className="px-4 py-3 text-right">{formatINR(l.taxable_amount)}</td>
                                     <td className="px-4 py-3 text-right">{formatPercent(l.gst_rate)}</td>
                                     <td className="px-4 py-3 text-right">{formatINR(l.cgst_amount)}</td>
@@ -187,6 +232,22 @@ export default function InvoiceDetailPage() {
                     </table>
                 </div>
             </div>
+
+            {repricing && (
+                <div className="glass rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <p className="text-xs text-slate-400 max-w-xl">
+                        Editing prices saves them as this customer&apos;s agreed price (future bills use it) and reissues a corrected GST invoice — the current one is cancelled with a reversing ledger entry.
+                    </p>
+                    <div className="flex gap-2">
+                        <button onClick={() => setRepricing(false)}
+                            className="px-4 py-2 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl text-sm">Cancel</button>
+                        <button onClick={saveReprice} disabled={reprcSaving}
+                            className="px-5 py-2 bg-gradient-to-r from-emerald-500 to-green-500 text-white rounded-xl text-sm font-medium disabled:opacity-50">
+                            {reprcSaving ? 'Reissuing…' : 'Save & reissue'}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Totals */}
             <div className="flex justify-end">

@@ -3,10 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useAccountingCustomers, AccountingCustomer } from '@/hooks/useAccounting';
+import { useQueryClient } from '@tanstack/react-query';
 import { CUSTOMER_TYPE_LABELS } from '@/lib/accounting';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
-import { Edit, BookText, Search } from 'lucide-react';
+import { Edit, BookText, Search, Tag, ChevronDown } from 'lucide-react';
 import { PUT } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -19,11 +20,43 @@ const blankForm = {
     credit_terms_days: '',
 };
 
+/** Lightweight collapsible (no Accordion primitive in the project). Calls
+ *  onFirstOpen the first time it expands so the B2C section can lazy-load. */
+function Section({ title, count, defaultOpen, onFirstOpen, children }: {
+    title: string;
+    count?: number;
+    defaultOpen?: boolean;
+    onFirstOpen?: () => void;
+    children: React.ReactNode;
+}) {
+    const [open, setOpen] = useState(!!defaultOpen);
+    return (
+        <div className="glass rounded-2xl overflow-hidden">
+            <button
+                onClick={() => { const next = !open; setOpen(next); if (next) onFirstOpen?.(); }}
+                className="w-full flex items-center justify-between px-4 py-3 text-left"
+            >
+                <span className="text-lg font-semibold text-white">
+                    {title}
+                    {count != null && <span className="ml-2 text-sm text-slate-400">({count})</span>}
+                </span>
+                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+            {open && <div className="border-t border-slate-800/50">{children}</div>}
+        </div>
+    );
+}
+
 export default function AccountingCustomersPage() {
+    const queryClient = useQueryClient();
     const [search, setSearch] = useState('');
     const [appliedQ, setAppliedQ] = useState('');
-    const { data, isLoading, refetch } = useAccountingCustomers(appliedQ ? { q: appliedQ } : {});
-    const customers = data?.data || [];
+    const [b2cOpened, setB2cOpened] = useState(false);
+
+    const qFilter: Record<string, string> = appliedQ ? { q: appliedQ } : {};
+    // B2B is a small set → load eagerly. B2C is huge → load only once expanded.
+    const b2b = useAccountingCustomers({ type: 'b2b', limit: '500', ...qFilter });
+    const b2c = useAccountingCustomers({ type: 'b2c', limit: '200', ...qFilter }, { enabled: b2cOpened });
 
     const [editItem, setEditItem] = useState<AccountingCustomer | null>(null);
     const [form, setForm] = useState(blankForm);
@@ -59,13 +92,16 @@ export default function AccountingCustomersPage() {
             });
             toast.success('Customer GST profile saved');
             setEditItem(null);
-            refetch();
+            // Refresh both sections — a type change moves a customer between them.
+            queryClient.invalidateQueries({ queryKey: ['accounting', 'customers'] });
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to save');
         } finally {
             setIsSubmitting(false);
         }
     };
+
+    const isB2b = (item: AccountingCustomer) => !!item.gstin || item.customer_type === 1;
 
     const columns: Column<AccountingCustomer>[] = [
         {
@@ -82,7 +118,7 @@ export default function AccountingCustomersPage() {
         {
             key: 'customer_type', header: 'Type', width: '80px',
             render: (item) => (
-                item.gstin || item.customer_type === 1
+                isB2b(item)
                     ? <span className="text-xs px-2 py-1 rounded-lg bg-indigo-500/20 text-indigo-300">B2B</span>
                     : <span className="text-xs px-2 py-1 rounded-lg bg-slate-700/50 text-slate-400">{CUSTOMER_TYPE_LABELS[Number(item.customer_type ?? 0)]}</span>
             ),
@@ -93,7 +129,16 @@ export default function AccountingCustomersPage() {
             render: (item) => item.place_of_supply_state_code || <span className="text-slate-600">—</span>,
         },
         {
-            key: 'ledger', header: 'Ledger', width: '80px', sortable: false,
+            key: 'prices', header: 'Prices', width: '70px', sortable: false,
+            render: (item) => isB2b(item) ? (
+                <Link href={`/accounting/customers/${item.user_id}/prices`} title="B2B price overrides"
+                    className="p-2 inline-flex hover:bg-slate-800/50 rounded-lg">
+                    <Tag className="w-4 h-4 text-amber-400" />
+                </Link>
+            ) : <span className="text-slate-600">—</span>,
+        },
+        {
+            key: 'ledger', header: 'Ledger', width: '70px', sortable: false,
             render: (item) => (
                 <Link href={`/accounting/ledgers?user=${item.user_id}`} className="p-2 inline-flex hover:bg-slate-800/50 rounded-lg">
                     <BookText className="w-4 h-4 text-cyan-400" />
@@ -106,7 +151,7 @@ export default function AccountingCustomersPage() {
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-bold text-white">Customers</h1>
-                <p className="text-slate-400">GST profiles — GSTIN, place of supply, credit terms</p>
+                <p className="text-slate-400">GST profiles — grouped B2B / B2C; GSTIN, place of supply, credit terms</p>
             </div>
 
             <form
@@ -130,8 +175,20 @@ export default function AccountingCustomersPage() {
                 )}
             </form>
 
-            <DataTable data={customers} columns={columns} loading={isLoading} pageSize={50}
-                searchPlaceholder="Filter loaded rows..." emptyMessage="No customers found (showing up to 200; use search to narrow)" />
+            <Section title="B2B Customers" defaultOpen count={b2b.data?.meta?.total ?? b2b.data?.data.length}>
+                <DataTable data={b2b.data?.data ?? []} columns={columns} loading={b2b.isLoading} pageSize={50}
+                    searchPlaceholder="Filter loaded rows..." emptyMessage="No B2B customers" />
+            </Section>
+
+            <Section
+                title="B2C Customers"
+                count={b2cOpened ? (b2c.data?.meta?.total ?? b2c.data?.data.length) : undefined}
+                onFirstOpen={() => setB2cOpened(true)}
+            >
+                <DataTable data={b2c.data?.data ?? []} columns={columns} loading={b2cOpened && b2c.isLoading} pageSize={50}
+                    searchPlaceholder="Filter loaded rows..."
+                    emptyMessage={b2cOpened ? 'No B2C customers' : 'Loading…'} />
+            </Section>
 
             <Modal isOpen={!!editItem} onClose={() => setEditItem(null)} title={`GST profile — ${editItem?.name ?? ''}`} size="lg">
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -184,6 +241,14 @@ export default function AccountingCustomersPage() {
                                 onChange={(e) => setForm({ ...form, shipping_address: e.target.value })} className={inputCls} />
                         </div>
                     </div>
+                    {editItem && (form.customer_type === 1 || editItem.gstin) && (
+                        <div className="pt-1">
+                            <Link href={`/accounting/customers/${editItem.user_id}/prices`}
+                                className="text-sm text-amber-400 hover:text-amber-300 inline-flex items-center gap-1.5">
+                                <Tag className="w-4 h-4" /> Manage B2B price overrides →
+                            </Link>
+                        </div>
+                    )}
                     <div className="flex gap-3 pt-2 justify-end">
                         <button type="button" onClick={() => setEditItem(null)}
                             className="px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl text-sm">Cancel</button>

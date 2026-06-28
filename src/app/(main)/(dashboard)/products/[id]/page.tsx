@@ -43,6 +43,7 @@ const productSchema = z.object({
     qty_text: z.string().min(1, 'Quantity text is required'),
     price: z.number().min(0),
     mrp: z.number().min(0),
+    b2b_price: z.number().min(0).optional(),
     tax: z.number().min(0).max(99),
     stock_qty: z.number().min(0).max(10000),
     preferences: z.number().min(0),
@@ -131,6 +132,7 @@ export default function EditProductPage() {
                 qty_text: product.qty_text || '',
                 price: product.price || 0,
                 mrp: product.mrp || 0,
+                b2b_price: product.b2b_price != null ? Number(product.b2b_price) : undefined,
                 tax: product.tax || 0,
                 stock_qty: product.stock_qty || 0,
                 preferences: product.preferences || 0,
@@ -372,6 +374,9 @@ export default function EditProductPage() {
                         </FormField>
                         <FormField label="MRP (₹)" error={errors.mrp} required className={fieldNumber}>
                             <input {...register('mrp', { valueAsNumber: true })} type="number" step="0.01" className={inputClassName} />
+                        </FormField>
+                        <FormField label="B2B price (₹)" error={errors.b2b_price} className={fieldNumber}>
+                            <input {...register('b2b_price', { setValueAs: (v) => (v === '' || v == null ? undefined : Number(v)) })} type="number" step="0.01" className={inputClassName} placeholder="blank = MRP" />
                         </FormField>
                         <FormField label="Tax (%)" error={errors.tax} className={fieldNumber}>
                             <input {...register('tax', { valueAsNumber: true })} type="number" min={0} max={99} className={inputClassName} />

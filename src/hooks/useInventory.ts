@@ -86,6 +86,8 @@ export interface LedgerEntry {
   entry_type: 'purchase' | 'payment';
   ref_id: number;
   entry_date: string;
+  qty?: number | string | null;   // purchase rows only; null for payments
+  rate?: number | string | null;  // purchase rows only; null for payments
   amount: number | string;
   reference?: string | null;
   detail?: string | null;

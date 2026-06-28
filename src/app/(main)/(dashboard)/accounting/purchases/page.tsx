@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { GET, PUT, POST } from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
@@ -70,6 +70,9 @@ export default function AccountingPurchasesPage() {
   const [tab, setTab] = useState('pending');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [form, setForm] = useState({ qty: '', unit_price: '', gst_rate: '', supply_type: '1', hsn_code: '', invoice_no: '' });
+  // Multi-select for bulk approval (only meaningful on the To-review tab).
+  const [selected, setSelected] = useState<Set<number | string>>(new Set());
+  useEffect(() => { setSelected(new Set()); }, [tab]);
 
   // 'pending' tab maps to the API default (draft + reviewed) — no status param.
   const statusParam = tab === 'pending' ? undefined : { status: tab };
@@ -124,6 +127,37 @@ export default function AccountingPurchasesPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to reject'),
   });
 
+  const bulkApprove = useMutation({
+    mutationFn: async (ids: number[]) => POST('/accounting/purchases/bulk_approve', { ids }),
+    onSuccess: (res) => {
+      const d = ((res as { data?: { approved?: number; failed?: number } })?.data) ?? {};
+      toast.success(`Approved ${d.approved ?? 0}${d.failed ? `, ${d.failed} failed` : ''}`);
+      setSelected(new Set());
+      queryClient.invalidateQueries({ queryKey: ['accounting', 'purchases'] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Bulk approve failed'),
+  });
+
+  // Export the currently filtered/sorted rows as a clean CSV that includes quantity.
+  const exportPurchasesCsv = (filtered: PurchaseRow[]) => {
+    const headers = ['Date', 'Vendor', 'Material', 'Qty', 'Unit', 'Unit price', 'Taxable', 'CGST', 'SGST', 'IGST', 'Total', 'Status', 'Invoice no'];
+    const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = filtered.map((r) => [
+      r.purchase_date, r.vendor_name, r.raw_material_name,
+      Number(r.qty ?? 0), r.raw_material_unit, Number(r.unit_price ?? 0),
+      Number(r.taxable_amount ?? 0), Number(r.cgst_amount ?? 0), Number(r.sgst_amount ?? 0),
+      Number(r.igst_amount ?? 0), Number(r.total_amount ?? 0), r.status, r.invoice_no ?? '',
+    ].map(esc).join(','));
+    const csv = [headers.join(','), ...lines].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `purchases-${tab}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const columns: Column<PurchaseRow>[] = [
     {
       key: 'edit', header: '', width: '50px', sortable: false,
@@ -175,7 +209,21 @@ export default function AccountingPurchasesPage() {
         ))}
       </div>
 
-      <DataTable data={rows} columns={columns} loading={isLoading} pageSize={50} searchPlaceholder="Search purchases..." />
+      {tab === 'pending' && selected.size > 0 && (
+        <div className="flex items-center gap-3 glass rounded-xl px-4 py-2">
+          <span className="text-sm text-slate-300">{selected.size} selected</span>
+          <button onClick={() => bulkApprove.mutate([...selected].map(Number))} disabled={bulkApprove.isPending}
+            className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl text-sm font-medium disabled:opacity-50 flex items-center gap-1.5">
+            <CheckCircle2 className="w-4 h-4" /> Approve selected ({selected.size})
+          </button>
+          <button onClick={() => setSelected(new Set())} className="text-sm text-slate-400 hover:text-slate-200">Clear</button>
+        </div>
+      )}
+
+      <DataTable data={rows} columns={columns} loading={isLoading} pageSize={50}
+        searchPlaceholder="Search purchases..."
+        getRowId={(r) => r.id} selectable={tab === 'pending'} selectedIds={selected} onSelectionChange={setSelected}
+        exportable onExport={exportPurchasesCsv} />
 
       <Modal isOpen={selectedId != null} onClose={() => setSelectedId(null)} title={`Purchase #${selectedId ?? ''}`}>
         {!detail ? (
