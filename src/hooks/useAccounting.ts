@@ -475,12 +475,32 @@ export interface StatementRow {
     matched_invoice_number?: string | null;
     matched_invoice_total?: number | string | null;
     matched_customer_name?: string | null;
+    matched_ledger_id?: number | null;
+    matched_ledger_name?: string | null;
+    matched_voucher_id?: number | null;
+    matched_voucher_number?: string | null;
+}
+
+export interface BankAccount {
+    id: number;
+    name: string;
+    account_number?: string | null;
+    ledger_account_id?: number | null;
+    ledger_name?: string | null;
+    is_active?: number;
 }
 
 export function useStatements() {
     return useQuery({
         queryKey: ['accounting', 'bank-statements'],
         queryFn: () => getList<StatementImport>('/accounting/bank/statements', { limit: 100 }),
+    });
+}
+
+export function useBankAccounts() {
+    return useQuery({
+        queryKey: ['accounting', 'bank-accounts'],
+        queryFn: async () => (await GET<BankAccount[]>('/accounting/bank/accounts')).data || [],
     });
 }
 
