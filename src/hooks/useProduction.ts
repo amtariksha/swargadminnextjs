@@ -79,6 +79,24 @@ export interface Writeoff {
   created_at?: string;
 }
 
+export interface PackingRun {
+  id: number;
+  product_id: number;
+  source_type: StockInputType;
+  source_id: number;
+  packed_qty: number | string;
+  pack_volume_used?: number | string | null;
+  source_consumed?: number | string | null;
+  wastage_qty: number | string;
+  packing_date: string;
+  notes?: string | null;
+  product_title?: string | null;
+  source_name?: string | null;
+  source_unit?: string | null;
+  created_by_name?: string | null;
+  created_at?: string;
+}
+
 export interface StockLevels {
   raw_materials: Array<{ id: number; name: string; unit: string; current_stock: number | string; is_active: number }>;
   intermediates: Array<{ id: number; name: string; base_unit: string; current_stock: number | string; is_active: number }>;
@@ -138,6 +156,13 @@ export function useWriteoffs() {
   return useQuery({
     queryKey: ['production', 'writeoffs'],
     queryFn: async () => (await GET<Writeoff[]>('/production/writeoffs')).data || [],
+  });
+}
+
+export function usePackingRuns(filters: Record<string, string> = {}) {
+  return useQuery({
+    queryKey: ['production', 'packing-runs', filters],
+    queryFn: async () => (await GET<PackingRun[]>('/production/packing-runs', filters)).data || [],
   });
 }
 

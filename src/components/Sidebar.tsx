@@ -296,6 +296,7 @@ const navItems: NavItem[] = [
                             { name: 'Intermediates', href: '/production/intermediates', icon: <Boxes className="w-4 h-4" /> },
                             { name: 'Recipes', href: '/production/recipes', icon: <FileText className="w-4 h-4" /> },
                             { name: 'Production Records', href: '/production/runs', icon: <ClipboardList className="w-4 h-4" /> },
+                            { name: 'Packing', href: '/production/packing', icon: <PackageCheck className="w-4 h-4" /> },
                             { name: 'Write-offs', href: '/production/writeoffs', icon: <Trash2 className="w-4 h-4" /> },
                             { name: 'Reports', href: '/production/reports', icon: <BarChart3 className="w-4 h-4" /> },
                         ],
