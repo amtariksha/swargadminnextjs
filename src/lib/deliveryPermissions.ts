@@ -9,6 +9,9 @@ export const DELIVERY_PERMISSIONS: { key: string; label: string; icon: string }[
     // Truck route — drop-points + shops with mark-delivered (legacy role-5 screen).
     { key: 'truck-delivery', label: 'Truck Deliveries (drop points)', icon: '🚚' },
     { key: 'collection-pickup', label: 'Collection Pickup', icon: '🧺' },
+    // Scan Bill — capture any purchase bill via OCR → draft (Phase G). Backend
+    // gate: requireDeliveryPermission(['purchase-capture','collection-pickup']).
+    { key: 'purchase-capture', label: 'Scan Bill (purchase capture)', icon: '🧾' },
     { key: 'production-supervisor', label: 'Production Supervisor', icon: '🏭' },
     { key: 'day-production-support', label: 'Day Production Support', icon: '🛠️' },
     // Lets a non-day-driver (e.g. a production supervisor) cover the day-time
