@@ -15,7 +15,7 @@ const inputCls =
   'w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50';
 
 const blankForm = {
-  name: '', unit: '', notes: '', is_active: 1,
+  name: '', unit: '', notes: '', is_active: 1, show_in_collection: 0,
   hsn_rate_id: '', hsn_code: '', gst_rate: '', default_unit_price: '',
 };
 const today = () => new Date().toISOString().slice(0, 10);
@@ -52,6 +52,7 @@ export default function RawMaterialsPage() {
     setEditItem(m);
     setForm({
       name: m.name, unit: m.unit, notes: m.notes || '', is_active: m.is_active,
+      show_in_collection: m.show_in_collection ?? 0,
       hsn_rate_id: m.hsn_rate_id != null ? String(m.hsn_rate_id) : '',
       hsn_code: m.hsn_code || '',
       gst_rate: m.gst_rate != null ? String(m.gst_rate) : '',
@@ -78,12 +79,14 @@ export default function RawMaterialsPage() {
       if (editItem) {
         await PUT(`/inventory/raw-materials/${editItem.id}`, {
           name: form.name.trim(), unit: form.unit.trim(), notes: form.notes || null, is_active: form.is_active,
+          show_in_collection: form.show_in_collection ? 1 : 0,
           ...gstFields,
         });
         toast.success('Raw material updated');
       } else {
         await POST('/inventory/raw-materials', {
           name: form.name.trim(), unit: form.unit.trim(), notes: form.notes || null,
+          show_in_collection: form.show_in_collection ? 1 : 0,
           ...gstFields,
         });
         toast.success('Raw material created');
@@ -150,6 +153,12 @@ export default function RawMaterialsPage() {
           {item.is_active ? 'Active' : 'Inactive'}
         </span>
       ),
+    },
+    {
+      key: 'show_in_collection', header: 'Collection', width: '110px',
+      render: (item) => item.show_in_collection
+        ? <span className="text-xs px-2 py-1 rounded-lg bg-cyan-500/20 text-cyan-300">In pickup</span>
+        : <span className="text-slate-600 text-xs">—</span>,
     },
     {
       key: 'adjust', header: 'Adjust', width: '90px', sortable: false,
@@ -228,6 +237,16 @@ export default function RawMaterialsPage() {
             <textarea value={form.notes} rows={2}
               onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inputCls} />
           </div>
+          <label className="flex items-start gap-2 text-sm text-slate-300">
+            <input type="checkbox" className="mt-1" checked={!!form.show_in_collection}
+              onChange={(e) => setForm({ ...form, show_in_collection: e.target.checked ? 1 : 0 })} />
+            <span>
+              Show in delivery-app collection pickup
+              <span className="block text-xs text-slate-500">
+                Only flagged materials (e.g. Raw Milk) — and vendors linked to them — appear in the truck driver&apos;s pickup screen.
+              </span>
+            </span>
+          </label>
           {editItem && (
             <label className="flex items-center gap-2 text-sm text-slate-300">
               <input type="checkbox" checked={!!form.is_active}

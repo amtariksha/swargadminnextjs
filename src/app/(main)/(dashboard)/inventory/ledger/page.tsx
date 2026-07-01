@@ -4,8 +4,12 @@ import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useVendors, useVendorLedger } from '@/hooks/useInventory';
 import DataTable, { Column } from '@/components/DataTable';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import MonthRangePicker, { currentMonthRange } from '@/components/MonthRangePicker';
 import type { LedgerEntry } from '@/hooks/useInventory';
 import { formatApiDate } from '@/lib/dateUtils';
+import { DELETE } from '@/lib/api';
+import { toast } from 'sonner';
 
 const inputCls =
   'w-full sm:w-72 px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50';
@@ -17,8 +21,25 @@ function LedgerInner() {
     const v = searchParams.get('vendor');
     return v ? Number(v) : null;
   });
+  const [range, setRange] = useState(currentMonthRange);
+  const [deleteItem, setDeleteItem] = useState<LedgerEntry | null>(null);
 
-  const { data: ledger, isLoading } = useVendorLedger(vendorId);
+  const { data: ledger, isLoading, refetch } = useVendorLedger(vendorId, range);
+
+  const handleDelete = async () => {
+    if (!deleteItem) return;
+    const path = deleteItem.entry_type === 'purchase'
+      ? `/inventory/purchases/${deleteItem.ref_id}`
+      : `/inventory/payments/${deleteItem.ref_id}`;
+    try {
+      await DELETE(path);
+      toast.success(deleteItem.entry_type === 'purchase' ? 'Invoice deleted' : 'Payment deleted');
+      setDeleteItem(null);
+      refetch();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete');
+    }
+  };
 
   const columns: Column<LedgerEntry>[] = [
     {
@@ -34,6 +55,12 @@ function LedgerInner() {
       ),
     },
     { key: 'detail', header: 'Detail' },
+    {
+      key: 'invoice_no', header: 'Invoice No', width: '130px',
+      render: (item) => item.invoice_no
+        ? <span className="text-slate-200">{item.invoice_no}</span>
+        : <span className="text-slate-600">—</span>,
+    },
     {
       key: 'qty', header: 'Qty', width: '90px',
       render: (item) => item.qty != null
@@ -59,6 +86,15 @@ function LedgerInner() {
       key: 'balance', header: 'Balance', width: '130px',
       render: (item) => <span className="text-cyan-400">₹{Number(item.balance).toFixed(2)}</span>,
     },
+    {
+      key: 'del', header: '', width: '70px', sortable: false,
+      render: (item) => (
+        <button onClick={() => setDeleteItem(item)}
+          className="p-2 hover:bg-slate-800/50 rounded-lg text-red-400 text-xs" title="Delete">
+          Delete
+        </button>
+      ),
+    },
   ];
 
   return (
@@ -68,11 +104,14 @@ function LedgerInner() {
         <p className="text-slate-400">Purchases and payments with a running outstanding balance</p>
       </div>
 
-      <select value={vendorId ?? ''} onChange={(e) => setVendorId(e.target.value ? Number(e.target.value) : null)}
-        className={inputCls}>
-        <option value="">Select a vendor</option>
-        {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-      </select>
+      <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+        <select value={vendorId ?? ''} onChange={(e) => setVendorId(e.target.value ? Number(e.target.value) : null)}
+          className={inputCls}>
+          <option value="">Select a vendor</option>
+          {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+        </select>
+        <MonthRangePicker from={range.from} to={range.to} onChange={(from, to) => setRange({ from, to })} />
+      </div>
 
       {ledger && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -95,8 +134,22 @@ function LedgerInner() {
 
       {vendorId != null && (
         <DataTable data={ledger?.entries ?? []} columns={columns} loading={isLoading} pageSize={50}
-          searchable={false} emptyMessage="No ledger entries for this vendor" />
+          searchable={false} emptyMessage="No ledger entries for this vendor in this period" />
       )}
+
+      <ConfirmDialog
+        isOpen={!!deleteItem}
+        title={deleteItem?.entry_type === 'purchase' ? 'Delete Invoice' : 'Delete Payment'}
+        message={
+          deleteItem?.entry_type === 'purchase'
+            ? `Delete purchase invoice ${deleteItem?.invoice_no ? `"${deleteItem.invoice_no}"` : `#${deleteItem?.ref_id}`}? Stock and vendor outstanding will be reversed.`
+            : `Delete this payment (₹${Number(deleteItem?.amount ?? 0).toFixed(2)})? The vendor outstanding will be restored.`
+        }
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteItem(null)}
+        variant="danger"
+        confirmText="Delete"
+      />
     </div>
   );
 }

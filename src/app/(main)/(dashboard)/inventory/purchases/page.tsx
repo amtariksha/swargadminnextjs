@@ -5,6 +5,7 @@ import { usePurchaseEntries, useVendors, useRawMaterials, PurchaseEntry } from '
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import MonthRangePicker, { currentMonthRange } from '@/components/MonthRangePicker';
 import { Plus, Edit } from 'lucide-react';
 import { POST, PUT, DELETE } from '@/lib/api';
 import { toast } from 'sonner';
@@ -20,7 +21,8 @@ const blankForm = {
 };
 
 export default function PurchasesPage() {
-  const { data: entries = [], isLoading, refetch } = usePurchaseEntries();
+  const [range, setRange] = useState(currentMonthRange);
+  const { data: entries = [], isLoading, refetch } = usePurchaseEntries(range);
   const { data: vendors = [] } = useVendors();
   const { data: materials = [] } = useRawMaterials();
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -130,6 +132,8 @@ export default function PurchasesPage() {
           <Plus className="w-5 h-5" /> Add Purchase
         </button>
       </div>
+
+      <MonthRangePicker from={range.from} to={range.to} onChange={(from, to) => setRange({ from, to })} />
 
       <DataTable data={entries} columns={columns} loading={isLoading} pageSize={50}
         searchPlaceholder="Search purchases..." />

@@ -36,6 +36,8 @@ export interface RawMaterial {
   hsn_code?: string | null;
   gst_rate?: number | string | null;
   default_unit_price?: number | string | null;
+  // Opt-in visibility in the delivery-app collection-pickup picker (migration 097).
+  show_in_collection?: number;
   created_at?: string;
   updated_at?: string;
 }
@@ -90,6 +92,7 @@ export interface LedgerEntry {
   rate?: number | string | null;  // purchase rows only; null for payments
   amount: number | string;
   reference?: string | null;
+  invoice_no?: string | null;     // purchase rows only; null for payments
   detail?: string | null;
   notes?: string | null;
   balance: number;
@@ -125,10 +128,13 @@ export function useRawMaterials() {
   });
 }
 
-export function usePurchaseEntries() {
+export function usePurchaseEntries(filters: { from?: string; to?: string } = {}) {
+  const params: Record<string, string> = {};
+  if (filters.from) params.from = filters.from;
+  if (filters.to) params.to = filters.to;
   return useQuery({
-    queryKey: ['inventory', 'purchases'],
-    queryFn: async () => (await GET<PurchaseEntry[]>('/inventory/purchases')).data || [],
+    queryKey: ['inventory', 'purchases', params],
+    queryFn: async () => (await GET<PurchaseEntry[]>('/inventory/purchases', params)).data || [],
   });
 }
 
@@ -139,10 +145,13 @@ export function useVendorPayments() {
   });
 }
 
-export function useVendorLedger(vendorId: number | null) {
+export function useVendorLedger(vendorId: number | null, filters: { from?: string; to?: string } = {}) {
+  const params: Record<string, string> = {};
+  if (filters.from) params.from = filters.from;
+  if (filters.to) params.to = filters.to;
   return useQuery({
-    queryKey: ['inventory', 'vendor-ledger', vendorId],
-    queryFn: async () => (await GET<VendorLedger>(`/inventory/vendors/${vendorId}/ledger`)).data,
+    queryKey: ['inventory', 'vendor-ledger', vendorId, params],
+    queryFn: async () => (await GET<VendorLedger>(`/inventory/vendors/${vendorId}/ledger`, params)).data,
     enabled: vendorId != null,
   });
 }
