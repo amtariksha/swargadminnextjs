@@ -7,6 +7,8 @@ import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { PodLink } from '@/components/PodImage';
 import BulkPurchaseImportModal from '@/components/accounting/BulkPurchaseImportModal';
+import LedgerPicker from '@/components/accounting/LedgerPicker';
+import { useVendors, useRawMaterials } from '@/hooks/useInventory';
 import { CheckCircle2, XCircle, Edit, Image as ImageIcon, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -31,6 +33,8 @@ interface PurchaseRow {
   source: string;
   ocr_confidence: number | string | null;
   photos?: string[];
+  vendor_id: number;
+  raw_material_id: number;
   vendor_name: string;
   raw_material_name: string;
   raw_material_unit: string;
@@ -47,7 +51,13 @@ interface QualityReading {
   max_value?: number | string | null;
 }
 
-type PurchaseDetail = PurchaseRow & { vendor_gstin?: string | null; quality_readings: QualityReading[]; notes?: string | null };
+type PurchaseDetail = PurchaseRow & {
+  vendor_gstin?: string | null;
+  quality_readings: QualityReading[];
+  notes?: string | null;
+  account_head_ledger_id?: number | null;
+  account_head_name?: string | null;
+};
 
 const STATUS_TABS: { key: string; label: string }[] = [
   { key: 'pending', label: 'To review' },
@@ -68,9 +78,14 @@ const statusBadge = (s: string) => {
 
 export default function AccountingPurchasesPage() {
   const queryClient = useQueryClient();
+  const { data: vendors = [] } = useVendors();
+  const { data: rawMaterials = [] } = useRawMaterials();
   const [tab, setTab] = useState('pending');
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [form, setForm] = useState({ qty: '', unit_price: '', gst_rate: '', supply_type: '1', hsn_code: '', invoice_no: '' });
+  const [form, setForm] = useState({
+    qty: '', unit_price: '', gst_rate: '', supply_type: '1', hsn_code: '', invoice_no: '',
+    vendor_id: '', raw_material_id: '', account_head_ledger_id: '',
+  });
   // Multi-select for bulk approval (only meaningful on the To-review tab).
   const [selected, setSelected] = useState<Set<number | string>>(new Set());
   const [showImport, setShowImport] = useState(false);
@@ -98,8 +113,24 @@ export default function AccountingPurchasesPage() {
       supply_type: String(row.supply_type ?? 1),
       hsn_code: row.hsn_code || '',
       invoice_no: row.invoice_no || '',
+      vendor_id: row.vendor_id != null ? String(row.vendor_id) : '',
+      raw_material_id: row.raw_material_id != null ? String(row.raw_material_id) : '',
+      account_head_ledger_id: '', // filled from detail (only getPurchase returns it)
     });
   };
+
+  // The account head + party ids only come back on the detail fetch — sync them
+  // into the form once the selected purchase's detail loads.
+  useEffect(() => {
+    if (detail && detail.id === selectedId) {
+      setForm((f) => ({
+        ...f,
+        account_head_ledger_id: detail.account_head_ledger_id != null ? String(detail.account_head_ledger_id) : '',
+        vendor_id: f.vendor_id || (detail.vendor_id != null ? String(detail.vendor_id) : ''),
+        raw_material_id: f.raw_material_id || (detail.raw_material_id != null ? String(detail.raw_material_id) : ''),
+      }));
+    }
+  }, [detail, selectedId]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['accounting', 'purchases'] });
@@ -112,6 +143,9 @@ export default function AccountingPurchasesPage() {
       gst_rate: form.gst_rate === '' ? null : Number(form.gst_rate),
       supply_type: Number(form.supply_type), hsn_code: form.hsn_code || null,
       invoice_no: form.invoice_no || null,
+      vendor_id: form.vendor_id ? Number(form.vendor_id) : undefined,
+      raw_material_id: form.raw_material_id ? Number(form.raw_material_id) : undefined,
+      account_head_ledger_id: form.account_head_ledger_id === '' ? null : Number(form.account_head_ledger_id),
     }),
     onSuccess: () => { toast.success('Saved'); invalidate(); },
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to save'),
@@ -239,10 +273,34 @@ export default function AccountingPurchasesPage() {
         ) : (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div><span className="text-slate-500">Vendor:</span> <span className="text-white">{detail.vendor_name}</span></div>
-              <div><span className="text-slate-500">Material:</span> <span className="text-white">{detail.raw_material_name}</span></div>
               <div><span className="text-slate-500">GSTIN:</span> <span className="text-white">{detail.vendor_gstin || '—'}</span></div>
               <div><span className="text-slate-500">Status:</span> <span className={`text-xs px-2 py-0.5 rounded ${statusBadge(detail.status)}`}>{detail.status}</span></div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Vendor</label>
+                <select value={form.vendor_id} disabled={!canEdit}
+                  onChange={(e) => setForm({ ...form, vendor_id: e.target.value })} className={inputCls}>
+                  <option value="">Select vendor…</option>
+                  {vendors.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Material</label>
+                <select value={form.raw_material_id} disabled={!canEdit}
+                  onChange={(e) => setForm({ ...form, raw_material_id: e.target.value })} className={inputCls}>
+                  <option value="">Select material…</option>
+                  {rawMaterials.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>)}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-slate-400 mb-1">Account head — GL ledger this bill posts to (blank = Purchase account)</label>
+                <LedgerPicker value={form.account_head_ledger_id ? Number(form.account_head_ledger_id) : null}
+                  disabled={!canEdit}
+                  onChange={(sel) => setForm({ ...form, account_head_ledger_id: sel ? String(sel.id) : '' })}
+                  placeholder={detail.account_head_name || 'Default: Purchase account'} />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
