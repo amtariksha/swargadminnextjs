@@ -3,6 +3,19 @@ import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { isPlaceholderName } from "@/lib/whatsapp/utils";
 import { maybeCreateWhatsAppLead } from "@/lib/lms/leads/whatsapp-intake";
 
+// Digits-only phone normalization + tolerant equality (exact digits OR the same
+// 10-digit national tail). MSG91 field formats drift — "+91…", "91…", bare
+// 10-digit — and a single missed match here flips a business-app-sent message
+// to "inbound" (renders on the wrong side of the inbox).
+const digitsOnly = (v: unknown): string => String(v ?? "").replace(/\D/g, "");
+const phonesMatch = (a: string, b: string): boolean => {
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const tailA = a.slice(-10);
+    const tailB = b.slice(-10);
+    return tailA.length === 10 && tailA === tailB;
+};
+
 // ─── POST /api/webhooks/msg91 — Receive inbound messages ──
 export async function POST(request: NextRequest) {
     try {
@@ -110,7 +123,16 @@ export async function POST(request: NextRequest) {
             ['sent', 'delivered', 'read', 'failed'].includes(messageStatus.toLowerCase()) ||
             ['sent', 'delivered', 'read', 'failed'].includes(eventName.toLowerCase());
 
-        const isOutboundRequestReceived = webhookType === "2" || (!isDeliveryReport && body.direction === "outbound");
+        // Explicit origin markers first — some MSG91 shapes carry a definitive
+        // "sent by the business" flag; trust it over any phone-number heuristic.
+        const explicitFromMe =
+            body.fromMe === true || body.from_me === true ||
+            body.isFromMe === true || body.is_from_me === true ||
+            String(body.fromMe ?? body.from_me ?? "").toLowerCase() === "true";
+
+        const isOutboundRequestReceived =
+            webhookType === "2" ||
+            (!isDeliveryReport && (body.direction === "outbound" || explicitFromMe));
 
         if (!senderPhone && !isDeliveryReport) {
             console.log("[MSG91 Webhook] No sender phone found. Payload keys:", Object.keys(body));
@@ -121,63 +143,51 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Normalize phone (remove + prefix if present)
-        const normalizedPhone = senderPhone.replace(/^\+/, "");
+        // Normalize phone to digits only (formats drift: "+91…", "91-…", spaces)
+        const normalizedPhone = digitsOnly(senderPhone);
         console.log(`[MSG91 Webhook] Processing message from ${normalizedPhone}`);
 
         // ─── Detect Business App Messages ────────────────────
         // MSG91 doesn't always send webhookType or direction for messages sent
-        // from the WhatsApp Business App. We use multiple detection mechanisms:
-        //   1. Sender phone matches a known integrated (business) number
-        //   2. Receiver phone matches a known integrated number AND sender doesn't
-        //      (normal inbound — skip, but useful for org resolution)
-        //   3. MSG91 media URL pattern contains a business number
-        //   4. Body contains JSON with attachment_url from MSG91's CDN
+        // from the WhatsApp Business App. Detection mechanisms:
+        //   1. ANY sender-ish payload field matches an active integrated
+        //      (business) number — tested individually, NOT just the first
+        //      non-empty of the fallback chain: an echo can carry BOTH
+        //      customerNumber (the customer) and from/sender (our number),
+        //      and the chain alone would hide the business number.
+        //   2. Body contains JSON with an MSG91-CDN attachment_url whose path
+        //      carries a business number (media sent from the phone app).
+        // Matching is variant-tolerant (digits-only, 10-digit-tail equality).
         let isSenderBusinessNumber = false;
-        if (normalizedPhone && !isDeliveryReport) {
-            // Check 1: Look up sender in integrated_numbers DB table
-            // Try exact match first, then with/without leading country separators
-            const phonesToCheck = [normalizedPhone];
-            // If the phone doesn't start with common country codes, also try with "91" prefix
-            if (normalizedPhone.length <= 10) {
-                phonesToCheck.push("91" + normalizedPhone);
-            }
+        let businessNumbers: string[] = [];
+        if (!isDeliveryReport) {
+            const { data: activeNumbers } = await supabaseAdmin
+                .from("integrated_numbers")
+                .select("number")
+                .eq("active", true);
+            businessNumbers = (activeNumbers || []).map((r) => digitsOnly(r.number)).filter(Boolean);
 
-            for (const phoneVariant of phonesToCheck) {
-                const { data: matchedNumber } = await supabaseAdmin
-                    .from("integrated_numbers")
-                    .select("number")
-                    .eq("number", phoneVariant)
-                    .eq("active", true)
-                    .limit(1)
-                    .maybeSingle();
-                if (matchedNumber) {
+            // Check 1: every sender-ish field, independently.
+            const senderishFields = [normalizedPhone, body.from, body.sender, body.mobile, body.phone];
+            for (const field of senderishFields) {
+                const candidate = digitsOnly(field);
+                if (candidate && businessNumbers.some((biz) => phonesMatch(candidate, biz))) {
                     isSenderBusinessNumber = true;
+                    console.log(`[MSG91 Webhook] Business number detected in sender field: ${candidate}`);
                     break;
                 }
             }
 
-            // Check 2: If body is a JSON string with attachment_url containing
-            // an integrated number, it was sent FROM the business app
+            // Check 2: MSG91 CDN URLs contain the business number:
+            // /whatsapp-haptik-media/917090166111/...
             if (!isSenderBusinessNumber && messageBody) {
                 try {
                     const parsed = typeof messageBody === "string" ? JSON.parse(messageBody) : null;
                     if (parsed?.attachment_url && typeof parsed.attachment_url === "string") {
-                        // MSG91 CDN URLs contain the business number: /whatsapp-haptik-media/917090166111/...
                         const urlMatch = parsed.attachment_url.match(/\/(\d{10,15})\//);
-                        if (urlMatch) {
-                            const numberInUrl = urlMatch[1];
-                            const { data: urlNumber } = await supabaseAdmin
-                                .from("integrated_numbers")
-                                .select("number")
-                                .eq("number", numberInUrl)
-                                .eq("active", true)
-                                .limit(1)
-                                .maybeSingle();
-                            if (urlNumber) {
-                                isSenderBusinessNumber = true;
-                                console.log(`[MSG91 Webhook] Business number detected from media URL: ${numberInUrl}`);
-                            }
+                        if (urlMatch && businessNumbers.some((biz) => phonesMatch(digitsOnly(urlMatch[1]), biz))) {
+                            isSenderBusinessNumber = true;
+                            console.log(`[MSG91 Webhook] Business number detected from media URL: ${urlMatch[1]}`);
                         }
                     }
                 } catch {
@@ -256,12 +266,34 @@ export async function POST(request: NextRequest) {
         let messageDirection = "inbound";
 
         if (isExternalOutbound) {
-            // MSG91 ALWAYS reports customerNumber = the customer and
+            // MSG91 usually reports customerNumber = the customer and
             // integratedNumber = our business number, regardless of direction.
-            // So do NOT swap customer/business — only flip the direction. (The
-            // old swap created contacts under our own number and conversations
-            // keyed on a customer number, orphaned from every inbox.)
+            // So normally do NOT swap customer/business — only flip the
+            // direction. (An unconditional swap once created contacts under our
+            // own number and conversations orphaned from every inbox.)
             messageDirection = "outbound";
+
+            // EXCEPTION — echo shape with no customerNumber: the parsed
+            // "customer" is OUR OWN number (it came from from/sender). Threading
+            // under ourselves is always wrong; the real customer is on the
+            // receiver side. Swap only in this provably-wrong case, and only
+            // when the receiver is NOT also one of our numbers.
+            const customerDigits = digitsOnly(actualCustomerPhone);
+            if (customerDigits && businessNumbers.some((biz) => phonesMatch(customerDigits, biz))) {
+                const receiverDigits = digitsOnly(receiverNumber);
+                if (receiverDigits && !businessNumbers.some((biz) => phonesMatch(receiverDigits, biz))) {
+                    actualBusinessPhone = actualCustomerPhone;
+                    actualCustomerPhone = receiverDigits;
+                    console.log(`[MSG91 Webhook] Echo shape: swapped — customer is receiver ${receiverDigits}`);
+                } else {
+                    console.log("[MSG91 Webhook] Echo with no resolvable customer (receiver is ours/empty); acknowledging.");
+                    return NextResponse.json(
+                        { received: true, skipped: "echo_no_customer" },
+                        { status: 200 }
+                    );
+                }
+            }
+
             console.log(`[MSG91 Webhook] Outbound message. Customer: ${actualCustomerPhone}, Business: ${actualBusinessPhone}`);
 
             if (!actualCustomerPhone) {
@@ -271,6 +303,16 @@ export async function POST(request: NextRequest) {
                     { status: 200 }
                 );
             }
+        } else {
+            // Classified INBOUND — forensic one-liner so any future
+            // misclassification (echo rendered as received) is diagnosable
+            // from logs without guessing at MSG91's payload shape.
+            console.log(
+                `[MSG91 Webhook] direction=inbound wt=${webhookType || "-"} ev=${eventName || "-"} ` +
+                `customerNumber=${digitsOnly(body.customerNumber) || "-"} from=${digitsOnly(body.from) || "-"} ` +
+                `sender=${digitsOnly(body.sender) || "-"} mobile=${digitsOnly(body.mobile) || "-"} ` +
+                `to=${digitsOnly(receiverNumber) || "-"} keys=${Object.keys(body).join(",")}`
+            );
         }
 
         // ─── 1. Upsert Contact ─────────────────────────────

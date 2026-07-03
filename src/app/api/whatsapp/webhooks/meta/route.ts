@@ -52,7 +52,16 @@ export async function POST(request: NextRequest) {
                     console.error("[Meta Webhook] Invalid signature");
                     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
                 }
+            } else {
+                // Secret configured but Meta sent no signature header — suspicious.
+                console.warn("[Meta Webhook] FACEBOOK_APP_SECRET set but request carried no x-hub-signature-256 header");
             }
+        } else {
+            // Loud, every request: unauthenticated webhook accepts ANY payload.
+            console.warn(
+                "[Meta Webhook] SECURITY: FACEBOOK_APP_SECRET is not set — signature verification is DISABLED. " +
+                "Set it in the deployment env to authenticate Meta webhook calls."
+            );
         }
 
         const body = await request.json();

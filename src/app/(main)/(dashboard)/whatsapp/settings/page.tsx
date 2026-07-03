@@ -920,6 +920,12 @@ function NumbersTab() {
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
+        // A Meta-direct number is unusable without all three credentials —
+        // fail here with a plain message instead of a silent dead number.
+        if (provider === "meta" && (!metaWabaId.trim() || !metaPhoneNumberId.trim() || !metaAccessToken.trim())) {
+            alert("Meta provider needs all three fields: WABA ID, Phone Number ID and Access Token.");
+            return;
+        }
         setSaving(true);
         try {
             const payload: Record<string, unknown> = {

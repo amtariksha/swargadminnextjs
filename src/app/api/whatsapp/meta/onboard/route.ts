@@ -63,13 +63,27 @@ export async function POST(request: NextRequest) {
             wabaId: string;
         }> = [];
 
+        const warnings: string[] = [];
+
         // Step 3: For each WABA, get phone numbers, subscribe, register
         for (const wabaId of wabaIds) {
-            // Subscribe WABA to webhooks
-            await fetch(`https://graph.facebook.com/${metaApiVersion}/${wabaId}/subscribed_apps`, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${accessToken}` },
-            });
+            // Subscribe WABA to webhooks — surface failures instead of
+            // swallowing them (an unsubscribed WABA = inbound silently dead).
+            try {
+                const subRes = await fetch(`https://graph.facebook.com/${metaApiVersion}/${wabaId}/subscribed_apps`, {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                });
+                const subData = await subRes.json().catch(() => ({}));
+                if (!subRes.ok || subData?.error || subData?.success === false) {
+                    const msg = subData?.error?.message || `HTTP ${subRes.status}`;
+                    console.error(`[Meta Onboard] Webhook subscription FAILED for WABA ${wabaId}:`, msg);
+                    warnings.push(`Webhook subscription failed for WABA ${wabaId}: ${msg} — inbound messages will NOT arrive until fixed.`);
+                }
+            } catch (subErr) {
+                console.error(`[Meta Onboard] Webhook subscription threw for WABA ${wabaId}:`, subErr);
+                warnings.push(`Webhook subscription error for WABA ${wabaId} — inbound messages will NOT arrive until fixed.`);
+            }
 
             // Get phone numbers
             const phonesUrl = `https://graph.facebook.com/${metaApiVersion}/${wabaId}/phone_numbers?access_token=${accessToken}`;
@@ -142,11 +156,13 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        console.log(`[Meta Onboard] Successfully onboarded ${results.length} number(s)`);
+        console.log(`[Meta Onboard] Successfully onboarded ${results.length} number(s)` +
+            (warnings.length ? ` with ${warnings.length} warning(s)` : ""));
 
         return NextResponse.json({
             success: true,
             numbers: results,
+            warnings,
             configId,
         });
     } catch (err) {
