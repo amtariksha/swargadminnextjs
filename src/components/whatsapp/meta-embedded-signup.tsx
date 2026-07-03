@@ -1,7 +1,7 @@
 "use client";
 import { wfetch } from "@/lib/whatsapp/wfetch";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
 declare global {
@@ -26,6 +26,13 @@ export function MetaEmbeddedSignup({ onSuccess, configId }: MetaEmbeddedSignupPr
     const [status, setStatus] = useState<"idle" | "loading" | "sdk_loading" | "processing" | "success" | "error">("idle");
     const [error, setError] = useState("");
     const [inputConfigId, setInputConfigId] = useState(configId || "");
+
+    // The saved Configuration ID is fetched asynchronously by the parent, so it
+    // may arrive after this component mounts. Backfill the field when it does,
+    // but never overwrite a value the user has already typed.
+    useEffect(() => {
+        if (configId) setInputConfigId((prev) => prev || configId);
+    }, [configId]);
 
     const loadFBSDK = (): Promise<void> => {
         return new Promise((resolve, reject) => {

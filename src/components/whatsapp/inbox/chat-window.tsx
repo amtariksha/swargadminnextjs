@@ -51,7 +51,10 @@ const SOURCE_CONFIG: Record<string, { icon: React.ReactNode; label: string; colo
     webapp: {
         icon: <Monitor className="w-3 h-3" />,
         label: "CRM Webapp",
-        color: "text-emerald-600",
+        // Source icons render only on the fixed light-green outbound bubble.
+        // Use a dark hex (not text-emerald-*, which the .whatsapp-shell theme
+        // layer remaps to light lavender in dark mode → invisible on green).
+        color: "text-[#047857]",
     },
     mobile_app: {
         icon: <Smartphone className="w-3 h-3" />,
@@ -266,7 +269,9 @@ function MessageBubble({ message }: { message: Message }) {
                     isNote
                         ? "bg-amber-50 border border-amber-200"
                         : isOutbound
-                            ? "bg-[#dcf8c6] text-slate-900 rounded-br-md"
+                            // Fixed light-green surface in both themes → pin text to a
+                            // dark hex so the dark-mode .text-slate-* flip can't wash it out.
+                            ? "bg-[#dcf8c6] text-[#111b21] rounded-br-md"
                             : "bg-white border border-slate-200 text-slate-900 rounded-bl-md"
                 )}
             >
@@ -322,7 +327,7 @@ function MessageBubble({ message }: { message: Message }) {
                     <div
                         className={cn(
                             "flex items-center gap-2 mb-2 p-2 rounded-lg",
-                            isOutbound ? "bg-black/5 text-slate-800" : "bg-indigo-50 border border-indigo-100 text-indigo-700"
+                            isOutbound ? "bg-black/5 text-[#111b21]" :"bg-indigo-50 border border-indigo-100 text-indigo-700"
                         )}
                     >
                         <MessageSquareText className="w-5 h-5 flex-shrink-0" />
@@ -334,7 +339,7 @@ function MessageBubble({ message }: { message: Message }) {
                     <div
                         className={cn(
                             "flex flex-col gap-1 mb-2 p-2 rounded-lg",
-                            isOutbound ? "bg-black/5 text-slate-800" : "bg-slate-50 text-slate-800"
+                            isOutbound ? "bg-black/5 text-[#111b21]" :"bg-slate-50 text-slate-800"
                         )}
                     >
                         <div className="flex items-center gap-2">
@@ -370,7 +375,7 @@ function MessageBubble({ message }: { message: Message }) {
                     <div
                         className={cn(
                             "flex flex-col gap-1 mb-2 p-2 rounded-lg",
-                            isOutbound ? "bg-black/5 text-slate-800" : "bg-slate-50 text-slate-800"
+                            isOutbound ? "bg-black/5 text-[#111b21]" :"bg-slate-50 text-slate-800"
                         )}
                     >
                         <div className="flex items-center gap-2">
@@ -404,7 +409,7 @@ function MessageBubble({ message }: { message: Message }) {
                     <div
                         className={cn(
                             "flex items-center gap-2 mb-2 p-2 rounded-lg",
-                            isOutbound ? "bg-black/5 text-slate-800" : "bg-blue-50 border border-blue-100 text-blue-700"
+                            isOutbound ? "bg-black/5 text-[#111b21]" :"bg-blue-50 border border-blue-100 text-blue-700"
                         )}
                     >
                         <PhoneIcon className="w-5 h-5 flex-shrink-0" />
@@ -419,7 +424,9 @@ function MessageBubble({ message }: { message: Message }) {
                             "text-sm leading-relaxed whitespace-pre-wrap",
                             isNote
                                 ? "text-amber-900"
-                                : "text-slate-800"
+                                : isOutbound
+                                    ? "text-[#111b21]"
+                                    : "text-slate-800"
                         )}
                     >
                         {formatWhatsAppText(displayText)}
@@ -432,7 +439,7 @@ function MessageBubble({ message }: { message: Message }) {
                         isNote
                             ? "text-amber-500"
                             : isOutbound
-                                ? "text-emerald-700/70"
+                                ? "text-[#54656f]"
                                 : "text-slate-400"
                     )}
                 >

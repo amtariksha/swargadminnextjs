@@ -13,7 +13,6 @@ import {
     XCircle,
     Eye,
     Clipboard,
-    Building2,
     Search,
 } from "lucide-react";
 import { useAuth } from "@/components/whatsapp/auth-provider";
@@ -104,36 +103,17 @@ const LANGUAGE_LABELS: Record<string, string> = {
 export default function TemplatesPage() {
     const { user } = useAuth();
     const router = useRouter();
-    const isSuperAdmin = user?.role === "super_admin";
     const [templates, setTemplates] = useState<RemoteTemplate[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<"all" | "approved" | "pending" | "rejected">("all");
 
-    // Org selector for super_admin
-    const [orgs, setOrgs] = useState<{ id: string; name: string }[]>([]);
-    const [selectedOrgId, setSelectedOrgId] = useState("");
-
     // View dialog state
     const [viewTemplate, setViewTemplate] = useState<RemoteTemplate | null>(null);
 
     // Clipboard toast
     const [copiedName, setCopiedName] = useState<string | null>(null);
-
-    // Fetch orgs for super_admin
-    useEffect(() => {
-        if (!isSuperAdmin) return;
-        wfetch("/api/whatsapp/organizations")
-            .then((r) => r.json())
-            .then((data) => {
-                if (Array.isArray(data)) {
-                    setOrgs(data);
-                    if (data.length > 0 && !selectedOrgId) setSelectedOrgId(data[0].id);
-                }
-            })
-            .catch(() => {});
-    }, [isSuperAdmin]);
 
     const fetchTemplates = async () => {
         setLoading(true);
@@ -247,25 +227,6 @@ export default function TemplatesPage() {
             </div>
 
             {/* Org Selector for super_admin */}
-            {isSuperAdmin && orgs.length > 0 && (
-                <div className="mb-4 bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-                    <div className="flex items-center gap-3">
-                        <Building2 className="w-5 h-5 text-slate-500" />
-                        <div className="flex-1">
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">View templates for organization</label>
-                            <select
-                                value={selectedOrgId}
-                                onChange={(e) => setSelectedOrgId(e.target.value)}
-                                className="w-full max-w-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
-                            >
-                                {orgs.map((org) => (
-                                    <option key={org.id} value={org.id}>{org.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* Search + Status Filter */}
             <div className="flex items-center gap-3 mb-6">

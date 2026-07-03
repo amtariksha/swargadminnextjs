@@ -15,7 +15,6 @@ import {
     Download,
     Wallet,
     RefreshCw,
-    Building2,
     HelpCircle,
 } from "lucide-react";
 import { useAuth } from "@/components/whatsapp/auth-provider";
@@ -31,32 +30,10 @@ export default function SettingsPage() {
     const { user: currentUser } = useAuth();
 
     // ─── Settings tab ───────────────────────────────────────
-    const [activeTab, setActiveTab] = useState<"quick-replies" | "numbers" | "general" | "organizations">("numbers");
+    const [activeTab, setActiveTab] = useState<"quick-replies" | "numbers" | "general">("numbers");
+    // Single-org deployment (WACRM_ORG_ID). isSuperAdmin still gates saving the
+    // GLOBAL settings (Facebook app id/secret etc.), not any org UI.
     const isSuperAdmin = currentUser?.role === "super_admin";
-
-    // ─── Org list (for super_admin org selectors across tabs) ──
-    const [orgs, setOrgs] = useState<{ id: string; name: string }[]>([]);
-
-    const fetchOrgs = async () => {
-        try {
-            const res = await wfetch("/api/whatsapp/organizations");
-            if (res.ok) {
-                const data = await res.json();
-                setOrgs(data);
-            }
-        } catch (e) {
-            console.error("Failed to fetch orgs:", e);
-        }
-    };
-
-    useEffect(() => {
-        if (isSuperAdmin) fetchOrgs();
-    }, [isSuperAdmin]);
-
-    const getOrgName = (orgId: string) => {
-        const org = orgs.find((o) => o.id === orgId);
-        return org?.name || "Unknown";
-    };
 
     if (currentUser?.role !== "admin" && currentUser?.role !== "super_admin") {
         return (
@@ -120,23 +97,11 @@ export default function SettingsPage() {
                     <SlidersHorizontal className="w-4 h-4 inline mr-2" />
                     General
                 </button>
-                {currentUser?.role === "super_admin" && (
-                    <button
-                        onClick={() => setActiveTab("organizations")}
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === "organizations"
-                            ? "bg-white text-slate-900 shadow-sm"
-                            : "text-slate-500 hover:text-slate-700"
-                            }`}
-                    >
-                        <Building2 className="w-4 h-4 inline mr-2" />
-                        Organizations
-                    </button>
-                )}
             </div>
 
 
             {activeTab === "quick-replies" && (
-                <QuickRepliesTab isSuperAdmin={!!isSuperAdmin} orgs={orgs} getOrgName={getOrgName} />
+                <QuickRepliesTab />
             )}
 
             {activeTab === "numbers" && (
@@ -144,20 +109,15 @@ export default function SettingsPage() {
             )}
 
             {activeTab === "general" && (
-                <GeneralSettingsTab isSuperAdmin={!!isSuperAdmin} orgs={orgs} />
-            )}
-
-            {activeTab === "organizations" && (
-                <OrganizationsTab />
+                <GeneralSettingsTab isSuperAdmin={!!isSuperAdmin} />
             )}
         </div>
     );
 }
 
 // ─── General Settings Tab ─────────────────────────────────
-function GeneralSettingsTab({ isSuperAdmin, orgs }: { isSuperAdmin: boolean; orgs: { id: string; name: string }[] }) {
-    const [selectedOrgId, setSelectedOrgId] = useState(orgs[0]?.id || "");
-    const { data: settings, isLoading } = useSettings(selectedOrgId || undefined);
+function GeneralSettingsTab({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+    const { data: settings, isLoading } = useSettings(undefined);
     const { mutate: updateSettingsMutation, isPending: saving } = useUpdateSettings();
 
     const [paymentTemplateName, setPaymentTemplateName] = useState("");
@@ -171,17 +131,11 @@ function GeneralSettingsTab({ isSuperAdmin, orgs }: { isSuperAdmin: boolean; org
     const [facebookAppSecret, setFacebookAppSecret] = useState("");
     const [facebookOauthRedirectUri, setFacebookOauthRedirectUri] = useState("");
     const [metaApiVersion, setMetaApiVersion] = useState("v21.0");
+    const [metaEmbeddedConfigId, setMetaEmbeddedConfigId] = useState("");
     const [webhookVerifyToken, setWebhookVerifyToken] = useState("");
     const [webhookCopied, setWebhookCopied] = useState(false);
     const [saved, setSaved] = useState(false);
     const [settingsGuideKey, setSettingsGuideKey] = useState<GuideKey | null>(null);
-
-    // Update selectedOrgId when orgs first load
-    useEffect(() => {
-        if (orgs.length > 0 && !selectedOrgId) {
-            setSelectedOrgId(orgs[0].id);
-        }
-    }, [orgs, selectedOrgId]);
 
     useEffect(() => {
         if (settings) {
@@ -196,6 +150,7 @@ function GeneralSettingsTab({ isSuperAdmin, orgs }: { isSuperAdmin: boolean; org
             setFacebookAppSecret(settings.facebook_app_secret || "");
             setFacebookOauthRedirectUri(settings.facebook_oauth_redirect_uri || "");
             setMetaApiVersion(settings.meta_api_version || "v21.0");
+            setMetaEmbeddedConfigId(settings.meta_embedded_config_id || "");
             setWebhookVerifyToken(settings.meta_webhook_verify_token || "");
         }
     }, [settings]);
@@ -221,13 +176,14 @@ function GeneralSettingsTab({ isSuperAdmin, orgs }: { isSuperAdmin: boolean; org
             orgSettings.facebook_app_secret = facebookAppSecret;
             orgSettings.facebook_oauth_redirect_uri = facebookOauthRedirectUri;
             orgSettings.meta_api_version = metaApiVersion || "v21.0";
+            orgSettings.meta_embedded_config_id = metaEmbeddedConfigId.trim();
             orgSettings.meta_webhook_verify_token = webhookVerifyToken;
         }
 
         updateSettingsMutation(
             {
                 settings: orgSettings,
-                orgId: selectedOrgId || undefined,
+                orgId: undefined,
             },
             {
                 onSuccess: () => {
@@ -248,33 +204,12 @@ function GeneralSettingsTab({ isSuperAdmin, orgs }: { isSuperAdmin: boolean; org
 
     return (
         <div>
-            {/* Org Selector for super_admin */}
-            {isSuperAdmin && orgs.length > 0 && (
-                <div className="mb-6 bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-                    <div className="flex items-center gap-3">
-                        <Building2 className="w-5 h-5 text-slate-500" />
-                        <div className="flex-1">
-                            <label className="block text-xs font-semibold text-slate-700 mb-1">Configure settings for organization</label>
-                            <select
-                                value={selectedOrgId}
-                                onChange={(e) => setSelectedOrgId(e.target.value)}
-                                className="w-full max-w-xs px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
-                            >
-                                {orgs.map((org) => (
-                                    <option key={org.id} value={org.id}>{org.name}</option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-                </div>
-            )}
-
             {/* MSG91 Balance Card */}
             <BalanceCard />
 
             <form onSubmit={handleSave}>
                 <p className="text-sm text-slate-500 mb-6">
-                    Organization-specific settings. {isSuperAdmin ? "Select an organization above to configure its settings." : "These values apply to your organization."}
+                    WhatsApp integration settings.
                 </p>
 
                 <div className="space-y-6">
@@ -490,6 +425,21 @@ function GeneralSettingsTab({ isSuperAdmin, orgs }: { isSuperAdmin: boolean; org
                                 The Graph API version to use for Meta API calls (e.g. v21.0). Keep this updated to the latest stable version.
                             </p>
                         </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-700 mb-1">
+                                Meta Embedded Signup Configuration ID
+                            </label>
+                            <input
+                                type="text"
+                                value={metaEmbeddedConfigId}
+                                onChange={(e) => setMetaEmbeddedConfigId(e.target.value)}
+                                placeholder="e.g. 4461769007389120"
+                                className="w-full max-w-md px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+                            />
+                            <p className="text-[11px] text-slate-400 mt-1.5">
+                                Saved once and pre-filled every time you onboard a number via <strong>Numbers → Connect via Meta</strong>. Find it in the Meta Developer Console under your app → <strong>WhatsApp → Embedded Signup</strong> configuration.
+                            </p>
+                        </div>
                     </div>
                 </div>
                 )}
@@ -632,15 +582,14 @@ function BalanceCard() {
 }
 
 // ─── Quick Replies Tab ────────────────────────────────────
-function QuickRepliesTab({ isSuperAdmin, orgs, getOrgName }: { isSuperAdmin: boolean; orgs: { id: string; name: string }[]; getOrgName: (id: string) => string }) {
-    const [quickReplies, setQuickReplies] = useState<{ id: string; title: string; body: string; shortcut?: string; orgId?: string }[]>([]);
+function QuickRepliesTab() {
+    const [quickReplies, setQuickReplies] = useState<{ id: string; title: string; body: string; shortcut?: string }[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [editId, setEditId] = useState<string | null>(null);
     const [title, setTitle] = useState("");
     const [body, setBody] = useState("");
     const [shortcut, setShortcut] = useState("");
-    const [selectedOrgId, setSelectedOrgId] = useState(orgs[0]?.id || "");
     const [saving, setSaving] = useState(false);
 
     const fetchReplies = async () => {
@@ -663,9 +612,6 @@ function QuickRepliesTab({ isSuperAdmin, orgs, getOrgName }: { isSuperAdmin: boo
             const url = editId ? `/api/quick-replies/${editId}` : "/api/quick-replies";
             const method = editId ? "PATCH" : "POST";
             const payload: Record<string, unknown> = { title, body, shortcut: shortcut || undefined };
-            if (isSuperAdmin && selectedOrgId && !editId) {
-                payload.orgId = selectedOrgId;
-            }
             await wfetch(url, {
                 method,
                 headers: { "Content-Type": "application/json" },
@@ -678,12 +624,11 @@ function QuickRepliesTab({ isSuperAdmin, orgs, getOrgName }: { isSuperAdmin: boo
         }
     };
 
-    const handleEdit = (qr: { id: string; title: string; body: string; shortcut?: string; orgId?: string }) => {
+    const handleEdit = (qr: { id: string; title: string; body: string; shortcut?: string }) => {
         setEditId(qr.id);
         setTitle(qr.title);
         setBody(qr.body);
         setShortcut(qr.shortcut || "");
-        if (qr.orgId) setSelectedOrgId(qr.orgId);
         setShowForm(true);
     };
 
@@ -699,7 +644,6 @@ function QuickRepliesTab({ isSuperAdmin, orgs, getOrgName }: { isSuperAdmin: boo
         setTitle("");
         setBody("");
         setShortcut("");
-        if (orgs.length > 0) setSelectedOrgId(orgs[0].id);
     };
 
     return (
@@ -720,21 +664,6 @@ function QuickRepliesTab({ isSuperAdmin, orgs, getOrgName }: { isSuperAdmin: boo
                         {editId ? "Edit Quick Reply" : "New Quick Reply"}
                     </h3>
                     <form onSubmit={handleSave} className="space-y-3">
-                        {isSuperAdmin && orgs.length > 0 && !editId && (
-                            <div>
-                                <label className="block text-xs font-medium text-slate-600 mb-1">Organization</label>
-                                <select
-                                    value={selectedOrgId}
-                                    onChange={(e) => setSelectedOrgId(e.target.value)}
-                                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none"
-                                    required
-                                >
-                                    {orgs.map((org) => (
-                                        <option key={org.id} value={org.id}>{org.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-xs font-medium text-slate-600 mb-1">Title</label>
@@ -813,12 +742,6 @@ function QuickRepliesTab({ isSuperAdmin, orgs, getOrgName }: { isSuperAdmin: boo
                                         {qr.shortcut && (
                                             <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono">/{qr.shortcut}</span>
                                         )}
-                                        {isSuperAdmin && qr.orgId && (
-                                            <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                                                <Building2 className="w-2.5 h-2.5" />
-                                                {getOrgName(qr.orgId)}
-                                            </span>
-                                        )}
                                     </div>
                                     <p className="text-xs text-slate-500 line-clamp-2">{qr.body}</p>
                                 </div>
@@ -847,17 +770,13 @@ function QuickRepliesTab({ isSuperAdmin, orgs, getOrgName }: { isSuperAdmin: boo
 
 // ─── Numbers Tab ───────────────────────────────────────────
 function NumbersTab() {
-    const { user: currentUser } = useAuth();
-    const isSuperAdmin = currentUser?.role === "super_admin";
+    const { data: settings } = useSettings(undefined);
     const [numbers, setNumbers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [showMetaSignup, setShowMetaSignup] = useState(false);
     const [editId, setEditId] = useState<string | null>(null);
     const [autoDetectResult, setAutoDetectResult] = useState<string | null>(null);
-
-    // Org list for super_admin
-    const [orgs, setOrgs] = useState<{ id: string; name: string }[]>([]);
 
     // Form fields
     const [number, setNumber] = useState("");
@@ -866,7 +785,6 @@ function NumbersTab() {
     const [metaWabaId, setMetaWabaId] = useState("");
     const [metaPhoneNumberId, setMetaPhoneNumberId] = useState("");
     const [metaAccessToken, setMetaAccessToken] = useState("");
-    const [selectedOrgId, setSelectedOrgId] = useState("");
     const [saving, setSaving] = useState(false);
     const [guideKey, setGuideKey] = useState<GuideKey | null>(null);
 
@@ -883,28 +801,7 @@ function NumbersTab() {
         }
     };
 
-    const fetchOrgs = async () => {
-        try {
-            const res = await wfetch("/api/whatsapp/organizations");
-            if (res.ok) {
-                const data = await res.json();
-                setOrgs(data);
-                if (data.length > 0 && !selectedOrgId) {
-                    setSelectedOrgId(data[0].id);
-                }
-            }
-        } catch (e) {
-            console.error("Failed to fetch orgs:", e);
-        }
-    };
-
     useEffect(() => { fetchNumbers(); }, []);
-    useEffect(() => { if (isSuperAdmin) fetchOrgs(); }, [isSuperAdmin]);
-
-    const getOrgName = (orgId: string) => {
-        const org = orgs.find((o) => o.id === orgId);
-        return org?.name || "Unknown";
-    };
 
     const resetForm = () => {
         setShowForm(false);
@@ -915,7 +812,6 @@ function NumbersTab() {
         setMetaWabaId("");
         setMetaPhoneNumberId("");
         setMetaAccessToken("");
-        setSelectedOrgId(orgs.length > 0 ? orgs[0].id : "");
     };
 
     const handleSave = async (e: React.FormEvent) => {
@@ -937,11 +833,6 @@ function NumbersTab() {
                 metaPhoneNumberId: provider === "meta" ? metaPhoneNumberId : undefined,
                 metaAccessToken: provider === "meta" ? metaAccessToken : undefined,
             };
-
-            // Super admin can assign number to a specific org
-            if (isSuperAdmin && selectedOrgId) {
-                payload.orgId = selectedOrgId;
-            }
 
             const method = editId ? "PATCH" : "POST";
             const res = await wfetch("/api/whatsapp/numbers", {
@@ -971,7 +862,6 @@ function NumbersTab() {
         setMetaWabaId(num.metaWabaId || "");
         setMetaPhoneNumberId(num.metaPhoneNumberId || "");
         setMetaAccessToken(num.metaAccessToken || "");
-        if (num.orgId) setSelectedOrgId(num.orgId);
         setShowForm(true);
     };
 
@@ -1058,6 +948,7 @@ function NumbersTab() {
                         <button onClick={() => setShowMetaSignup(false)} className="text-slate-400 hover:text-slate-600 text-sm">Cancel</button>
                     </div>
                     <MetaEmbeddedSignup
+                        configId={settings?.meta_embedded_config_id || ""}
                         onSuccess={() => {
                             fetchNumbers();
                             setTimeout(() => setShowMetaSignup(false), 2000);
@@ -1072,22 +963,6 @@ function NumbersTab() {
                         {editId ? "Edit Number Configuration" : "Add Number Configuration"}
                     </h3>
                     <form onSubmit={handleSave} className="space-y-4">
-                        {isSuperAdmin && orgs.length > 0 && (
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1">Organization</label>
-                                <select
-                                    value={selectedOrgId}
-                                    onChange={(e) => setSelectedOrgId(e.target.value)}
-                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
-                                    required
-                                >
-                                    {orgs.map((org) => (
-                                        <option key={org.id} value={org.id}>{org.name}</option>
-                                    ))}
-                                </select>
-                                <p className="text-[10px] text-slate-400 mt-1">Assign this number to an organization</p>
-                            </div>
-                        )}
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-xs font-semibold text-slate-700 mb-1">Phone Number</label>
@@ -1231,12 +1106,6 @@ function NumbersTab() {
                                         {num.isDefault && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Default</span>}
                                     </h4>
                                     <p className="text-xs text-slate-500 font-medium mt-0.5">{num.label}</p>
-                                    {isSuperAdmin && num.orgId && (
-                                        <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
-                                            <Building2 className="w-3 h-3" />
-                                            {getOrgName(num.orgId)}
-                                        </p>
-                                    )}
                                 </div>
                                 <div className="flex items-center gap-2">
                                      <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase tracking-wider ${num.provider === 'meta' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
@@ -1271,218 +1140,3 @@ function NumbersTab() {
     );
 }
 
-// ─── Organizations Tab (super_admin only) ────────────────────
-interface OrgRecord {
-    id: string;
-    name: string;
-    slug: string;
-    created_at: string;
-    updated_at: string;
-}
-
-function OrganizationsTab() {
-    const [orgs, setOrgs] = useState<OrgRecord[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [showAdd, setShowAdd] = useState(false);
-    const [orgName, setOrgName] = useState("");
-    const [orgSlug, setOrgSlug] = useState("");
-    const [saving, setSaving] = useState(false);
-    const [error, setError] = useState("");
-    const [editId, setEditId] = useState<string | null>(null);
-    const [editName, setEditName] = useState("");
-    const [editSlug, setEditSlug] = useState("");
-
-    const fetchOrgs = async () => {
-        try {
-            const res = await wfetch("/api/whatsapp/organizations");
-            if (res.ok) setOrgs(await res.json());
-        } catch (e) {
-            console.error("Failed to fetch organizations:", e);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => { fetchOrgs(); }, []);
-
-    const handleCreate = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError("");
-        setSaving(true);
-        try {
-            const res = await wfetch("/api/whatsapp/organizations", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: orgName, slug: orgSlug }),
-            });
-            if (!res.ok) {
-                const data = await res.json();
-                setError(data.error || "Failed to create organization");
-                return;
-            }
-            setShowAdd(false);
-            setOrgName("");
-            setOrgSlug("");
-            fetchOrgs();
-        } catch {
-            setError("Network error");
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleUpdate = async (id: string) => {
-        setError("");
-        setSaving(true);
-        try {
-            const res = await wfetch(`/api/whatsapp/organizations/${id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: editName, slug: editSlug }),
-            });
-            if (!res.ok) {
-                const data = await res.json();
-                setError(data.error || "Failed to update organization");
-                return;
-            }
-            setEditId(null);
-            fetchOrgs();
-        } catch {
-            setError("Network error");
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    const handleDelete = async (id: string) => {
-        if (!confirm("Delete this organization? All associated data may become orphaned.")) return;
-        try {
-            const res = await wfetch(`/api/whatsapp/organizations/${id}`, { method: "DELETE" });
-            if (!res.ok) {
-                const data = await res.json();
-                alert(data.error || "Failed to delete");
-                return;
-            }
-            fetchOrgs();
-        } catch {
-            alert("Network error");
-        }
-    };
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
-            </div>
-        );
-    }
-
-    return (
-        <div>
-            <div className="flex justify-between items-center mb-4">
-                <p className="text-sm text-slate-500">{orgs.length} organization(s)</p>
-                <button
-                    onClick={() => setShowAdd(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm"
-                >
-                    <Plus className="w-4 h-4" />
-                    New Organization
-                </button>
-            </div>
-
-            {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>
-            )}
-
-            {showAdd && (
-                <form onSubmit={handleCreate} className="mb-6 p-4 border border-slate-200 rounded-lg bg-slate-50 space-y-3">
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Name</label>
-                        <input
-                            type="text"
-                            value={orgName}
-                            onChange={(e) => setOrgName(e.target.value)}
-                            placeholder="Acme Corp"
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                            required
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-1">Slug</label>
-                        <input
-                            type="text"
-                            value={orgSlug}
-                            onChange={(e) => setOrgSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                            placeholder="acme-corp"
-                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"
-                            required
-                        />
-                        <p className="text-xs text-slate-400 mt-1">Lowercase letters, numbers, and hyphens only</p>
-                    </div>
-                    <div className="flex gap-2">
-                        <button type="submit" disabled={saving} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-50">
-                            {saving ? "Creating..." : "Create"}
-                        </button>
-                        <button type="button" onClick={() => { setShowAdd(false); setError(""); }} className="px-4 py-2 text-slate-600 bg-white border border-slate-300 rounded-lg text-sm hover:bg-slate-50">
-                            Cancel
-                        </button>
-                    </div>
-                </form>
-            )}
-
-            <div className="space-y-2">
-                {orgs.map((org) => (
-                    <div key={org.id} className="flex items-center justify-between p-4 border border-slate-200 rounded-lg bg-white">
-                        {editId === org.id ? (
-                            <div className="flex-1 flex items-center gap-3">
-                                <input
-                                    type="text"
-                                    value={editName}
-                                    onChange={(e) => setEditName(e.target.value)}
-                                    className="px-2 py-1 border border-slate-300 rounded text-sm"
-                                />
-                                <input
-                                    type="text"
-                                    value={editSlug}
-                                    onChange={(e) => setEditSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
-                                    className="px-2 py-1 border border-slate-300 rounded text-sm"
-                                />
-                                <button onClick={() => handleUpdate(org.id)} disabled={saving} className="px-3 py-1 bg-emerald-600 text-white rounded text-sm hover:bg-emerald-700 disabled:opacity-50">
-                                    Save
-                                </button>
-                                <button onClick={() => setEditId(null)} className="px-3 py-1 text-slate-600 bg-slate-100 rounded text-sm hover:bg-slate-200">
-                                    Cancel
-                                </button>
-                            </div>
-                        ) : (
-                            <>
-                                <div>
-                                    <p className="font-medium text-slate-900">{org.name}</p>
-                                    <p className="text-xs text-slate-400">slug: {org.slug} &middot; {new Date(org.created_at).toLocaleDateString()}</p>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                    <button
-                                        onClick={() => { setEditId(org.id); setEditName(org.name); setEditSlug(org.slug); }}
-                                        className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
-                                        title="Edit"
-                                    >
-                                        <Pencil className="w-4 h-4" />
-                                    </button>
-                                    {org.id !== "00000000-0000-0000-0000-000000000001" && (
-                                        <button
-                                            onClick={() => handleDelete(org.id)}
-                                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                            title="Delete"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    )}
-                                </div>
-                            </>
-                        )}
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-}

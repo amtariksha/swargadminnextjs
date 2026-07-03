@@ -10,6 +10,10 @@ const GLOBAL_ONLY_KEYS = new Set([
     "facebook_oauth_redirect_uri",
     "meta_api_version",
     "meta_webhook_verify_token",
+    // Meta Embedded Signup configuration ID — a property of the shared
+    // Facebook app, so it's stored once globally and pre-fills the
+    // "Connect via Meta" flow for every number onboarding.
+    "meta_embedded_config_id",
 ]);
 
 // ─── GET /api/settings ─────────────────────────────────────
