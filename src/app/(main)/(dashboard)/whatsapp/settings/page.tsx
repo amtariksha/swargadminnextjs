@@ -468,11 +468,11 @@ function GeneralSettingsTab({ isSuperAdmin, orgs }: { isSuperAdmin: boolean; org
                                 type="url"
                                 value={facebookOauthRedirectUri}
                                 onChange={(e) => setFacebookOauthRedirectUri(e.target.value)}
-                                placeholder="e.g. https://your-domain.com/api/ctwa/callback"
+                                placeholder="e.g. https://your-domain.com/api/whatsapp/ctwa/callback"
                                 className="w-full max-w-md px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
                             />
                             <p className="text-[11px] text-slate-400 mt-1.5">
-                                The redirect URL Facebook returns to after OAuth authorization. Must match exactly what&apos;s configured in your Facebook App. For local dev use <code className="text-[11px] bg-slate-100 px-1 rounded">http://localhost:3000/api/ctwa/callback</code>.
+                                The redirect URL Facebook returns to after OAuth authorization. Must match exactly what&apos;s configured in your Facebook App. For local dev use <code className="text-[11px] bg-slate-100 px-1 rounded">http://localhost:3000/api/whatsapp/ctwa/callback</code>.
                             </p>
                         </div>
                         <div>
@@ -512,13 +512,13 @@ function GeneralSettingsTab({ isSuperAdmin, orgs }: { isSuperAdmin: boolean; org
                                 <input
                                     type="text"
                                     readOnly
-                                    value={typeof window !== "undefined" ? `${window.location.origin}/api/webhooks/meta` : "/api/webhooks/meta"}
+                                    value={typeof window !== "undefined" ? `${window.location.origin}/api/whatsapp/webhooks/meta` : "/api/whatsapp/webhooks/meta"}
                                     className="flex-1 max-w-md px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm font-mono text-slate-600 cursor-default"
                                 />
                                 <button
                                     type="button"
                                     onClick={() => {
-                                        const url = `${window.location.origin}/api/webhooks/meta`;
+                                        const url = `${window.location.origin}/api/whatsapp/webhooks/meta`;
                                         navigator.clipboard.writeText(url);
                                         setWebhookCopied(true);
                                         setTimeout(() => setWebhookCopied(false), 2000);
