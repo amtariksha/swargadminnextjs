@@ -7,6 +7,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { deleteLead, getLead, updateLead } from "@/lib/lms/leads/service";
+import { getRequestContext } from "@/lib/whatsapp/request";
+import { notifyLeadAssignment } from "@/lib/whatsapp/send-template";
 import type { LeadStatus } from "@/lib/lms/leads/types";
 
 const STATUSES: LeadStatus[] = [
@@ -31,6 +33,9 @@ const patchSchema = z.object({
     // which 400'd every real assignment.
     ownerUserId: z.string().max(64).nullable().optional(),
     ownerName: z.string().max(200).nullable().optional(),
+    // Transient — NOT persisted on the lead; only lets the server fire the
+    // WhatsApp new-lead alert to the assigned sales person (opt-in).
+    ownerPhone: z.string().max(20).nullable().optional(),
     score: z.number().int().min(0).max(100).nullable().optional(),
     tags: z.array(z.string().max(64)).max(20).nullable().optional(),
     notes: z.string().max(4000).nullable().optional(),
@@ -86,6 +91,22 @@ export async function PATCH(
         if (parsed.data.notes !== undefined) patch.notes = parsed.data.notes ?? undefined;
 
         const lead = await updateLead({ leadId, patch });
+
+        // Fire the WhatsApp new-lead alert when a lead is assigned to a person
+        // (owner set to non-null). Opt-in + template-gated inside the helper, so
+        // this is a no-op until the operator enables it. Awaited but never
+        // throws — a failed alert must not fail the assignment.
+        if (parsed.data.ownerUserId && parsed.data.ownerPhone) {
+            const { orgId } = getRequestContext(request.headers);
+            await notifyLeadAssignment({
+                ownerPhone: parsed.data.ownerPhone,
+                ownerName: parsed.data.ownerName ?? lead.ownerName,
+                leadName: lead.name,
+                leadPhone: lead.phone,
+                orgId,
+            });
+        }
+
         return NextResponse.json({ lead });
     } catch (err) {
         console.error("[PATCH /api/lms/leads/:id]", err);

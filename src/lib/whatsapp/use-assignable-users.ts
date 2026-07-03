@@ -17,6 +17,7 @@ export interface AssignableUser {
     id: string;
     name: string;
     email?: string;
+    phone?: string;
 }
 
 /**
@@ -41,6 +42,7 @@ export function useAssignableUsers() {
                 id: String(u.user_id ?? u.id),
                 name: u.name,
                 email: u.email,
+                phone: u.phone,
             }));
     }, [query.data]);
 

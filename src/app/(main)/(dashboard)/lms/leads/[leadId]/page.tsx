@@ -112,7 +112,9 @@ export default function LeadDetailPage() {
             return;
         }
         const u = assignableUsers.find((x) => x.id === userId);
-        await patch({ ownerUserId: userId, ownerName: u?.name ?? null });
+        // ownerPhone is NOT stored on the lead — it only lets the server fire the
+        // WhatsApp new-lead alert to this sales person (opt-in, template-gated).
+        await patch({ ownerUserId: userId, ownerName: u?.name ?? null, ownerPhone: u?.phone ?? null });
     };
 
     const onAddTag = async () => {
