@@ -68,6 +68,7 @@ export interface LeadFilters {
     fromDate?: string;
     toDate?: string;
     search?: string;       // phone / email / name LIKE
+    sort?: "recent" | "score";  // default 'recent' (first_touch_at desc)
     limit?: number;
     offset?: number;
 }

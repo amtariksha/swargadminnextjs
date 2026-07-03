@@ -26,6 +26,7 @@ import {
     type LeadSource,
     type LeadStatus,
 } from "@/lib/lms/leads/types";
+import { computeLeadScore } from "@/lib/lms/leads/scoring";
 
 // ─── Read ─────────────────────────────────────────────────────────────────
 
@@ -38,8 +39,15 @@ export async function listLeads(
     let q = lmsAdmin
         .from("lms_leads")
         .select("*", { count: "exact" })
-        .order("first_touch_at", { ascending: false })
         .range(offset, offset + limit - 1);
+
+    // Sort: 'score' = hottest first (nulls last), else newest first.
+    if (filters.sort === "score") {
+        q = q.order("score", { ascending: false, nullsFirst: false })
+             .order("first_touch_at", { ascending: false });
+    } else {
+        q = q.order("first_touch_at", { ascending: false });
+    }
 
     if (filters.status && filters.status !== "all") q = q.eq("status", filters.status);
     if (filters.source && filters.source !== "all") q = q.eq("source", filters.source);
@@ -339,6 +347,48 @@ export async function expireStaleLeads(args: {
 
 function normalisePhone(input: string): string {
     return input.replace(/^\+/, "").replace(/\s+/g, "").trim();
+}
+
+/**
+ * Nightly rule-based scoring for OPEN leads. Computes computeLeadScore() for
+ * each new/contacted/qualified lead and writes it back. Bucketed by score so
+ * the write cost is at most 101 UPDATEs regardless of lead volume. Pinged by
+ * the backend lms-nightly cron; a plain background compute — does NOT touch
+ * last_activity_at.
+ */
+export async function scoreOpenLeads(args: { limit?: number } = {}): Promise<{ scored: number }> {
+    const limit = Math.min(Math.max(args.limit ?? 2000, 1), 5000);
+    const { data, error } = await lmsAdmin
+        .from("lms_leads")
+        .select("id, source, first_touch_at, last_activity_at, contact_id, email, name, tags, status")
+        .in("status", ["new", "contacted", "qualified"])
+        .limit(limit);
+    if (error) throw new Error(`[leads] score select failed: ${error.message}`);
+    const rows = data ?? [];
+    if (rows.length === 0) return { scored: 0 };
+
+    const now = Date.now();
+    const idsByScore = new Map<number, string[]>();
+    for (const r of rows) {
+        const s = computeLeadScore(r as Record<string, unknown>, now);
+        const bucket = idsByScore.get(s) ?? [];
+        bucket.push(r.id as string);
+        idsByScore.set(s, bucket);
+    }
+
+    let scored = 0;
+    for (const [score, ids] of idsByScore) {
+        const { error: upErr } = await lmsAdmin
+            .from("lms_leads")
+            .update({ score })
+            .in("id", ids);
+        if (upErr) {
+            console.warn(`[leads] score update failed (score=${score}, n=${ids.length}):`, upErr.message);
+            continue;
+        }
+        scored += ids.length;
+    }
+    return { scored };
 }
 
 function mapRow(row: Record<string, unknown>): Lead {

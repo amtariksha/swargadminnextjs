@@ -88,6 +88,7 @@ export default function LeadsPage() {
     const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
     const [sourceFilter, setSourceFilter] = useState<LeadSource | "all">("all");
     const [pipelineFilter, setPipelineFilter] = useState<LeadPipeline | "all">("b2c");
+    const [sortMode, setSortMode] = useState<"recent" | "score">("recent");
     const [search, setSearch] = useState("");
     const [syncing, setSyncing] = useState(false);
     const [syncResult, setSyncResult] = useState<string | null>(null);
@@ -100,6 +101,7 @@ export default function LeadsPage() {
             if (statusFilter !== "all") params.set("status", statusFilter);
             if (sourceFilter !== "all") params.set("source", sourceFilter);
             if (pipelineFilter !== "all") params.set("pipeline", pipelineFilter);
+            if (sortMode === "score") params.set("sort", "score");
             if (search.trim()) params.set("q", search.trim());
             params.set("limit", "100");
             const res = await wfetch(`/api/lms/leads?${params}`);
@@ -115,7 +117,7 @@ export default function LeadsPage() {
         } finally {
             setLoading(false);
         }
-    }, [statusFilter, sourceFilter, pipelineFilter, search]);
+    }, [statusFilter, sourceFilter, pipelineFilter, sortMode, search]);
 
     useEffect(() => {
         load();
@@ -236,6 +238,21 @@ export default function LeadsPage() {
                         ),
                     )}
                 </select>
+                <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800/60">
+                    {([["recent", "Newest"], ["score", "Hottest"]] as const).map(([v, label]) => (
+                        <button
+                            key={v}
+                            onClick={() => setSortMode(v)}
+                            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                sortMode === v
+                                    ? "bg-white text-purple-700 shadow-sm dark:bg-slate-900 dark:text-purple-300"
+                                    : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                            }`}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </div>
             </div>
 
             <div className="mb-4 flex flex-wrap gap-2">
@@ -285,6 +302,7 @@ export default function LeadsPage() {
                                 <th className="px-4 py-3">Contact</th>
                                 <th className="px-4 py-3">Source</th>
                                 <th className="px-4 py-3">Owner</th>
+                                <th className="px-4 py-3">Score</th>
                                 <th className="px-4 py-3">Status</th>
                                 <th className="px-4 py-3">Expires</th>
                                 <th className="px-4 py-3">First touch</th>
@@ -332,6 +350,19 @@ export default function LeadsPage() {
                                         </td>
                                         <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
                                             {l.ownerName ?? <span className="text-slate-400">Unassigned</span>}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm">
+                                            {l.score != null ? (
+                                                <span className={`font-semibold ${
+                                                    l.score >= 60 ? "text-emerald-600 dark:text-emerald-400"
+                                                        : l.score >= 35 ? "text-amber-600 dark:text-amber-400"
+                                                            : "text-slate-500 dark:text-slate-400"
+                                                }`}>
+                                                    {l.score}
+                                                </span>
+                                            ) : (
+                                                <span className="text-slate-400">—</span>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3">
                                             <span

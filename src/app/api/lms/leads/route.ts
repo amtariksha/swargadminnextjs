@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getRequestContext } from "@/lib/whatsapp/request";
 import { createLead, listLeads } from "@/lib/lms/leads/service";
-import type { LeadSource, LeadStatus } from "@/lib/lms/leads/types";
+import type { LeadPipeline, LeadSource, LeadStatus } from "@/lib/lms/leads/types";
 
 const SOURCES: LeadSource[] = [
     "whatsapp",
@@ -44,7 +44,8 @@ const createSchema = z.object({
     email: z.string().email().optional().or(z.literal("")),
     pincode: z.string().max(12).optional(),
     language: z.string().max(8).optional(),
-    ownerUserId: z.string().uuid().optional(),
+    // Admin-panel user id (String(admin.user_id)), NOT a UUID — see migration 012.
+    ownerUserId: z.string().max(64).optional(),
     tags: z.array(z.string().max(64)).max(20).optional(),
     notes: z.string().max(4000).optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
@@ -54,8 +55,10 @@ export async function GET(request: NextRequest) {
     const sp = new URL(request.url).searchParams;
     const status = sp.get("status") as (LeadStatus | "all") | null;
     const source = sp.get("source") as (LeadSource | "all") | null;
+    const pipeline = sp.get("pipeline") as (LeadPipeline | "all") | null;
     const owner = sp.get("owner");
     const search = sp.get("q") ?? undefined;
+    const sort = sp.get("sort") === "score" ? "score" : "recent";
     const fromDate = sp.get("from") ?? undefined;
     const toDate = sp.get("to") ?? undefined;
     const limit = sp.get("limit") ? parseInt(sp.get("limit") ?? "50", 10) : undefined;
@@ -67,8 +70,10 @@ export async function GET(request: NextRequest) {
             source: source && (SOURCES.includes(source as LeadSource) || source === "all")
                 ? source
                 : "all",
+            pipeline: pipeline === "b2c" || pipeline === "b2b" ? pipeline : "all",
             ownerUserId: owner ?? "any",
             search,
+            sort,
             fromDate,
             toDate,
             limit,
