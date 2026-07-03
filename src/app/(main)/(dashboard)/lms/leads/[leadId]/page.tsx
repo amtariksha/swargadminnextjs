@@ -101,6 +101,11 @@ export default function LeadDetailPage() {
         await patch({ status: newStatus });
     };
 
+    const onSetPipeline = async (pipeline: "b2c" | "b2b") => {
+        if (lead?.pipeline === pipeline) return;
+        await patch({ pipeline });
+    };
+
     const onAssignOwner = async (userId: string) => {
         if (!userId) {
             await patch({ ownerUserId: null, ownerName: null });
@@ -369,6 +374,29 @@ export default function LeadDetailPage() {
                                         → {STATUS_LABELS[s].label}
                                     </button>
                                 ))}
+                        </div>
+                    </div>
+
+                    {/* Pipeline — B2C vs B2B funnel. */}
+                    <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+                        <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                            Pipeline
+                        </h3>
+                        <div className="grid grid-cols-2 gap-2">
+                            {(["b2c", "b2b"] as const).map((p) => (
+                                <button
+                                    key={p}
+                                    onClick={() => onSetPipeline(p)}
+                                    disabled={saving}
+                                    className={`rounded-md px-2 py-1.5 text-xs font-semibold uppercase tracking-wider disabled:opacity-50 ${
+                                        lead.pipeline === p
+                                            ? "bg-purple-600 text-white"
+                                            : "border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                                    }`}
+                                >
+                                    {p === "b2c" ? "B2C" : "B2B"}
+                                </button>
+                            ))}
                         </div>
                     </div>
 

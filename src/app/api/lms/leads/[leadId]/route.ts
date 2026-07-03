@@ -25,6 +25,7 @@ const patchSchema = z.object({
     pincode: z.string().max(12).nullable().optional(),
     language: z.string().max(8).optional(),
     status: z.enum(STATUSES as [LeadStatus, ...LeadStatus[]]).optional(),
+    pipeline: z.enum(["b2c", "b2b"]).optional(),
     // Admin-panel identity is the backend user id (String(admin.user_id)), NOT a
     // UUID — assign-to-agent stores that verbatim (migration 012). Was `.uuid()`,
     // which 400'd every real assignment.
@@ -75,6 +76,7 @@ export async function PATCH(
         if (parsed.data.pincode !== undefined) patch.pincode = parsed.data.pincode ?? undefined;
         if (parsed.data.language !== undefined) patch.language = parsed.data.language;
         if (parsed.data.status !== undefined) patch.status = parsed.data.status;
+        if (parsed.data.pipeline !== undefined) patch.pipeline = parsed.data.pipeline;
         if (parsed.data.ownerUserId !== undefined)
             patch.ownerUserId = parsed.data.ownerUserId ?? null;
         if (parsed.data.ownerName !== undefined)

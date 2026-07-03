@@ -29,9 +29,16 @@ import { wfetch } from "@/lib/whatsapp/wfetch";
 import type {
     Lead,
     LeadListResponse,
+    LeadPipeline,
     LeadSource,
     LeadStatus,
 } from "@/lib/lms/leads/types";
+
+const PIPELINE_TABS: Array<{ value: LeadPipeline | "all"; label: string }> = [
+    { value: "b2c", label: "B2C" },
+    { value: "b2b", label: "B2B" },
+    { value: "all", label: "All" },
+];
 
 const STATUS_OPTIONS: Array<{ value: LeadStatus | "all"; label: string; cls: string }> = [
     { value: "all", label: "All", cls: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200" },
@@ -80,6 +87,7 @@ export default function LeadsPage() {
     const [error, setError] = useState<string | null>(null);
     const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
     const [sourceFilter, setSourceFilter] = useState<LeadSource | "all">("all");
+    const [pipelineFilter, setPipelineFilter] = useState<LeadPipeline | "all">("b2c");
     const [search, setSearch] = useState("");
     const [syncing, setSyncing] = useState(false);
     const [syncResult, setSyncResult] = useState<string | null>(null);
@@ -91,6 +99,7 @@ export default function LeadsPage() {
             const params = new URLSearchParams();
             if (statusFilter !== "all") params.set("status", statusFilter);
             if (sourceFilter !== "all") params.set("source", sourceFilter);
+            if (pipelineFilter !== "all") params.set("pipeline", pipelineFilter);
             if (search.trim()) params.set("q", search.trim());
             params.set("limit", "100");
             const res = await wfetch(`/api/lms/leads?${params}`);
@@ -106,7 +115,7 @@ export default function LeadsPage() {
         } finally {
             setLoading(false);
         }
-    }, [statusFilter, sourceFilter, search]);
+    }, [statusFilter, sourceFilter, pipelineFilter, search]);
 
     useEffect(() => {
         load();
@@ -185,6 +194,23 @@ export default function LeadsPage() {
                 </div>
             )}
 
+            {/* Pipeline tabs — the primary B2C / B2B funnel split. */}
+            <div className="mb-4 inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800/60">
+                {PIPELINE_TABS.map((p) => (
+                    <button
+                        key={p.value}
+                        onClick={() => setPipelineFilter(p.value)}
+                        className={`rounded-md px-4 py-1.5 text-sm font-semibold transition-colors ${
+                            pipelineFilter === p.value
+                                ? "bg-white text-purple-700 shadow-sm dark:bg-slate-900 dark:text-purple-300"
+                                : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                        }`}
+                    >
+                        {p.label}
+                    </button>
+                ))}
+            </div>
+
             {/* Filters */}
             <div className="mb-4 flex flex-wrap items-center gap-3">
                 <div className="relative">
@@ -258,6 +284,7 @@ export default function LeadsPage() {
                                 <th className="px-4 py-3">Name</th>
                                 <th className="px-4 py-3">Contact</th>
                                 <th className="px-4 py-3">Source</th>
+                                <th className="px-4 py-3">Owner</th>
                                 <th className="px-4 py-3">Status</th>
                                 <th className="px-4 py-3">Expires</th>
                                 <th className="px-4 py-3">First touch</th>
@@ -302,6 +329,9 @@ export default function LeadsPage() {
                                         </td>
                                         <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
                                             {SOURCE_LABELS[l.source]}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
+                                            {l.ownerName ?? <span className="text-slate-400">Unassigned</span>}
                                         </td>
                                         <td className="px-4 py-3">
                                             <span

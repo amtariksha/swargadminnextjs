@@ -27,6 +27,9 @@ export type LeadStatus =
     | "lost"
     | "duplicate";
 
+/** Sales funnel a lead belongs to (migration 013). */
+export type LeadPipeline = "b2c" | "b2b";
+
 export interface Lead {
     id: string;
     orgId: string;
@@ -40,6 +43,8 @@ export interface Lead {
     contactId?: string | null;
     language: string;
     status: LeadStatus;
+    /** B2C (default) or B2B funnel (migration 013). */
+    pipeline: LeadPipeline;
     /** admin-panel user id the lead is assigned to (String(admin.user_id) — the
      *  same identity conversations.assigned_to uses; migration 012). */
     ownerUserId?: string | null;
@@ -58,6 +63,7 @@ export interface Lead {
 export interface LeadFilters {
     status?: LeadStatus | "all";
     source?: LeadSource | "all";
+    pipeline?: LeadPipeline | "all";
     ownerUserId?: string | "any";
     fromDate?: string;
     toDate?: string;

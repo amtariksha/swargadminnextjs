@@ -22,6 +22,7 @@ import {
     type Lead,
     type LeadFilters,
     type LeadListResponse,
+    type LeadPipeline,
     type LeadSource,
     type LeadStatus,
 } from "@/lib/lms/leads/types";
@@ -42,6 +43,7 @@ export async function listLeads(
 
     if (filters.status && filters.status !== "all") q = q.eq("status", filters.status);
     if (filters.source && filters.source !== "all") q = q.eq("source", filters.source);
+    if (filters.pipeline && filters.pipeline !== "all") q = q.eq("pipeline", filters.pipeline);
     if (filters.ownerUserId && filters.ownerUserId !== "any") {
         q = q.eq("owner_user_id", filters.ownerUserId);
     }
@@ -88,6 +90,7 @@ export async function createLead(args: {
     /** public.contacts.id (Supabase) — set for WhatsApp-sourced leads. */
     contactId?: string;
     language?: string;
+    pipeline?: LeadPipeline;
     ownerUserId?: string;
     tags?: string[];
     notes?: string;
@@ -151,6 +154,7 @@ export async function createLead(args: {
             contact_id: args.contactId ?? null,
             language: args.language ?? "en",
             status: "new" satisfies LeadStatus,
+            pipeline: args.pipeline ?? "b2c",
             owner_user_id: args.ownerUserId ?? null,
             tags: args.tags ?? null,
             notes: args.notes ?? null,
@@ -168,7 +172,7 @@ export async function updateLead(args: {
         Pick<
             Lead,
             "name" | "phone" | "email" | "pincode" | "language" |
-            "status" | "ownerUserId" | "ownerName" | "score" | "tags" | "notes"
+            "status" | "pipeline" | "ownerUserId" | "ownerName" | "score" | "tags" | "notes"
         > & {
             metadata?: Record<string, unknown>;
         }
@@ -185,6 +189,7 @@ export async function updateLead(args: {
     if (args.patch.pincode !== undefined) update.pincode = args.patch.pincode;
     if (args.patch.language !== undefined) update.language = args.patch.language;
     if (args.patch.status !== undefined) update.status = args.patch.status;
+    if (args.patch.pipeline !== undefined) update.pipeline = args.patch.pipeline;
     if (args.patch.ownerUserId !== undefined) update.owner_user_id = args.patch.ownerUserId;
     if (args.patch.ownerName !== undefined) update.owner_name = args.patch.ownerName;
     if (args.patch.score !== undefined) update.score = args.patch.score;
@@ -350,6 +355,7 @@ function mapRow(row: Record<string, unknown>): Lead {
         contactId: (row.contact_id as string | null) ?? null,
         language: (row.language as string) ?? "en",
         status: row.status as LeadStatus,
+        pipeline: ((row.pipeline as LeadPipeline | null) ?? "b2c"),
         ownerUserId: (row.owner_user_id as string | null) ?? null,
         ownerName: (row.owner_name as string | null) ?? null,
         score: (row.score as number | null) ?? null,
