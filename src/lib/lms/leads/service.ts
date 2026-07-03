@@ -168,7 +168,7 @@ export async function updateLead(args: {
         Pick<
             Lead,
             "name" | "phone" | "email" | "pincode" | "language" |
-            "status" | "ownerUserId" | "score" | "tags" | "notes"
+            "status" | "ownerUserId" | "ownerName" | "score" | "tags" | "notes"
         > & {
             metadata?: Record<string, unknown>;
         }
@@ -186,6 +186,7 @@ export async function updateLead(args: {
     if (args.patch.language !== undefined) update.language = args.patch.language;
     if (args.patch.status !== undefined) update.status = args.patch.status;
     if (args.patch.ownerUserId !== undefined) update.owner_user_id = args.patch.ownerUserId;
+    if (args.patch.ownerName !== undefined) update.owner_name = args.patch.ownerName;
     if (args.patch.score !== undefined) update.score = args.patch.score;
     if (args.patch.tags !== undefined) update.tags = args.patch.tags;
     if (args.patch.notes !== undefined) update.notes = args.patch.notes;
@@ -350,6 +351,7 @@ function mapRow(row: Record<string, unknown>): Lead {
         language: (row.language as string) ?? "en",
         status: row.status as LeadStatus,
         ownerUserId: (row.owner_user_id as string | null) ?? null,
+        ownerName: (row.owner_name as string | null) ?? null,
         score: (row.score as number | null) ?? null,
         tags: (row.tags as string[] | null) ?? null,
         firstTouchAt: row.first_touch_at as string,

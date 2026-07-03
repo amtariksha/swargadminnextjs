@@ -40,7 +40,11 @@ export interface Lead {
     contactId?: string | null;
     language: string;
     status: LeadStatus;
+    /** admin-panel user id the lead is assigned to (String(admin.user_id) — the
+     *  same identity conversations.assigned_to uses; migration 012). */
     ownerUserId?: string | null;
+    /** denormalized owner display name (migration 012). */
+    ownerName?: string | null;
     score?: number | null;
     tags?: string[] | null;
     firstTouchAt: string;

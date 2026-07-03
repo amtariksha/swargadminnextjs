@@ -25,7 +25,11 @@ const patchSchema = z.object({
     pincode: z.string().max(12).nullable().optional(),
     language: z.string().max(8).optional(),
     status: z.enum(STATUSES as [LeadStatus, ...LeadStatus[]]).optional(),
-    ownerUserId: z.string().uuid().nullable().optional(),
+    // Admin-panel identity is the backend user id (String(admin.user_id)), NOT a
+    // UUID — assign-to-agent stores that verbatim (migration 012). Was `.uuid()`,
+    // which 400'd every real assignment.
+    ownerUserId: z.string().max(64).nullable().optional(),
+    ownerName: z.string().max(200).nullable().optional(),
     score: z.number().int().min(0).max(100).nullable().optional(),
     tags: z.array(z.string().max(64)).max(20).nullable().optional(),
     notes: z.string().max(4000).nullable().optional(),
@@ -72,7 +76,9 @@ export async function PATCH(
         if (parsed.data.language !== undefined) patch.language = parsed.data.language;
         if (parsed.data.status !== undefined) patch.status = parsed.data.status;
         if (parsed.data.ownerUserId !== undefined)
-            patch.ownerUserId = parsed.data.ownerUserId ?? undefined;
+            patch.ownerUserId = parsed.data.ownerUserId ?? null;
+        if (parsed.data.ownerName !== undefined)
+            patch.ownerName = parsed.data.ownerName ?? null;
         if (parsed.data.score !== undefined) patch.score = parsed.data.score ?? undefined;
         if (parsed.data.tags !== undefined) patch.tags = parsed.data.tags ?? undefined;
         if (parsed.data.notes !== undefined) patch.notes = parsed.data.notes ?? undefined;

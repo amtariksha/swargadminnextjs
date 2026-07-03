@@ -16,6 +16,7 @@ import {
     ArrowLeft,
     Loader2,
     User,
+    UserCog,
     Phone,
     Mail,
     MapPin,
@@ -25,8 +26,10 @@ import {
     AlertTriangle,
     Check,
     Link2,
+    X,
 } from "lucide-react";
 import { wfetch } from "@/lib/whatsapp/wfetch";
+import { useAssignableUsers } from "@/lib/whatsapp/use-assignable-users";
 import type { Lead, LeadStatus } from "@/lib/lms/leads/types";
 
 const STATUS_LABELS: Record<LeadStatus, { label: string; cls: string }> = {
@@ -50,6 +53,8 @@ export default function LeadDetailPage() {
     const [notesDraft, setNotesDraft] = useState("");
     const [linkUserId, setLinkUserId] = useState("");
     const [linking, setLinking] = useState(false);
+    const [tagInput, setTagInput] = useState("");
+    const { users: assignableUsers } = useAssignableUsers();
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -94,6 +99,32 @@ export default function LeadDetailPage() {
 
     const onStatusChange = async (newStatus: LeadStatus) => {
         await patch({ status: newStatus });
+    };
+
+    const onAssignOwner = async (userId: string) => {
+        if (!userId) {
+            await patch({ ownerUserId: null, ownerName: null });
+            return;
+        }
+        const u = assignableUsers.find((x) => x.id === userId);
+        await patch({ ownerUserId: userId, ownerName: u?.name ?? null });
+    };
+
+    const onAddTag = async () => {
+        const t = tagInput.trim();
+        if (!t) return;
+        const existing = lead?.tags ?? [];
+        if (existing.some((x) => x.toLowerCase() === t.toLowerCase())) {
+            setTagInput("");
+            return;
+        }
+        setTagInput("");
+        await patch({ tags: [...existing, t] });
+    };
+
+    const onRemoveTag = async (t: string) => {
+        const existing = lead?.tags ?? [];
+        await patch({ tags: existing.filter((x) => x !== t) });
     };
 
     const onSaveNote = async () => {
@@ -258,25 +289,58 @@ export default function LeadDetailPage() {
                         />
                     </div>
 
-                    {/* Tags */}
-                    {lead.tags && lead.tags.length > 0 && (
-                        <div className="mt-6">
-                            <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                                <TagIcon className="h-3.5 w-3.5" />
-                                Tags
-                            </h3>
-                            <div className="flex flex-wrap gap-1.5">
-                                {lead.tags.map((t) => (
-                                    <span
-                                        key={t}
-                                        className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                    {/* Tags — editable */}
+                    <div className="mt-6">
+                        <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                            <TagIcon className="h-3.5 w-3.5" />
+                            Tags
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            {(lead.tags ?? []).map((t) => (
+                                <span
+                                    key={t}
+                                    className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                >
+                                    {t}
+                                    <button
+                                        type="button"
+                                        onClick={() => onRemoveTag(t)}
+                                        disabled={saving}
+                                        className="text-slate-400 hover:text-red-500 disabled:opacity-50"
+                                        aria-label={`Remove tag ${t}`}
                                     >
-                                        {t}
-                                    </span>
-                                ))}
-                            </div>
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </span>
+                            ))}
+                            {(lead.tags ?? []).length === 0 && (
+                                <span className="text-xs text-slate-400">No tags yet.</span>
+                            )}
                         </div>
-                    )}
+                        <div className="mt-2 flex gap-2">
+                            <input
+                                value={tagInput}
+                                onChange={(e) => setTagInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        onAddTag();
+                                    }
+                                }}
+                                placeholder="Add a tag (e.g. hot, milk, B2B) and press Enter"
+                                maxLength={64}
+                                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-purple-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                            />
+                            <button
+                                type="button"
+                                onClick={onAddTag}
+                                disabled={saving || !tagInput.trim()}
+                                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+                            >
+                                Add
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Status sidebar */}
@@ -306,6 +370,30 @@ export default function LeadDetailPage() {
                                     </button>
                                 ))}
                         </div>
+                    </div>
+
+                    {/* Owner — assign to a sales/CS team member. */}
+                    <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-900">
+                        <h3 className="mb-1 flex items-center gap-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                            <UserCog className="h-3.5 w-3.5 text-purple-500" />
+                            Owner
+                        </h3>
+                        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+                            {lead.ownerName
+                                ? <>Assigned to <span className="font-medium text-slate-700 dark:text-slate-200">{lead.ownerName}</span>.</>
+                                : "Unassigned — pick who works this lead."}
+                        </p>
+                        <select
+                            value={lead.ownerUserId ?? ""}
+                            disabled={saving}
+                            onChange={(e) => onAssignOwner(e.target.value)}
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-transparent focus:ring-2 focus:ring-purple-500 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                        >
+                            <option value="">Unassigned</option>
+                            {assignableUsers.map((u) => (
+                                <option key={u.id} value={u.id}>{u.name}</option>
+                            ))}
+                        </select>
                     </div>
 
                     {/* Link to existing customer — alternate-number merge. */}
