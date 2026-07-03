@@ -293,7 +293,7 @@ function CreateTemplateContent() {
                     body: JSON.stringify(payload),
                 });
             }
-            router.push("/templates");
+            router.push("/whatsapp/templates");
         } catch (e) {
             console.error("Save error:", e);
             alert("Failed to save template.");
@@ -333,7 +333,7 @@ function CreateTemplateContent() {
             const submitRes = await wfetch(`/api/whatsapp/templates/local/${templateId}/submit`, { method: "POST" });
             const submitData = await submitRes.json();
             if (!submitRes.ok) { alert(`Submission failed: ${submitData.error || "Unknown error"}`); return; }
-            router.push("/templates");
+            router.push("/whatsapp/templates");
         } catch (e) {
             console.error("Submit error:", e);
             alert("Failed to submit template.");
@@ -361,7 +361,7 @@ function CreateTemplateContent() {
             {/* Top Bar */}
             <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <Button variant="ghost" size="icon" onClick={() => router.push("/templates")} className="h-9 w-9">
+                    <Button variant="ghost" size="icon" onClick={() => router.push("/whatsapp/templates")} className="h-9 w-9">
                         <ArrowLeft className="w-5 h-5" />
                     </Button>
                     <h1 className="text-lg font-semibold text-slate-800">

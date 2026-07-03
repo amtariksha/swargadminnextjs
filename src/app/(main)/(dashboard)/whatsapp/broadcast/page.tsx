@@ -117,7 +117,7 @@ export default function BroadcastPage() {
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => router.push("/templates")} className="gap-1.5">
+                        <Button variant="outline" size="sm" onClick={() => router.push("/whatsapp/templates")} className="gap-1.5">
                             <Plus className="w-3.5 h-3.5" />
                             Create Template
                         </Button>

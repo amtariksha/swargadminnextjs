@@ -169,7 +169,7 @@ export default function TemplatesPage() {
     }, []);
 
     const handleNewTemplate = () => {
-        router.push("/templates/create");
+        router.push("/whatsapp/templates/create");
     };
 
     const handleCopyName = (name: string) => {
