@@ -3,11 +3,12 @@
 import { useState, useMemo } from 'react';
 import { usePurchaseReport, useVendors, useRawMaterials } from '@/hooks/useInventory';
 import DataTable, { Column } from '@/components/DataTable';
+import MonthRangePicker, { currentMonthRange } from '@/components/MonthRangePicker';
 
 const inputCls =
   'w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50';
 
-type VendorRow = { vendor_id: number; vendor_name: string; entry_count: number; total_amount: number | string };
+type VendorRow = { vendor_id: number; vendor_name: string; entry_count: number; total_qty: number | string; total_amount: number | string };
 type MaterialRow = {
   raw_material_id: number; raw_material_name: string; raw_material_unit: string;
   entry_count: number; total_qty: number | string; total_amount: number | string;
@@ -16,7 +17,7 @@ type MaterialRow = {
 export default function PurchaseReportPage() {
   const { data: vendors = [] } = useVendors();
   const { data: materials = [] } = useRawMaterials();
-  const [filters, setFilters] = useState({ vendor_id: '', raw_material_id: '', from: '', to: '' });
+  const [filters, setFilters] = useState(() => ({ vendor_id: '', raw_material_id: '', ...currentMonthRange() }));
 
   const activeFilters = useMemo(() => {
     const f: Record<string, string> = {};
@@ -31,6 +32,10 @@ export default function PurchaseReportPage() {
 
   const vendorCols: Column<VendorRow>[] = [
     { key: 'vendor_name', header: 'Vendor' },
+    {
+      key: 'total_qty', header: 'Total Qty', width: '140px',
+      render: (item) => <span>{Number(item.total_qty)}</span>,
+    },
     { key: 'entry_count', header: 'Entries', width: '110px' },
     {
       key: 'total_amount', header: 'Total Amount', width: '160px',
@@ -73,13 +78,9 @@ export default function PurchaseReportPage() {
             {materials.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
         </div>
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">From</label>
-          <input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} className={`${inputCls} sm:max-w-[13rem]`} />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">To</label>
-          <input type="date" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} className={`${inputCls} sm:max-w-[13rem]`} />
+        <div className="col-span-2">
+          <label className="block text-xs text-slate-400 mb-1">Period</label>
+          <MonthRangePicker from={filters.from} to={filters.to} onChange={(from, to) => setFilters({ ...filters, from, to })} />
         </div>
       </div>
 

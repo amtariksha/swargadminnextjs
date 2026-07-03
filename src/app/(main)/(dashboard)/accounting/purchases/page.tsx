@@ -89,6 +89,10 @@ export default function AccountingPurchasesPage() {
   // Multi-select for bulk approval (only meaningful on the To-review tab).
   const [selected, setSelected] = useState<Set<number | string>>(new Set());
   const [showImport, setShowImport] = useState(false);
+  // Correcting a POSTED bill (reverse-and-repost). Separate from the draft edit path.
+  const [correcting, setCorrecting] = useState(false);
+  const [correctReason, setCorrectReason] = useState('');
+  const [correctionDate, setCorrectionDate] = useState('');
   useEffect(() => { setSelected(new Set()); }, [tab]);
 
   // 'pending' tab maps to the API default (draft + reviewed) — no status param.
@@ -106,6 +110,7 @@ export default function AccountingPurchasesPage() {
 
   const openDetail = (row: PurchaseRow) => {
     setSelectedId(row.id);
+    setCorrecting(false); setCorrectReason(''); setCorrectionDate('');
     setForm({
       qty: String(row.qty ?? ''),
       unit_price: String(row.unit_price ?? ''),
@@ -161,6 +166,26 @@ export default function AccountingPurchasesPage() {
     mutationFn: async (id: number) => POST(`/accounting/purchases/${id}/reject`, {}),
     onSuccess: () => { toast.success('Rejected'); setSelectedId(null); invalidate(); },
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to reject'),
+  });
+
+  // Correct a POSTED bill's cost — reverses the live ledger entry and re-posts the
+  // new amount in the correction period. Only cost fields + a reason are sent.
+  const correctMutation = useMutation({
+    mutationFn: async () => POST(`/accounting/purchases/${selectedId}/correct`, {
+      qty: Number(form.qty), unit_price: Number(form.unit_price),
+      gst_rate: form.gst_rate === '' ? null : Number(form.gst_rate),
+      supply_type: Number(form.supply_type),
+      account_head_ledger_id: form.account_head_ledger_id === '' ? null : Number(form.account_head_ledger_id),
+      reason: correctReason.trim(),
+      correction_date: correctionDate || undefined,
+    }),
+    onSuccess: (res) => {
+      const posted = ((res as { data?: { gl_posted?: boolean } })?.data)?.gl_posted !== false;
+      if (posted) toast.success('Bill corrected — ledger reversed & re-posted');
+      else toast.warning('Bill updated — ledger sync is pending and will self-heal. Do not re-submit.');
+      setCorrecting(false); setCorrectReason(''); setCorrectionDate(''); setSelectedId(null); invalidate();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Failed to correct'),
   });
 
   const bulkApprove = useMutation({
@@ -228,6 +253,9 @@ export default function AccountingPurchasesPage() {
   ];
 
   const canEdit = detail && detail.status !== 'posted' && detail.status !== 'rejected';
+  // Cost fields are editable for drafts (canEdit) OR when correcting a posted bill.
+  const costEditable = canEdit || correcting;
+  const previewTotal = (Number(form.qty) || 0) * (Number(form.unit_price) || 0) * (1 + (Number(form.gst_rate) || 0) / 100);
 
   return (
     <div className="space-y-6">
@@ -267,7 +295,7 @@ export default function AccountingPurchasesPage() {
         getRowId={(r) => r.id} selectable={tab === 'pending'} selectedIds={selected} onSelectionChange={setSelected}
         exportable onExport={exportPurchasesCsv} />
 
-      <Modal isOpen={selectedId != null} onClose={() => setSelectedId(null)} title={`Purchase #${selectedId ?? ''}`}>
+      <Modal isOpen={selectedId != null} onClose={() => { setSelectedId(null); setCorrecting(false); setCorrectReason(''); setCorrectionDate(''); }} title={`Purchase #${selectedId ?? ''}`}>
         {!detail ? (
           <p className="text-slate-400 text-sm">Loading…</p>
         ) : (
@@ -297,7 +325,7 @@ export default function AccountingPurchasesPage() {
               <div className="col-span-2">
                 <label className="block text-xs text-slate-400 mb-1">Account head — GL ledger this bill posts to (blank = Purchase account)</label>
                 <LedgerPicker value={form.account_head_ledger_id ? Number(form.account_head_ledger_id) : null}
-                  disabled={!canEdit}
+                  disabled={!costEditable}
                   onChange={(sel) => setForm({ ...form, account_head_ledger_id: sel ? String(sel.id) : '' })}
                   placeholder={detail.account_head_name || 'Default: Purchase account'} />
               </div>
@@ -306,22 +334,22 @@ export default function AccountingPurchasesPage() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Qty ({detail.raw_material_unit})</label>
-                <input type="number" step="any" value={form.qty} disabled={!canEdit}
+                <input type="number" step="any" value={form.qty} disabled={!costEditable}
                   onChange={(e) => setForm({ ...form, qty: e.target.value })} className={inputCls} />
               </div>
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Unit price</label>
-                <input type="number" step="any" value={form.unit_price} disabled={!canEdit}
+                <input type="number" step="any" value={form.unit_price} disabled={!costEditable}
                   onChange={(e) => setForm({ ...form, unit_price: e.target.value })} className={inputCls} />
               </div>
               <div>
                 <label className="block text-xs text-slate-400 mb-1">GST rate %</label>
-                <input type="number" step="any" value={form.gst_rate} disabled={!canEdit}
+                <input type="number" step="any" value={form.gst_rate} disabled={!costEditable}
                   onChange={(e) => setForm({ ...form, gst_rate: e.target.value })} className={inputCls} />
               </div>
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Supply</label>
-                <select value={form.supply_type} disabled={!canEdit}
+                <select value={form.supply_type} disabled={!costEditable}
                   onChange={(e) => setForm({ ...form, supply_type: e.target.value })} className={inputCls}>
                   <option value="1">Intra-state (CGST+SGST)</option>
                   <option value="2">Inter-state (IGST)</option>
@@ -370,6 +398,27 @@ export default function AccountingPurchasesPage() {
               </div>
             )}
 
+            {correcting && (
+              <div className="space-y-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-3">
+                <p className="text-xs text-amber-300">
+                  This reverses the bill&apos;s live ledger entry and re-posts the new amount in the correction period —
+                  the original entry is preserved. New total:{' '}
+                  <span className="text-white font-medium">₹{previewTotal.toFixed(2)}</span>
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-xs text-slate-400 mb-1">Reason (required)</label>
+                    <input type="text" value={correctReason} onChange={(e) => setCorrectReason(e.target.value)}
+                      placeholder="e.g. vendor billed a revised rate" className={inputCls} />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-400 mb-1">Correction date (blank = today)</label>
+                    <input type="date" value={correctionDate} onChange={(e) => setCorrectionDate(e.target.value)} className={inputCls} />
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3 pt-2">
               {canEdit && (
                 <>
@@ -385,6 +434,37 @@ export default function AccountingPurchasesPage() {
                   <button onClick={() => approveMutation.mutate(detail.id)} disabled={approveMutation.isPending}
                     className="px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl text-sm font-medium flex items-center gap-1.5 disabled:opacity-50">
                     <CheckCircle2 className="w-4 h-4" /> Approve &amp; Post
+                  </button>
+                </>
+              )}
+
+              {detail.status === 'posted' && !correcting && (
+                <button onClick={() => setCorrecting(true)}
+                  className="px-4 py-2 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-xl text-sm flex items-center gap-1.5">
+                  <Edit className="w-4 h-4" /> Correct cost
+                </button>
+              )}
+
+              {correcting && (
+                <>
+                  <button
+                    onClick={() => {
+                      setCorrecting(false); setCorrectReason(''); setCorrectionDate('');
+                      if (detail) setForm((f) => ({
+                        ...f,
+                        qty: String(detail.qty ?? ''), unit_price: String(detail.unit_price ?? ''),
+                        gst_rate: detail.gst_rate != null ? String(detail.gst_rate) : '',
+                        supply_type: String(detail.supply_type ?? 1),
+                        account_head_ledger_id: detail.account_head_ledger_id != null ? String(detail.account_head_ledger_id) : '',
+                      }));
+                    }}
+                    className="px-4 py-2 bg-slate-800/50 border border-slate-700/50 text-slate-200 rounded-xl text-sm">
+                    Cancel
+                  </button>
+                  <div className="flex-1" />
+                  <button onClick={() => correctMutation.mutate()} disabled={correctMutation.isPending || !correctReason.trim()}
+                    className="px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl text-sm font-medium flex items-center gap-1.5 disabled:opacity-50">
+                    <CheckCircle2 className="w-4 h-4" /> Post correction
                   </button>
                 </>
               )}
