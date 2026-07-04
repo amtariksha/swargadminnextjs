@@ -81,6 +81,19 @@ export const SYNC_ENTITY_TYPE_LABELS: Record<number, string> = {
     2: 'Receipt',
 };
 
+/** tally_import_run.run_type */
+export const TALLY_IMPORT_RUN_TYPE_LABELS: Record<number, string> = {
+    1: 'Day book import',
+    2: 'Trial-balance snapshot',
+};
+
+/** tally_import_run.status (VARCHAR) */
+export const TALLY_IMPORT_RUN_STATUS_BADGE: Record<string, string> = {
+    running: 'bg-yellow-500/20 text-yellow-400',
+    completed: 'bg-green-500/20 text-green-400',
+    failed: 'bg-red-500/20 text-red-400',
+};
+
 /** bank_statement_import.status (VARCHAR) */
 export const IMPORT_STATUS_BADGE: Record<string, string> = {
     uploaded: 'bg-slate-600/30 text-slate-400',

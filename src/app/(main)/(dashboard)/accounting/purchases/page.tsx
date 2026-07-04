@@ -9,6 +9,7 @@ import { PodLink } from '@/components/PodImage';
 import BulkPurchaseImportModal from '@/components/accounting/BulkPurchaseImportModal';
 import LedgerPicker from '@/components/accounting/LedgerPicker';
 import { useVendors, useRawMaterials } from '@/hooks/useInventory';
+import { useTallySettings } from '@/hooks/useAccounting';
 import { CheckCircle2, XCircle, Edit, Image as ImageIcon, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -97,10 +98,38 @@ const fmtReading = (v: number | string | null | undefined): string => {
   return Number.isFinite(n) ? String(Math.round(n * 100) / 100) : String(v);
 };
 
+// Amber below the auto-post threshold, red below 0.5 — both mean "open the photo
+// and verify the numbers before approving". At/above threshold it's informational.
+function OcrConfidenceBadge({ confidence, threshold }: { confidence: number | string | null | undefined; threshold: number }) {
+  if (confidence == null) return null;
+  const c = Number(confidence);
+  if (!Number.isFinite(c)) return null;
+  const pct = `${Math.round(c * 100)}%`;
+  if (c < 0.5) {
+    return (
+      <span className="text-xs px-2 py-0.5 rounded-lg bg-red-500/20 text-red-400 whitespace-nowrap"
+        title="Very low OCR confidence — check the bill photo before approving">
+        OCR {pct} · check photo
+      </span>
+    );
+  }
+  if (c < threshold) {
+    return (
+      <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-400 whitespace-nowrap"
+        title="Below the auto-post confidence threshold — check the bill photo">
+        OCR {pct} · check photo
+      </span>
+    );
+  }
+  return <span className="text-xs text-slate-400 whitespace-nowrap">OCR {pct}</span>;
+}
+
 export default function AccountingPurchasesPage() {
   const queryClient = useQueryClient();
   const { data: vendors = [] } = useVendors();
   const { data: rawMaterials = [] } = useRawMaterials();
+  const { data: tallyCfg } = useTallySettings();
+  const autoPostThreshold = Number(tallyCfg?.purchase_auto_post_confidence ?? 0.9) || 0.9;
   const [tab, setTab] = useState('pending');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [form, setForm] = useState({
@@ -220,6 +249,17 @@ export default function AccountingPurchasesPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : 'Bulk approve failed'),
   });
 
+  const bulkReject = useMutation({
+    mutationFn: async (ids: number[]) => POST('/accounting/purchases/bulk_reject', { ids }),
+    onSuccess: (res) => {
+      const d = ((res as { data?: { rejected?: number; failed?: number } })?.data) ?? {};
+      toast.success(`Rejected ${d.rejected ?? 0}${d.failed ? `, ${d.failed} failed` : ''}`);
+      setSelected(new Set());
+      queryClient.invalidateQueries({ queryKey: ['accounting', 'purchases'] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Bulk reject failed'),
+  });
+
   // Export the currently filtered/sorted rows as a clean CSV that includes quantity.
   const exportPurchasesCsv = (filtered: PurchaseRow[]) => {
     const headers = ['Date', 'Vendor', 'Material', 'Qty', 'Unit', 'Unit price', 'Taxable', 'CGST', 'SGST', 'IGST', 'Total', 'Status', 'Invoice no'];
@@ -277,10 +317,11 @@ export default function AccountingPurchasesPage() {
       render: (r) => <span className="text-cyan-400">₹{Number(r.total_amount ?? 0).toFixed(2)}</span>,
     },
     {
-      key: 'source', header: 'Source', width: '110px',
+      key: 'source', header: 'Source', width: '170px',
       render: (r) => (
-        <span className="text-xs text-slate-400">
-          {r.source}{r.ocr_confidence != null ? ` · ${Math.round(Number(r.ocr_confidence) * 100)}%` : ''}
+        <span className="flex items-center gap-1.5 text-xs text-slate-400">
+          {r.source}
+          <OcrConfidenceBadge confidence={r.ocr_confidence} threshold={autoPostThreshold} />
         </span>
       ),
     },
@@ -320,9 +361,19 @@ export default function AccountingPurchasesPage() {
       {tab === 'pending' && selected.size > 0 && (
         <div className="flex items-center gap-3 glass rounded-xl px-4 py-2">
           <span className="text-sm text-slate-300">{selected.size} selected</span>
-          <button onClick={() => bulkApprove.mutate([...selected].map(Number))} disabled={bulkApprove.isPending}
+          <button onClick={() => bulkApprove.mutate([...selected].map(Number))} disabled={bulkApprove.isPending || bulkReject.isPending}
             className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl text-sm font-medium disabled:opacity-50 flex items-center gap-1.5">
             <CheckCircle2 className="w-4 h-4" /> Approve selected ({selected.size})
+          </button>
+          <button
+            onClick={() => {
+              if (window.confirm(`Reject ${selected.size} selected bill(s)? Rejected bills never post to stock or Tally.`)) {
+                bulkReject.mutate([...selected].map(Number));
+              }
+            }}
+            disabled={bulkApprove.isPending || bulkReject.isPending}
+            className="px-4 py-2 bg-gradient-to-r from-rose-500 to-red-500 text-white rounded-xl text-sm font-medium disabled:opacity-50 flex items-center gap-1.5">
+            <XCircle className="w-4 h-4" /> Reject selected ({selected.size})
           </button>
           <button onClick={() => setSelected(new Set())} className="text-sm text-slate-400 hover:text-slate-200">Clear</button>
         </div>
@@ -341,6 +392,12 @@ export default function AccountingPurchasesPage() {
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div><span className="text-slate-500">GSTIN:</span> <span className="text-white">{detail.vendor_gstin || '—'}</span></div>
               <div><span className="text-slate-500">Status:</span> <span className={`text-xs px-2 py-0.5 rounded ${statusBadge(detail.status)}`}>{detail.status}</span></div>
+              {detail.ocr_confidence != null && (
+                <div className="col-span-2">
+                  <span className="text-slate-500">OCR:</span>{' '}
+                  <OcrConfidenceBadge confidence={detail.ocr_confidence} threshold={autoPostThreshold} />
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">

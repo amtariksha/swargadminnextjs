@@ -92,19 +92,16 @@ export default function ReconcilePage() {
                         <th className="text-right p-3">Imported</th><th className="text-left p-3">When</th>
                     </tr></thead>
                     <tbody className="divide-y divide-slate-700/40">
-                        {(runs || []).map((r, i) => {
-                            const row = r as Record<string, string | number>;
-                            return (
-                                <tr key={i}>
-                                    <td className="p-3 text-slate-200">{RUN_TYPE[Number(row.run_type)] || row.run_type}</td>
-                                    <td className="p-3 text-slate-400 text-xs">{row.from_date || row.as_of_date || '—'}{row.to_date ? ` → ${row.to_date}` : ''}</td>
-                                    <td className="p-3"><span className={`text-xs px-2 py-0.5 rounded-lg ${RUN_BADGE[String(row.status)] || 'bg-slate-700/50 text-slate-300'}`}>{row.status}</span></td>
-                                    <td className="p-3 text-right text-slate-400">{row.vouchers_seen ?? 0}</td>
-                                    <td className="p-3 text-right text-slate-400">{row.vouchers_imported ?? 0}</td>
-                                    <td className="p-3 text-xs text-slate-500">{formatDateTime(String(row.created_at))}</td>
-                                </tr>
-                            );
-                        })}
+                        {(runs || []).map((r, i) => (
+                            <tr key={i}>
+                                <td className="p-3 text-slate-200">{RUN_TYPE[Number(r.run_type)] || r.run_type}</td>
+                                <td className="p-3 text-slate-400 text-xs">{r.from_date || r.as_of_date || '—'}{r.to_date ? ` → ${r.to_date}` : ''}</td>
+                                <td className="p-3"><span className={`text-xs px-2 py-0.5 rounded-lg ${RUN_BADGE[String(r.status)] || 'bg-slate-700/50 text-slate-300'}`}>{r.status}</span></td>
+                                <td className="p-3 text-right text-slate-400">{r.vouchers_seen ?? 0}</td>
+                                <td className="p-3 text-right text-slate-400">{r.vouchers_imported ?? 0}</td>
+                                <td className="p-3 text-xs text-slate-500">{formatDateTime(String(r.created_at))}</td>
+                            </tr>
+                        ))}
                         {!runs?.length && <tr><td colSpan={6} className="p-6 text-center text-slate-500">No import runs yet.</td></tr>}
                     </tbody>
                 </table>

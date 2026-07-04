@@ -259,6 +259,7 @@ const navItems: NavItem[] = [
                     { name: 'Balance Sheet', href: '/accounting/reports/balance-sheet', icon: <BarChart3 className="w-4 h-4" /> },
                     { name: 'Profit & Loss', href: '/accounting/reports/pnl', icon: <TrendingUp className="w-4 h-4" /> },
                     { name: 'Day Book', href: '/accounting/reports/day-book', icon: <CalendarDays className="w-4 h-4" /> },
+                    { name: 'Sales Register', href: '/accounting/reports/sales-register', icon: <Receipt className="w-4 h-4" /> },
                     { name: 'GST Returns', href: '/accounting/gst-returns', icon: <Receipt className="w-4 h-4" /> },
                     { name: 'Stock & Valuation', href: '/accounting/stock', icon: <Tags className="w-4 h-4" /> },
                     { name: 'Ledgers', href: '/accounting/ledgers', icon: <BookText className="w-4 h-4" /> },

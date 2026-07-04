@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useAccountingConfig } from '@/hooks/useAccounting';
+import { useAccountingConfig, B2cConsolidationSettings } from '@/hooks/useAccounting';
 import { GST_REG_TYPE_OPTIONS } from '@/lib/accounting';
 import { PUT } from '@/lib/api';
 import { toast } from 'sonner';
 import {
     Users, FileText, BookText, Calculator, Building2, Banknote,
-    CalendarRange, BellRing, Power,
+    CalendarRange, BellRing, Power, AlertTriangle,
 } from 'lucide-react';
 
 const inputCls =
@@ -179,6 +179,85 @@ export default function AccountingHomePage() {
                     </div>
                 </form>
             </div>
+
+            <B2cConsolidationCard b2c={data?.b2c} refetch={refetch} />
+        </div>
+    );
+}
+
+function B2cConsolidationCard({ b2c, refetch }: { b2c?: B2cConsolidationSettings; refetch: () => void }) {
+    const [enabled, setEnabled] = useState(false);
+    const [runTime, setRunTime] = useState('02:00');
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        if (b2c) {
+            setEnabled(b2c.enabled);
+            setRunTime(b2c.run_time || '02:00');
+        }
+    }, [b2c]);
+
+    const save = async () => {
+        setSaving(true);
+        try {
+            await PUT('/accounting/config/b2c-consolidation', { enabled: enabled ? 1 : 0, run_time: runTime });
+            toast.success('B2C consolidation settings saved');
+            refetch();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to save');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    return (
+        <div className="glass rounded-2xl p-6 space-y-4">
+            <div>
+                <h2 className="flex items-center gap-2 text-lg font-semibold text-white mb-1">
+                    <CalendarRange className="w-4 h-4 text-purple-400" /> B2C consolidation
+                </h2>
+                <p className="text-sm text-slate-400">
+                    Monthly roll-up of unregistered-customer sales into one consolidated invoice (runs on the
+                    1st at the time below, IST). Review and post the drafts on the B2C Consolidation page.
+                </p>
+            </div>
+
+            {b2c && !b2c.user_id_set && (
+                <div className="flex items-center gap-2 text-sm text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded-xl px-4 py-2.5">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    Consolidation user is not configured (&ldquo;B2C Consolidation User Id&rdquo; app setting) — runs will fail until it is set.
+                </div>
+            )}
+
+            <div className="flex flex-wrap items-end gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Monthly consolidation</label>
+                    <button type="button" onClick={() => setEnabled((v) => !v)}
+                        className={`px-4 py-2 rounded-xl font-medium border transition-colors ${
+                            enabled
+                                ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                                : 'bg-slate-800/50 text-slate-400 border-slate-700/50'
+                        }`}>
+                        {enabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Run time (IST)</label>
+                    <input type="time" value={runTime} onChange={(e) => setRunTime(e.target.value)} className={inputCls} />
+                </div>
+                <button type="button" onClick={save} disabled={saving}
+                    className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50 text-sm">
+                    {saving ? 'Saving…' : 'Save'}
+                </button>
+            </div>
+
+            {b2c && (
+                <p className="text-xs text-slate-500">
+                    Daily consolidation (invoicing-mode switch): <span className={b2c.daily_enabled ? 'text-green-400' : 'text-slate-400'}>
+                        {b2c.daily_enabled ? `enabled · runs ${b2c.daily_run_time} IST` : 'disabled'}
+                    </span> — this changes how every B2C sale is invoiced, so it is read-only here; change it with Pradeep.
+                </p>
+            )}
         </div>
     );
 }

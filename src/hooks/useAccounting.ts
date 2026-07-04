@@ -44,9 +44,18 @@ export interface OrgGstProfile {
     thresholds_verified_on?: string | null;
 }
 
+export interface B2cConsolidationSettings {
+    enabled: boolean;
+    run_time: string;
+    daily_enabled: boolean;
+    daily_run_time: string;
+    user_id_set: boolean;
+}
+
 export interface AccountingConfig {
     profile: OrgGstProfile | null;
     accounting_enabled: boolean;
+    b2c?: B2cConsolidationSettings;
 }
 
 export function useAccountingConfig() {
@@ -323,6 +332,8 @@ export interface TallyConfig {
     b2c_consolidation_ledger?: string | null;
     default_debtor_ledger?: string | null;
     tally_posting_enabled: number;
+    tally_import_enabled?: number;
+    purchase_auto_post_confidence?: number | string | null;
     has_credentials: boolean;
 }
 
@@ -352,6 +363,28 @@ export function useTallySyncRecords(filters: Record<string, string> = {}) {
     return useQuery({
         queryKey: ['accounting', 'tally-sync', filters],
         queryFn: () => getList<TallySyncRecord>('/accounting/tally/sync-records', { limit: 200, ...filters }),
+    });
+}
+
+export interface TallyImportRun {
+    id: number;
+    run_type: number; // 1=day book import, 2=trial-balance snapshot
+    from_date?: string | null;
+    to_date?: string | null;
+    as_of_date?: string | null;
+    status: string; // running | completed | failed
+    vouchers_seen: number;
+    vouchers_imported: number;
+    vouchers_conflicted: number;
+    vouchers_unmapped: number;
+    last_error?: string | null;
+    created_at?: string;
+}
+
+export function useTallyImportRuns() {
+    return useQuery({
+        queryKey: ['accounting', 'tally-import-runs'],
+        queryFn: async () => (await GET<TallyImportRun[]>('/accounting/tally/import-runs')).data || [],
     });
 }
 
@@ -555,6 +588,22 @@ export function useTrialBalance(p: Period) {
     });
 }
 
+export interface SalesRegisterInvoice {
+    id: number; invoice_number: string; invoice_date: string; document_type: number; supply_type: number;
+    taxable_value: number; cgst_amount: number; sgst_amount: number; igst_amount: number; total_amount: number;
+    status: number; customer_name: string | null; customer_gstin: string | null;
+}
+export interface SalesRegister {
+    fy: string; from: string; to: string; invoices: SalesRegisterInvoice[];
+    totals: { taxable: number; cgst: number; sgst: number; igst: number; total: number };
+}
+export function useSalesRegister(p: Period) {
+    return useQuery({
+        queryKey: ['accounting', 'sales-register', p],
+        queryFn: async () => (await GET<SalesRegister>('/accounting/reports/sales-register', p as Record<string, string>)).data,
+    });
+}
+
 export interface BalanceSheetSide { ledgerName: string; groupName: string; amount: number; }
 export interface BalanceSheet {
     as_on: string; assets: BalanceSheetSide[]; liabilities: BalanceSheetSide[]; equity: BalanceSheetSide[];
@@ -623,13 +672,6 @@ export function useTallyReconcile(asOn?: string) {
         queryFn: async () => (await GET<Reconciliation>('/accounting/reconcile/trial-balance', asOn ? { as_on: asOn } : {})).data,
     });
 }
-export function useTallyImportRuns() {
-    return useQuery({
-        queryKey: ['accounting', 'import-runs'],
-        queryFn: async () => (await GET<Array<Record<string, unknown>>>('/accounting/tally/import-runs')).data || [],
-    });
-}
-
 export interface OpeningBalanceRow { id: number; ledger_account_id: number; ledger_name: string; group_name: string; debit: number | string; credit: number | string; is_provisional: number; posted_voucher_id: number | null; }
 export interface OpeningBalances { fy: string; rows: OpeningBalanceRow[]; total_debit: number; total_credit: number; balanced: boolean; posted: boolean; }
 export function useOpeningBalances(fy?: string) {
