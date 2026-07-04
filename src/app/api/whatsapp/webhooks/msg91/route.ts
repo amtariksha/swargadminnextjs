@@ -16,6 +16,35 @@ const phonesMatch = (a: string, b: string): boolean => {
     return tailA.length === 10 && tailA === tailB;
 };
 
+// MSG91 template echoes arrive with the RAW component-parameter JSON as the body
+// (e.g. {"body_name":{"type":"text","parameter_name":"name","text":"Dhivya"},…}),
+// which renders as unreadable JSON in the inbox. Detect that exact shape by the
+// MSG91-specific `parameter_name` marker on EVERY value (so location/contact JSON
+// — which lacks it — is never touched), and render the text params instead. Any
+// other body passes through untouched. Mixed templates (e.g. an image header
+// param with no .text) still render their text params.
+const normalizeTemplateEcho = (body: string, templateName?: string | null): string => {
+    if (!body || !body.startsWith("{")) return body;
+    try {
+        const parsed = JSON.parse(body);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return body;
+        const values = Object.values(parsed);
+        if (
+            values.length === 0 ||
+            !values.every((v) => v && typeof v === "object" && !Array.isArray(v) && "parameter_name" in (v as object))
+        ) {
+            return body;
+        }
+        const texts = values
+            .map((v) => (v as { text?: unknown }).text)
+            .filter((t): t is string => typeof t === "string" && t.length > 0);
+        const label = templateName ? `[${templateName}]` : "[Template]";
+        return texts.length ? `${label} ${texts.join(" · ")}` : label;
+    } catch {
+        return body;
+    }
+};
+
 // ─── POST /api/webhooks/msg91 — Receive inbound messages ──
 export async function POST(request: NextRequest) {
     try {
@@ -110,6 +139,15 @@ export async function POST(request: NextRequest) {
                 messageBody = `[Contact: ${contactData?.[0]?.name?.formatted_name || "Shared Contact"}]`;
             }
         }
+
+        // Template/campaign context (hoisted — also needed by echo dedup + body
+        // normalization below, not just the final insert).
+        const msgTemplateName = body.templateName || null;
+        const msgCampaignName = body.campaignName || null;
+
+        // Make template echoes readable BEFORE any dedup/content compare so both
+        // webhook events for the same message normalize to the same string.
+        messageBody = normalizeTemplateEcho(messageBody, msgTemplateName);
 
         // Use webhookType to identify the exact event type if present
         const webhookType = body.webhookType?.toString() || "";
@@ -315,6 +353,45 @@ export async function POST(request: NextRequest) {
             );
         }
 
+        // ─── ID-based echo dedup (the PRIMARY dedup, order-independent) ──────
+        // MSG91 fires several events for ONE message (Inbound + Outbound Request
+        // Received + Sent/Delivered/Read) that share the same uuid. Because we now
+        // store external_id on every insert (below), a matching id means the SAME
+        // message — 100% safe, no content guessing. Runs BEFORE the contact /
+        // conversation upsert so a duplicate never re-opens or unread-bumps a
+        // resolved conversation. Two exact-match lookups (NOT string interpolation
+        // into PostgREST .or() — this endpoint is unauthenticated).
+        if (externalId && /^[A-Za-z0-9._:-]+$/.test(externalId)) {
+            const byExt = await supabaseAdmin.from("messages")
+                .select("id, direction, conversation_id").eq("external_id", externalId).limit(1).maybeSingle();
+            const existingById = byExt.data || (await supabaseAdmin.from("messages")
+                .select("id, direction, conversation_id").eq("request_id", externalId).limit(1).maybeSingle()).data;
+            if (existingById) {
+                // Same message already stored. If it landed FIRST misclassified as
+                // inbound and THIS event is authoritatively outbound, flip it — and
+                // undo the spurious unread bump the inbound insert caused.
+                if (isExternalOutbound && existingById.direction === "inbound") {
+                    await supabaseAdmin.from("messages").update({
+                        direction: "outbound",
+                        status: "sent",
+                        source: isSenderBusinessNumber ? "mobile_app" : (msgCampaignName ? "broadcast" : "api"),
+                    }).eq("id", existingById.id);
+                    if (existingById.conversation_id) {
+                        const { data: conv } = await supabaseAdmin.from("conversations")
+                            .select("unread_count").eq("id", existingById.conversation_id).maybeSingle();
+                        if (conv && (conv.unread_count || 0) > 0) {
+                            await supabaseAdmin.from("conversations")
+                                .update({ unread_count: (conv.unread_count || 0) - 1 }).eq("id", existingById.conversation_id);
+                        }
+                    }
+                    console.log(`[MSG91 Webhook] Upgraded misclassified echo ${externalId} (msg ${existingById.id}) to outbound`);
+                    return NextResponse.json({ success: true, type: "echo_upgraded" });
+                }
+                console.log(`[MSG91 Webhook] Duplicate event for ${externalId} (msg ${existingById.id}), skipping`);
+                return NextResponse.json({ success: true, type: "duplicate_skipped" });
+            }
+        }
+
         // ─── 1. Upsert Contact ─────────────────────────────
         // Single org — no org scoping (the column defaults to the single org).
         let { data: contact } = await supabaseAdmin
@@ -431,13 +508,16 @@ export async function POST(request: NextRequest) {
             conversation = newConv;
             console.log(`[MSG91 Webhook] Created conversation: ${conversation!.id}`);
         } else {
-            // Update existing conversation
+            // Update existing conversation. Only a CUSTOMER message re-opens it —
+            // outbound sends (API templates, business-app, broadcasts) update the
+            // preview but must NOT push a resolved conversation back into the
+            // action queue; it surfaces again only when the customer replies.
             const updatePayload: any = {
-                status: "open",
                 last_message: messageBody || "[media]",
                 last_message_time: new Date().toISOString(),
             };
             if (!isExternalOutbound) {
+                updatePayload.status = "open";
                 updatePayload.last_incoming_timestamp = new Date().toISOString();
             }
 
@@ -493,74 +573,51 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // ─── Deduplication Check ─────────────────────────
-        // MSG91 echoes back outbound messages as webhook events that look like
-        // inbound messages. Check ALL conversations for this contact for a
-        // recent outbound message with matching content (exact body or shared URL).
-        if (contact?.id && messageBody) {
-            const twoMinutesAgo = new Date(Date.now() - 120_000).toISOString();
-
-            // Get all conversation IDs for this contact
+        // ─── Content dedup (SAFE fallback — OUTBOUND vs OUTBOUND only) ───────
+        // When the CRM sends via chat/send it stores an outbound row; MSG91 then
+        // echoes the same text back as an "Outbound Request Received" event, often
+        // with a DIFFERENT id (so the id dedup above misses). We drop that echo by
+        // matching a recent OUTBOUND row with the same body/URL. This NEVER touches
+        // inbound rows — a customer message can never be eaten or flipped, even if
+        // its text coincides with something we sent. (Cross-direction content
+        // matching was removed: a customer and an agent can legitimately send the
+        // same short text seconds apart; only the shared id can tell them apart.)
+        if (isExternalOutbound && contact?.id && messageBody) {
+            const recentWindow = new Date(Date.now() - 90_000).toISOString();
             const { data: contactConvs } = await supabaseAdmin
-                .from("conversations")
-                .select("id")
-                .eq("contact_id", contact.id);
+                .from("conversations").select("id").eq("contact_id", contact.id);
             const contactConvIds = (contactConvs || []).map((c: { id: string }) => c.id);
 
             if (contactConvIds.length > 0) {
-                // Check 1: Exact body match against recent outbound messages
-                let dupMsg: { id: string } | null = null;
-                const { data: exactMatch } = await supabaseAdmin
-                    .from("messages")
-                    .select("id")
-                    .in("conversation_id", contactConvIds)
-                    .eq("direction", "outbound")
-                    .eq("body", messageBody)
-                    .gte("created_at", twoMinutesAgo)
-                    .limit(1)
-                    .maybeSingle();
-                dupMsg = exactMatch;
+                let dupMsg: { id: string } | null = (await supabaseAdmin
+                    .from("messages").select("id")
+                    .in("conversation_id", contactConvIds).eq("direction", "outbound")
+                    .eq("body", messageBody).gte("created_at", recentWindow).limit(1).maybeSingle()).data;
 
-                // Check 2: URL-based match (for payment links where CRM stores
-                // a compact body but MSG91 echoes the full text with the same URL)
                 if (!dupMsg) {
                     const urls = messageBody.match(/https?:\/\/[^\s]+/g) || [];
                     for (const url of urls) {
-                        const { data: urlMatch } = await supabaseAdmin
-                            .from("messages")
-                            .select("id")
-                            .in("conversation_id", contactConvIds)
-                            .eq("direction", "outbound")
-                            .ilike("body", `%${url}%`)
-                            .gte("created_at", twoMinutesAgo)
-                            .limit(1)
-                            .maybeSingle();
-                        if (urlMatch) {
-                            dupMsg = urlMatch;
-                            break;
-                        }
+                        const { data: m } = await supabaseAdmin
+                            .from("messages").select("id")
+                            .in("conversation_id", contactConvIds).eq("direction", "outbound")
+                            .ilike("body", `%${url}%`).gte("created_at", recentWindow).limit(1).maybeSingle();
+                        if (m) { dupMsg = m; break; }
                     }
                 }
 
                 if (dupMsg) {
-                    // Update the existing message's external_id for delivery report correlation
+                    // Remember the id on the surviving row for delivery-report correlation.
                     if (externalId) {
-                        await supabaseAdmin
-                            .from("messages")
-                            .update({ external_id: externalId })
-                            .eq("id", dupMsg.id);
+                        await supabaseAdmin.from("messages").update({ external_id: externalId }).eq("id", dupMsg.id);
                     }
-                    console.log(`[MSG91 Webhook] Skipping duplicate message for contact ${contact.id} (matched msg ${dupMsg.id})`);
+                    console.log(`[MSG91 Webhook] Skipping duplicate outbound echo for contact ${contact.id} (matched msg ${dupMsg.id})`);
                     return NextResponse.json({ success: true, type: "duplicate_skipped" });
                 }
             }
         }
 
         // ─── 3. Insert Message ─────────────────────────────
-
-        // If it's a template payload or campaign, let's parse those properties
-        const msgTemplateName = body.templateName || null;
-        const msgCampaignName = body.campaignName || null;
+        // (msgTemplateName / msgCampaignName hoisted above for dedup + normalization)
 
         // If it's outbound, we want to represent it accurately
         let finalBody = messageBody;
@@ -592,6 +649,10 @@ export async function POST(request: NextRequest) {
             template_name: msgTemplateName,
             status: isExternalOutbound ? "sent" : "delivered",
             source: messageSource,
+            // Store the provider id so the id-dedup above and the delivery-report
+            // status updates (sent/delivered/read) can match this row later.
+            external_id: externalId,
+            request_id: externalId,
         };
 
         if (locationData) {

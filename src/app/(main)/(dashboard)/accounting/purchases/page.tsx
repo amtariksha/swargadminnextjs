@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { GET, PUT, POST } from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
@@ -14,6 +14,12 @@ import { toast } from 'sonner';
 
 const inputCls =
   'w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50';
+
+interface QualityValue {
+  name: string;
+  value: string | null;
+  unit: string | null;
+}
 
 interface PurchaseRow {
   id: number;
@@ -38,6 +44,7 @@ interface PurchaseRow {
   vendor_name: string;
   raw_material_name: string;
   raw_material_unit: string;
+  quality_readings?: QualityValue[];
 }
 
 interface QualityReading {
@@ -51,12 +58,18 @@ interface QualityReading {
   max_value?: number | string | null;
 }
 
-type PurchaseDetail = PurchaseRow & {
+type PurchaseDetail = Omit<PurchaseRow, 'quality_readings'> & {
   vendor_gstin?: string | null;
   quality_readings: QualityReading[];
   notes?: string | null;
   account_head_ledger_id?: number | null;
   account_head_name?: string | null;
+  fat_pricing?: {
+    pricing_mode: 'per_fat';
+    fat_rate: number;
+    fat_value: number;
+    suggested_unit_price: number;
+  } | null;
 };
 
 const STATUS_TABS: { key: string; label: string }[] = [
@@ -219,6 +232,14 @@ export default function AccountingPurchasesPage() {
     URL.revokeObjectURL(url);
   };
 
+  // Quality parameters present in the current rows (Fat, CLR, …) become their
+  // own list columns so the accountant reviews values without opening each bill.
+  const qualityParams = useMemo(() => {
+    const names = new Set<string>();
+    rows.forEach((r) => (r.quality_readings || []).forEach((q) => q?.name && names.add(q.name)));
+    return [...names].slice(0, 5);
+  }, [rows]);
+
   const columns: Column<PurchaseRow>[] = [
     {
       key: 'edit', header: '', width: '50px', sortable: false,
@@ -234,6 +255,15 @@ export default function AccountingPurchasesPage() {
       key: 'raw_material_name', header: 'Material',
       render: (r) => <span>{r.raw_material_name} <span className="text-slate-500">({Number(r.qty)} {r.raw_material_unit})</span></span>,
     },
+    ...qualityParams.map((param): Column<PurchaseRow> => ({
+      key: `quality_${param}`, header: param, width: '90px', sortable: false,
+      render: (r) => {
+        const reading = (r.quality_readings || []).find((q) => q.name === param);
+        return reading?.value != null
+          ? <span>{reading.value}{reading.unit ? <span className="text-slate-500 text-xs"> {reading.unit}</span> : null}</span>
+          : <span className="text-slate-600">—</span>;
+      },
+    })),
     {
       key: 'total_amount', header: 'Total', width: '110px',
       render: (r) => <span className="text-cyan-400">₹{Number(r.total_amount ?? 0).toFixed(2)}</span>,
@@ -366,6 +396,25 @@ export default function AccountingPurchasesPage() {
                   onChange={(e) => setForm({ ...form, invoice_no: e.target.value })} className={inputCls} />
               </div>
             </div>
+
+            {detail.fat_pricing && costEditable && (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-200">
+                <span>
+                  Fat-based price: <span className="text-white font-medium">{detail.fat_pricing.fat_value}</span> fat
+                  × ₹{detail.fat_pricing.fat_rate}/point
+                  = <span className="text-white font-semibold">₹{detail.fat_pricing.suggested_unit_price.toFixed(2)}</span> per {detail.raw_material_unit || 'unit'}
+                </span>
+                {Number(form.unit_price) !== detail.fat_pricing.suggested_unit_price ? (
+                  <button
+                    onClick={() => setForm({ ...form, unit_price: String(detail.fat_pricing!.suggested_unit_price) })}
+                    className="px-3 py-1 bg-cyan-500/20 border border-cyan-500/40 text-cyan-200 rounded-lg text-xs font-medium hover:bg-cyan-500/30">
+                    Apply suggested price
+                  </button>
+                ) : (
+                  <span className="text-xs text-cyan-400">applied ✓</span>
+                )}
+              </div>
+            )}
 
             <div className="text-sm text-slate-300 bg-slate-800/40 rounded-lg px-3 py-2">
               Taxable ₹{Number(detail.taxable_amount ?? 0).toFixed(2)} · CGST ₹{Number(detail.cgst_amount ?? 0).toFixed(2)} ·

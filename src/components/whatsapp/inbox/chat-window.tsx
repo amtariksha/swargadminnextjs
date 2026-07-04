@@ -184,6 +184,24 @@ function parseMessageBody(body: string, mediaUrl?: string, contentType?: string)
                 return result;
             }
 
+            // MSG91 template echo stored raw: {"body_name":{"parameter_name":"name","text":"Dhivya"},…}
+            // — every value carries MSG91's `parameter_name` marker (location/contact
+            // JSON does not). Render the text params instead of the JSON (covers
+            // legacy rows saved before the webhook started normalizing these).
+            {
+                const values = Object.values(parsed);
+                if (
+                    values.length > 0 &&
+                    values.every((v) => v && typeof v === "object" && !Array.isArray(v) && "parameter_name" in (v as object))
+                ) {
+                    const texts = values
+                        .map((v) => (v as { text?: unknown }).text)
+                        .filter((t): t is string => typeof t === "string" && t.length > 0);
+                    result.displayText = texts.length ? texts.join(" · ") : "[Template]";
+                    return result;
+                }
+            }
+
             // Format: {"text":"message text","location":{...}}
             if (parsed.text && !parsed.attachment_url) {
                 result.displayText = parsed.text;
