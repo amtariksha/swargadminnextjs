@@ -89,6 +89,14 @@ const statusBadge = (s: string) => {
   }
 };
 
+// Quality readings: cap numeric values at 2 decimals (drop trailing zeros);
+// pass non-numeric text readings through unchanged.
+const fmtReading = (v: number | string | null | undefined): string => {
+  if (v == null || v === '') return '';
+  const n = Number(v);
+  return Number.isFinite(n) ? String(Math.round(n * 100) / 100) : String(v);
+};
+
 export default function AccountingPurchasesPage() {
   const queryClient = useQueryClient();
   const { data: vendors = [] } = useVendors();
@@ -260,7 +268,7 @@ export default function AccountingPurchasesPage() {
       render: (r) => {
         const reading = (r.quality_readings || []).find((q) => q.name === param);
         return reading?.value != null
-          ? <span>{reading.value}{reading.unit ? <span className="text-slate-500 text-xs"> {reading.unit}</span> : null}</span>
+          ? <span>{fmtReading(reading.value)}{reading.unit ? <span className="text-slate-500 text-xs"> {reading.unit}</span> : null}</span>
           : <span className="text-slate-600">—</span>;
       },
     })),
@@ -428,7 +436,7 @@ export default function AccountingPurchasesPage() {
                 <div className="flex flex-wrap gap-2">
                   {detail.quality_readings.map((q) => (
                     <span key={q.id} className="text-xs bg-slate-800/40 rounded px-2 py-1 text-slate-300">
-                      {q.param_name}: {q.value_numeric ?? q.value_text ?? '—'}{q.param_unit ? ` ${q.param_unit}` : ''}
+                      {q.param_name}: {q.value_numeric != null ? fmtReading(q.value_numeric) : (q.value_text ?? '—')}{q.param_unit ? ` ${q.param_unit}` : ''}
                     </span>
                   ))}
                 </div>
