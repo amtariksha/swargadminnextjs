@@ -45,12 +45,22 @@ export interface RfmRunResult {
     durationMs: number;
 }
 
-interface OrderAggregate {
+export interface OrderAggregate {
     lastOrderAt: Date | null;
     count90d: number;
     sum90d: number;
     count180d: number;
     firstOrderAt: Date | null;
+}
+
+export interface AggregateScoreResult {
+    contactCount: number;
+    rowsWritten: number;
+    computedAt: string;
+    /** Contacts that matched an aggregate by phone. */
+    matched: number;
+    /** Aggregates no contact claimed (phone exists backend-side only). */
+    unmatchedAggregates: number;
 }
 
 // ─── Public entrypoint ────────────────────────────────────────────────────
@@ -100,13 +110,79 @@ export async function runRfmRecompute(args: {
         backendError = "No auth token provided; skipped backend fetch.";
     }
 
+    // Steps 4-6 are shared with the aggregates-push path (nightly cron).
+    const result = await scoreAndWriteFromAggregates({ aggregates, computedAt });
+
+    return {
+        contactCount: result.contactCount,
+        rowsWritten: result.rowsWritten,
+        backendOk,
+        backendError,
+        computedAt,
+        durationMs: Date.now() - startedAt,
+    };
+}
+
+/**
+ * Steps 4-6: score every contact against a per-phone aggregate map and
+ * upsert lms_rfm_scores + lms_health_scores. Shared by the manual
+ * runRfmRecompute path (aggregates fetched via /get_order) and the nightly
+ * push path (/api/agent-tools/lms/rfm-recompute — the backend computes the
+ * aggregates in SQL and POSTs them).
+ *
+ * Phone matching is digits-only with a last-10-digit fallback: backend
+ * users.phone is often 10-digit while WhatsApp contacts.phone carries the 91
+ * country code — raw string equality would zero-score every mismatch.
+ */
+export async function scoreAndWriteFromAggregates(args: {
+    aggregates: Map<string, OrderAggregate>;
+    computedAt?: string;
+}): Promise<AggregateScoreResult> {
+    const computedAt = args.computedAt ?? new Date().toISOString();
+    const contacts = await fetchContacts();
+    if (contacts.length === 0) {
+        return {
+            contactCount: 0,
+            rowsWritten: 0,
+            computedAt,
+            matched: 0,
+            unmatchedAggregates: args.aggregates.size,
+        };
+    }
+
+    const byDigits = new Map<string, OrderAggregate>();
+    const byLast10 = new Map<string, OrderAggregate>();
+    for (const [phone, agg] of args.aggregates) {
+        const digits = phone.replace(/\D/g, "");
+        if (!digits) continue;
+        byDigits.set(digits, agg);
+        if (digits.length >= 10) byLast10.set(digits.slice(-10), agg);
+    }
+    const resolveAggregate = (rawPhone: string): OrderAggregate | undefined => {
+        const digits = rawPhone.replace(/\D/g, "");
+        if (!digits) return undefined;
+        return (
+            byDigits.get(digits) ??
+            (digits.length >= 10 ? byLast10.get(digits.slice(-10)) : undefined)
+        );
+    };
+
     // Step 4: compute R/F/M for every contact.
+    const now = new Date();
+    const aggByCustomer = new Map<string, OrderAggregate | undefined>();
+    const matchedAggregates = new Set<OrderAggregate>();
+    let matched = 0;
     const inputs: RfmInput[] = contacts.map((c) => {
-        const agg = aggregates.get(c.phone);
+        const agg = resolveAggregate(c.phone);
+        aggByCustomer.set(c.id, agg);
+        if (agg) {
+            matched += 1;
+            matchedAggregates.add(agg);
+        }
         return {
             customerId: c.id,
             recencyDays: agg?.lastOrderAt
-                ? daysBetween(agg.lastOrderAt, new Date())
+                ? daysBetween(agg.lastOrderAt, now)
                 : 9999,
             frequencyCount: agg?.count90d ?? 0,
             monetaryValue: agg?.sum90d ?? 0,
@@ -116,11 +192,10 @@ export async function runRfmRecompute(args: {
 
     // Step 5: health score per contact, using available signals.
     const healthRows = rfmRows.map((r) => {
-        const aggKey = contacts.find((c) => c.id === r.customerId)?.phone;
-        const agg = aggKey ? aggregates.get(aggKey) : undefined;
+        const agg = aggByCustomer.get(r.customerId);
         const signals: HealthSignals = {
             firstOrderAgeDays: agg?.firstOrderAt
-                ? daysBetween(agg.firstOrderAt, new Date())
+                ? daysBetween(agg.firstOrderAt, now)
                 : null,
             // Signals we don't have yet — engagement, opt-out, festival
             // calendar — will be wired up in C8 (Insights agent) and C6
@@ -130,7 +205,8 @@ export async function runRfmRecompute(args: {
         return { customerId: r.customerId, ...computeHealth(r, signals) };
     });
 
-    // Step 6: bulk upsert (delete-then-insert for simplicity; small dataset).
+    // Step 6: bulk upsert (upsert on customer_id; partial failure keeps the
+    // previous snapshot).
     const rowsWritten = await writeRfmAndHealth({
         computedAt,
         rfm: rfmRows,
@@ -146,10 +222,9 @@ export async function runRfmRecompute(args: {
     return {
         contactCount: contacts.length,
         rowsWritten,
-        backendOk,
-        backendError,
         computedAt,
-        durationMs: Date.now() - startedAt,
+        matched,
+        unmatchedAggregates: args.aggregates.size - matchedAggregates.size,
     };
 }
 
@@ -260,7 +335,9 @@ function extractDate(order: Record<string, unknown>): Date | null {
 }
 
 function extractAmount(order: Record<string, unknown>): number {
-    const candidates = [order.total_amount, order.amount, order.grand_total];
+    // order_amount is the real column on the backend `orders` table — without
+    // it every manual run scored monetary_value 0 for everyone.
+    const candidates = [order.order_amount, order.total_amount, order.amount, order.grand_total];
     for (const c of candidates) {
         if (typeof c === "number" && Number.isFinite(c)) return c;
         if (typeof c === "string") {

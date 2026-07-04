@@ -30,6 +30,7 @@ export const AGENT_SLUGS = {
     insights: "lms-insights",
     leadTriage: "lms-lead-triage",
     customerSupportAssist: "lms-customer-support-assist",
+    ceoDigest: "lms-ceo-digest",
 } as const;
 
 // ─── Compliance Guard ────────────────────────────────────────────────────
@@ -133,6 +134,35 @@ export async function runInsightsBatch(args: {
     });
     if (!result) return { agentReachable: false };
     return { agentReachable: true, rawResponse: result.text };
+}
+
+// ─── Weekly CEO digest note ──────────────────────────────────────────────
+
+/**
+ * Ask the lms-ceo-digest agent for a one-line takeaway on the week's stats.
+ * The agent needs NO tools — the deterministic numbers arrive inline (backend
+ * SQL + LMS enrichment); the prompt lives in the Agent Force UI so the CEO
+ * can tune the voice without a deploy.
+ *
+ * Returns the first non-empty line (≤150 chars) or null when the agent is
+ * unconfigured/unreachable/empty — the caller falls back to a plain digest.
+ */
+export async function generateCeoDigestNote(
+    stats: Record<string, number | string>,
+): Promise<string | null> {
+    const result = await invoke({
+        sessionId: `ceo-digest-${new Date().toISOString().slice(0, 10)}`,
+        agentSlug: AGENT_SLUGS.ceoDigest,
+        message: JSON.stringify({ kind: "weekly_ceo_digest_note", stats }),
+        timeoutMs: 30_000,
+    });
+    if (!result) return null;
+    const line = result.text
+        .split("\n")
+        .map((l) => l.trim())
+        .find((l) => l.length > 0);
+    if (!line) return null;
+    return line.length > 150 ? `${line.slice(0, 147)}...` : line;
 }
 
 // ─── Lead Triage ─────────────────────────────────────────────────────────

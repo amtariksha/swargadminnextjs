@@ -193,6 +193,8 @@ const navItems: NavItem[] = [
         permissionKey: 'lms',
         children: [
             { name: 'Today', href: '/lms', icon: <BarChart3 className="w-4 h-4" /> },
+            { name: 'Insights', href: '/lms/insights', icon: <Sparkles className="w-4 h-4" /> },
+            { name: 'At-Risk Today', href: '/lms/at-risk', icon: <BarChart3 className="w-4 h-4" /> },
             { name: 'People', href: '/lms/people', icon: <Users className="w-4 h-4" /> },
             { name: 'Leads', href: '/lms/leads', icon: <UserPlus className="w-4 h-4" /> },
             { name: 'Tags', href: '/lms/tags', icon: <Tags className="w-4 h-4" /> },
