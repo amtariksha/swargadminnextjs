@@ -11,6 +11,10 @@ import { toast } from 'sonner';
 // Available pages/permissions
 const AVAILABLE_PERMISSIONS = [
     { key: 'dashboard', label: 'Dashboard', icon: '📊' },
+    // Business Pulse (Phase 5) — CEO metrics dashboard at /business-pulse
+    // (revenue, subscriptions, wastage, drivers, vendor pricing). Grant to
+    // the CEO role only; full-access roles see it automatically.
+    { key: 'business-pulse', label: 'Business Pulse', icon: '📈' },
     { key: 'users', label: 'Users', icon: '👥' },
     { key: 'drivers', label: 'Drivers', icon: '🚚' },
     { key: 'orders', label: 'Orders', icon: '📦' },

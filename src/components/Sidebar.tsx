@@ -76,6 +76,9 @@ interface NavItem {
 const navItems: NavItem[] = [
     // 0: Dashboard
     { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
+    // Business Pulse (Phase 5) — CEO metrics over the v_pulse_* views. Gated
+    // by the 'business-pulse' permission (grant to the CEO role only).
+    { name: 'Business Pulse', href: '/business-pulse', icon: <Activity className="w-5 h-5" /> },
     // --- Operations --- (divider after 0)
     // 1
     { name: 'Delivery List', href: '/delivery-list', icon: <ClipboardList className="w-5 h-5" /> },
@@ -314,7 +317,7 @@ const navItems: NavItem[] = [
  * the dividers — replaces the old fragile positional `index === N` checks.
  */
 const DIVIDER_AFTER = new Set<string>([
-    'Dashboard', 'Delivery List', 'Performance Report', 'Users', 'Products',
+    'Dashboard', 'Business Pulse', 'Delivery List', 'Performance Report', 'Users', 'Products',
     'Transactions', 'Refunds', 'Payroll', 'Settings', 'Notifications',
     'WhatsApp', 'CRM', 'LMS', 'CMS',
 ]);
@@ -353,6 +356,8 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'attributes',
     // Review moderation (migration 033 / Phase H).
     'reviews',
+    // Business Pulse (Phase 5) — CEO dashboard over the v_pulse_* views.
+    'business-pulse',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
