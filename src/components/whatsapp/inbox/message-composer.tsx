@@ -8,6 +8,8 @@ import {
     AlertTriangle,
     FileText,
     Zap,
+    Sparkles,
+    Loader2,
     X,
     Image as ImageIcon,
     MessageSquareText,
@@ -31,6 +33,7 @@ import {
     DropdownMenuTrigger,
 } from "@/components/whatsapp/ui/dropdown-menu";
 import { cn, isSessionExpired } from "@/lib/whatsapp/utils";
+import { wfetch } from "@/lib/whatsapp/wfetch";
 import { useSendMessage, useQuickReplies } from "@/lib/whatsapp/hooks";
 import type { QuickReply } from "@/lib/whatsapp/types";
 import { useAppStore } from "@/lib/whatsapp/store";
@@ -62,6 +65,12 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
     const [waPaymentDialogOpen, setWaPaymentDialogOpen] = useState(false);
     const [showQuickReplies, setShowQuickReplies] = useState(false);
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
+    const [suggestions, setSuggestions] = useState<
+        Array<{ text: string; tone: string; confidence: number }>
+    >([]);
+    const [suggestLoading, setSuggestLoading] = useState(false);
+    const [suggestError, setSuggestError] = useState<string | null>(null);
+    const [doNotSendAlone, setDoNotSendAlone] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const sendMessage = useSendMessage();
     const { data: quickReplies } = useQuickReplies();
@@ -94,6 +103,45 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
         }
         // Reset input so the same file can be re-selected
         if (fileInputRef.current) fileInputRef.current.value = "";
+    };
+
+    const handleSuggest = async () => {
+        setSuggestLoading(true);
+        setSuggestError(null);
+        setSuggestions([]);
+        setDoNotSendAlone(false);
+        try {
+            const res = await wfetch("/api/whatsapp/chat/suggest", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    conversationId: conversation.id,
+                    contactId: conversation.contact.id,
+                }),
+            });
+            const body = await res.json();
+            if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+            if (!body.configured) {
+                setSuggestError("AI assist isn't configured yet (Agent Force env missing).");
+                return;
+            }
+            if (!body.suggestions?.length) {
+                setSuggestError("No suggestion this time — the agent couldn't draft a confident reply.");
+                return;
+            }
+            setSuggestions(body.suggestions);
+            setDoNotSendAlone(Boolean(body.doNotSendAlone));
+        } catch (err) {
+            setSuggestError(err instanceof Error ? err.message : "Suggestion failed");
+        } finally {
+            setSuggestLoading(false);
+        }
+    };
+
+    const handlePickSuggestion = (suggestionText: string) => {
+        setText(suggestionText);
+        setSuggestions([]);
+        setDoNotSendAlone(false);
     };
 
     const handleSend = (e: FormEvent) => {
@@ -230,6 +278,64 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
                     </div>
                 )}
 
+                {/* AI reply suggestions — drafts only, a human always sends */}
+                {suggestError && (
+                    <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
+                        <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                        <span className="text-xs text-amber-700 flex-1">{suggestError}</span>
+                        <button
+                            type="button"
+                            onClick={() => setSuggestError(null)}
+                            className="text-amber-400 hover:text-amber-600 transition-colors"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+                )}
+                {suggestions.length > 0 && (
+                    <div className="mb-2 px-3 py-2 rounded-lg bg-purple-50 border border-purple-200">
+                        <div className="flex items-center gap-2 mb-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-purple-500" />
+                            <span className="text-[11px] font-medium text-purple-700">
+                                AI drafts — pick one to edit, you send it
+                            </span>
+                            {doNotSendAlone && (
+                                <Badge
+                                    variant="secondary"
+                                    className="bg-amber-100 text-amber-700 text-[10px] h-5"
+                                >
+                                    Review carefully before sending
+                                </Badge>
+                            )}
+                            <button
+                                type="button"
+                                onClick={() => setSuggestions([])}
+                                className="ml-auto text-purple-300 hover:text-purple-600 transition-colors"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                        <div className="space-y-1">
+                            {suggestions.map((s, i) => (
+                                <button
+                                    key={i}
+                                    type="button"
+                                    onClick={() => handlePickSuggestion(s.text)}
+                                    className="w-full text-left px-2.5 py-1.5 rounded-md bg-white border border-purple-100 hover:border-purple-300 hover:bg-purple-50/50 transition-colors"
+                                >
+                                    <p className="text-xs text-slate-700 line-clamp-2">{s.text}</p>
+                                    <p className="text-[10px] text-slate-400 mt-0.5">
+                                        {s.tone}
+                                        {typeof s.confidence === "number"
+                                            ? ` · ${Math.round(s.confidence * 100)}%`
+                                            : ""}
+                                    </p>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* Composer */}
                 <form onSubmit={handleSend} className="flex items-end gap-2">
                     <div className="flex-1 relative">
@@ -323,6 +429,30 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
                                     </div>
                                 )}
                             </div>
+                        )}
+
+                        {!sessionExpired && !isInternalNote && (
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={handleSuggest}
+                                        disabled={suggestLoading}
+                                        className="h-9 w-9 text-slate-400 hover:text-purple-500"
+                                    >
+                                        {suggestLoading ? (
+                                            <Loader2 className="w-4.5 h-4.5 animate-spin" />
+                                        ) : (
+                                            <Sparkles className="w-4.5 h-4.5" />
+                                        )}
+                                    </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    Suggest reply (AI draft — you send it)
+                                </TooltipContent>
+                            </Tooltip>
                         )}
 
                         {!sessionExpired && (
