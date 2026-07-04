@@ -17,6 +17,7 @@ import {
     productsToCsvUrl,
 } from '@/lib/deliveryHelpers';
 import { Truck, Package, Milk, Download, Boxes, RefreshCw } from 'lucide-react';
+import { useDemandForecast, type DemandForecastProduct } from '@/hooks/usePulse';
 
 type TabId = 'routewise' | 'packing' | 'dairy' | 'prepacking';
 
@@ -80,6 +81,20 @@ export default function ProductionDeliveryPage() {
     }, [tomorrow]);
     const prepackItems = prepackResult?.packingList ?? [];
     const prepackTotalUnits = prepackItems.reduce((s, i) => s + (i.qty || 0), 0);
+
+    // Phase 5 — 28-day forecast for tomorrow (mean of the last 4 same-weekday
+    // delivered totals, backend /production/demand-forecast). Shows before the
+    // dry run is pressed; merges in as a comparison column once it has run.
+    const { data: forecastData } = useDemandForecast(tomorrow);
+    const forecastProducts = useMemo(
+        () => forecastData?.products ?? [],
+        [forecastData]
+    );
+    const forecastByProduct = useMemo(() => {
+        const map = new Map<number, DemandForecastProduct>();
+        for (const p of forecastProducts) map.set(p.product_id, p);
+        return map;
+    }, [forecastProducts]);
 
     const dateForActive =
         activeTab === 'routewise' ? routewiseDate :
@@ -332,9 +347,45 @@ export default function ProductionDeliveryPage() {
                     </div>
 
                     {!prepackResult && !prepackLoading && (
-                        <div className="glass rounded-xl p-10 text-center text-slate-500">
-                            Dry run — nothing is saved. Click <span className="text-slate-300 font-medium">Run quantity check</span> to compute tomorrow&apos;s packing quantities.
-                        </div>
+                        forecastProducts.length > 0 ? (
+                            <div className="glass rounded-xl overflow-hidden">
+                                <div className="px-4 py-3 bg-slate-800/50 flex items-center justify-between">
+                                    <h3 className="font-semibold text-white">Tomorrow&apos;s forecast</h3>
+                                    <span className="text-sm text-slate-400">
+                                        Forecast = average of the last 4 same-weekday totals · subscription deliveries only
+                                    </span>
+                                </div>
+                                <table className="w-full">
+                                    <thead>
+                                        <tr className="border-b border-slate-800/50">
+                                            <th className="text-left px-4 py-2 text-xs text-slate-400 font-medium">Product</th>
+                                            <th className="text-right px-4 py-2 text-xs text-slate-400 font-medium w-40">28-day forecast</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {forecastProducts.map((f) => (
+                                            <tr key={f.product_id} className="border-b border-slate-800/30 hover:bg-slate-800/20">
+                                                <td className="px-4 py-2.5 text-sm text-white">{f.product_title}</td>
+                                                <td className="px-4 py-2.5 text-right">
+                                                    <span className="px-2 py-0.5 bg-sky-500/20 text-sky-300 rounded text-sm font-bold">
+                                                        {f.low_confidence ? '~' : ''}{Number(f.forecast_qty)}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                <p className="px-4 py-3 text-xs text-slate-500">
+                                    ~ = under 14 days of history for this product, take it as a rough guide.
+                                    Click <span className="text-slate-300 font-medium">Run quantity check</span> for
+                                    the exact quantities from tomorrow&apos;s subscriptions (nothing is saved).
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="glass rounded-xl p-10 text-center text-slate-500">
+                                Dry run — nothing is saved. Click <span className="text-slate-300 font-medium">Run quantity check</span> to compute tomorrow&apos;s packing quantities.
+                            </div>
+                        )
                     )}
 
                     {prepackResult && (
@@ -350,26 +401,42 @@ export default function ProductionDeliveryPage() {
                                     <thead>
                                         <tr className="border-b border-slate-800/50">
                                             <th className="text-left px-4 py-2 text-xs text-slate-400 font-medium">Product</th>
+                                            <th className="text-right px-4 py-2 text-xs text-slate-400 font-medium w-36">28-day forecast</th>
                                             <th className="text-right px-4 py-2 text-xs text-slate-400 font-medium w-32">Qty to pack</th>
+                                            <th className="text-right px-4 py-2 text-xs text-slate-400 font-medium w-20">Δ</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {prepackItems.length === 0 ? (
-                                            <tr><td colSpan={2} className="px-4 py-8 text-center text-slate-500">Nothing to pack for {tomorrow}.</td></tr>
-                                        ) : prepackItems.map((it) => (
-                                            <tr key={it.product_id ?? it.product} className="border-b border-slate-800/30 hover:bg-slate-800/20">
-                                                <td className="px-4 py-2.5 text-sm text-white">{it.product}</td>
-                                                <td className="px-4 py-2.5 text-right">
-                                                    <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-sm font-bold">{it.qty}</span>
-                                                </td>
-                                            </tr>
-                                        ))}
+                                            <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-500">Nothing to pack for {tomorrow}.</td></tr>
+                                        ) : prepackItems.map((it) => {
+                                            const forecast = it.product_id != null ? forecastByProduct.get(it.product_id) : undefined;
+                                            const forecastQty = forecast ? Number(forecast.forecast_qty) : null;
+                                            const delta = forecastQty != null ? (it.qty || 0) - forecastQty : null;
+                                            return (
+                                                <tr key={it.product_id ?? it.product} className="border-b border-slate-800/30 hover:bg-slate-800/20">
+                                                    <td className="px-4 py-2.5 text-sm text-white">{it.product}</td>
+                                                    <td className="px-4 py-2.5 text-right text-sm text-sky-300">
+                                                        {forecastQty == null ? '—' : `${forecast?.low_confidence ? '~' : ''}${forecastQty}`}
+                                                    </td>
+                                                    <td className="px-4 py-2.5 text-right">
+                                                        <span className="px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded text-sm font-bold">{it.qty}</span>
+                                                    </td>
+                                                    <td className={`px-4 py-2.5 text-right text-sm ${delta == null ? 'text-slate-600'
+                                                        : delta > 0 ? 'text-emerald-400' : delta < 0 ? 'text-rose-400' : 'text-slate-500'}`}>
+                                                        {delta == null ? '—' : delta > 0 ? `+${delta}` : delta}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
                             <p className="text-xs text-slate-500">
                                 Net of wallet allocation — low-balance orders that would be skipped or partially
                                 delivered are already reflected, so this is what will actually go out.
+                                Forecast = average of the last 4 same-weekday delivered totals (subscriptions only);
+                                ~ means under 14 days of history. Δ = qty to pack minus forecast.
                             </p>
                         </>
                     )}
