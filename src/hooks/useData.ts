@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { GET, POST, PUT, DELETE } from '@/lib/api';
 import { uploadViaPresign } from '@/lib/uploads';
 import { wfetch } from '@/lib/whatsapp/wfetch';
+import { CALL_TYPE_OPTIONS, callTypeLabel, type Option } from '@/lib/crm';
 
 // Users
 export interface User {
@@ -1631,7 +1633,27 @@ export function useCallScripts() {
     });
 }
 
-export function useCallScript(type: 'feedback' | 'reactivation', enabled = true) {
+/**
+ * Call-type choices for the guided call screen and feedback filters.
+ * The two built-ins (feedback / reactivation) stay pinned first; every
+ * other active script_type from /crm/scripts is appended, so a new type
+ * added under CRM → Call Scripts becomes callable without a code change.
+ */
+export function useCallTypeOptions(): Option[] {
+    const { data: scripts } = useCallScripts();
+    return useMemo(() => {
+        const options = [...CALL_TYPE_OPTIONS];
+        const seen = new Set(options.map((o) => o.value));
+        for (const script of scripts || []) {
+            if (script.is_active !== 1 || seen.has(script.script_type)) continue;
+            seen.add(script.script_type);
+            options.push({ value: script.script_type, label: callTypeLabel(script.script_type) });
+        }
+        return options;
+    }, [scripts]);
+}
+
+export function useCallScript(type: string, enabled = true) {
     return useQuery({
         queryKey: ['call-script', type],
         queryFn: async () => {
@@ -2288,6 +2310,10 @@ export interface DaytimeOrder {
     payment_short_url?: string | null;
     razorpay_payment_id?: string | null;
     paid_at?: string | null;
+    // Mark-cash provenance: who the cash was handed to + an optional payment
+    // screenshot (R2 key/URL) — editable after the fact via /payment_note.
+    payment_note?: string | null;
+    payment_proof_url?: string | null;
     // Phase 5 — fulfilment pool. 'last_mile' / pool_locked=1 once the order has
     // been transferred onto the last-mile delivery list (one-way).
     pool?: 'day_pool' | 'last_mile';

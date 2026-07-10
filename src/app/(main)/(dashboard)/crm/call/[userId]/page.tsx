@@ -9,16 +9,14 @@ import {
 import { toast } from 'sonner';
 import {
     useCustomerContext, useCallScript, useFeedbackEntry,
-    useCreateFeedback, useUpdateFeedback,
+    useCreateFeedback, useUpdateFeedback, useCallTypeOptions,
 } from '@/hooks/useData';
 import { inputClassName, selectClassName, textareaClassName, dateInputClassName } from '@/components/FormField';
 import {
-    FEEDBACK_STATUS_OPTIONS, RING_BELL_OPTIONS, DROP_PLACE_OPTIONS, CALL_TYPE_OPTIONS,
+    FEEDBACK_STATUS_OPTIONS, RING_BELL_OPTIONS, DROP_PLACE_OPTIONS,
 } from '@/lib/crm';
 import MarkdownView from '@/components/crm/MarkdownView';
 import ActivityWindowStrip from '@/components/crm/ActivityWindowStrip';
-
-type CallType = 'feedback' | 'reactivation';
 
 const EMPTY_FORM = {
     calling_date: '',
@@ -68,9 +66,7 @@ export default function GuidedCallPage() {
     const fromWorklist = searchParams.get('from') === 'worklist';
     const isEdit = !!feedbackId;
 
-    const [callType, setCallType] = useState<CallType>(
-        searchParams.get('type') === 'reactivation' ? 'reactivation' : 'feedback',
-    );
+    const [callType, setCallType] = useState<string>(searchParams.get('type') || 'feedback');
     // When editing an existing feedback the script panel is collapsed by
     // default — the caller has already read it once; on new entries we
     // surface it open so they don't miss the prompt.
@@ -79,6 +75,7 @@ export default function GuidedCallPage() {
     const [prefilled, setPrefilled] = useState(false);
 
     const { data: ctx, isLoading: ctxLoading, isError: ctxError } = useCustomerContext(userId);
+    const callTypeOptions = useCallTypeOptions();
     const script = useCallScript(callType);
     const { data: entry } = useFeedbackEntry(feedbackId ?? undefined, isEdit);
     const createMutation = useCreateFeedback();
@@ -102,7 +99,7 @@ export default function GuidedCallPage() {
             status: entry.status ?? '',
             followup_date: entry.followup_date ? String(entry.followup_date).slice(0, 10) : '',
         });
-        if (entry.call_type === 'reactivation' || entry.call_type === 'feedback') {
+        if (entry.call_type) {
             setCallType(entry.call_type);
         }
         setPrefilled(true);
@@ -231,10 +228,10 @@ export default function GuidedCallPage() {
                     <div className="px-5 pb-5 space-y-3">
                         {/* Call-type toggle */}
                         <div className="flex gap-2">
-                            {CALL_TYPE_OPTIONS.map((opt) => (
+                            {callTypeOptions.map((opt) => (
                                 <button
                                     key={opt.value}
-                                    onClick={() => setCallType(opt.value as CallType)}
+                                    onClick={() => setCallType(opt.value)}
                                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                                         callType === opt.value
                                             ? 'bg-purple-600/30 text-purple-200 border border-purple-500/40'

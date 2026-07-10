@@ -101,7 +101,7 @@ export default function CallScriptsPage() {
                 {typeChoice === '__other__' && (
                     <div>
                         <label className="block text-sm text-slate-300 mb-1.5">Custom type name</label>
-                        <input value={customType} onChange={(e) => setCustomType(e.target.value)} placeholder="e.g. winback" className={inputClassName} />
+                        <input value={customType} onChange={(e) => setCustomType(e.target.value)} maxLength={20} placeholder="e.g. winback" className={inputClassName} />
                     </div>
                 )}
                 <div>
