@@ -181,6 +181,7 @@ export interface SendTextPayload {
   text: string;
   conversationId: string;
   integratedNumber: string;
+  isInternalNote?: boolean;
 }
 
 export interface SendTemplatePayload {

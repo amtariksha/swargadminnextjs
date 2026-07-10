@@ -101,7 +101,15 @@ export async function PATCH(
     const body = await request.json();
 
     const updateData: Record<string, unknown> = {};
-    if (body.status) updateData.status = body.status;
+    if (body.status) {
+        if (body.status !== "open" && body.status !== "resolved") {
+            return NextResponse.json(
+                { error: "Invalid status. Allowed: open, resolved" },
+                { status: 400 }
+            );
+        }
+        updateData.status = body.status;
+    }
     if (body.unreadCount !== undefined) updateData.unread_count = body.unreadCount;
 
     // Handle assignment — assigned_to is the admin-panel user id; assigned_name

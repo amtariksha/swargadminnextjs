@@ -33,6 +33,7 @@ function mapConversation(row: Record<string, unknown>) {
         status: row.status as string,
         assignedTo: (row.assigned_to as string) || undefined,
         assignedAt: (row.assigned_at as string) || undefined,
+        assignedName: (row.assigned_name as string) || undefined,
         lastMessage: (row.last_message as string) || "",
         lastMessageTime: row.last_message_time as string,
         lastIncomingTimestamp: (row.last_incoming_timestamp as string) || (row.last_message_time as string),
