@@ -19,4 +19,5 @@ export const DELIVERY_PERMISSIONS: { key: string; label: string; icon: string }[
     { key: 'day-delivery', label: 'Day Deliveries', icon: '🛵' },
     { key: 'collection-approval', label: 'Collection Approval', icon: '✅' },
     { key: 'dairy-receipt', label: 'Dairy Receipt (Milk Received)', icon: '🐄' },
+    { key: 'whatsapp-inbox', label: 'WhatsApp Inbox (Customer Care)', icon: '💬' },
 ];

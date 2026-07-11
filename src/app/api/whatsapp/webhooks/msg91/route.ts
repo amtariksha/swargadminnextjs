@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { isPlaceholderName } from "@/lib/whatsapp/utils";
 import { maybeCreateWhatsAppLead } from "@/lib/lms/leads/whatsapp-intake";
+import { notifyStaffInbound } from "@/lib/whatsapp/staff-notify";
 
 // Digits-only phone normalization + tolerant equality (exact digits OR the same
 // 10-digit national tail). MSG91 field formats drift — "+91…", "91…", bare
@@ -542,6 +543,11 @@ export async function POST(request: NextRequest) {
         }
 
         // ─── 2. Upsert Conversation ────────────────────────
+        // Staff-push throttle state: notify only on the FIRST new inbound message
+        // (conversation just created, or prior unread was 0 before this bump) so a
+        // chatty customer produces one push, not ten.
+        let conversationWasNew = false;
+        let priorUnreadCount: number | null = null;
         let { data: conversation } = await supabaseAdmin
             .from("conversations")
             .select("id")
@@ -583,6 +589,7 @@ export async function POST(request: NextRequest) {
                 return NextResponse.json({ received: true, skipped: "conversation_create_failed" }, { status: 200 });
             }
             conversation = newConv;
+            conversationWasNew = true;
             console.log(`[MSG91 Webhook] Created conversation: ${conversation!.id}`);
         } else {
             // Update existing conversation. Only a CUSTOMER message re-opens it —
@@ -612,6 +619,7 @@ export async function POST(request: NextRequest) {
                     .single();
 
                 if (convData) {
+                    priorUnreadCount = convData.unread_count || 0;
                     await supabaseAdmin
                         .from("conversations")
                         .update({ unread_count: (convData.unread_count || 0) + 1 })
@@ -770,6 +778,23 @@ export async function POST(request: NextRequest) {
         }
 
         console.log(`[MSG91 Webhook] Message saved for conversation ${conversation!.id}`);
+
+        // ─── Staff push (first-new-message throttle) ─────────────────────────
+        // Only for a genuine INBOUND customer message that was actually inserted
+        // (every dedup/skip path returned above), and only when the conversation
+        // is new or had no unread backlog before this bump. Fire-and-forget —
+        // notifyStaffInbound swallows every error and is capped at 3s, so it can
+        // never delay or break the 200 ack.
+        if (!isExternalOutbound && (conversationWasNew || priorUnreadCount === 0)) {
+            void notifyStaffInbound({
+                contactName: senderName || contact!.name || actualCustomerPhone,
+                phone: actualCustomerPhone,
+                preview: messageBody || "[media]",
+                conversationId: conversation!.id,
+                integratedNumber: actualBusinessPhone ? String(actualBusinessPhone) : undefined,
+            });
+        }
+
         return NextResponse.json({ success: true, conversationId: conversation!.id });
     } catch (err) {
         // Always acknowledge with 200. A non-2xx here — even on a malformed payload — risks MSG91

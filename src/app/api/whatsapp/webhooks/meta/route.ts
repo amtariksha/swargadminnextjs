@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import crypto from 'crypto';
 import { isPlaceholderName } from "@/lib/whatsapp/utils";
 import { maybeCreateWhatsAppLead } from "@/lib/lms/leads/whatsapp-intake";
+import { notifyStaffInbound } from "@/lib/whatsapp/staff-notify";
 
 // ─── GET /api/webhooks/meta ─────────────────────────────────
 // Handles webhook verification from Meta Developer Portal
@@ -255,6 +256,11 @@ export async function POST(request: NextRequest) {
 
             // ─── Find or create conversation ────────────────────
             const integratedNum = businessPhoneNumber || integratedNumberDisplay || integratedNumberId;
+            // Staff-push throttle state: notify only on the FIRST new inbound
+            // message (conversation just created, or prior unread was 0 before
+            // this bump) — mirrors the MSG91 webhook behaviour.
+            let conversationWasNew = false;
+            let priorUnreadCount: number | null = null;
             let conversationId: string;
             const { data: existingConv } = await supabaseAdmin
                 .from("conversations")
@@ -289,6 +295,7 @@ export async function POST(request: NextRequest) {
                         .eq("id", conversationId)
                         .single();
                     if (convData) {
+                        priorUnreadCount = convData.unread_count || 0;
                         await supabaseAdmin
                             .from("conversations")
                             .update({ unread_count: (convData.unread_count || 0) + 1 })
@@ -314,10 +321,11 @@ export async function POST(request: NextRequest) {
                     throw new Error("Failed to create conversation");
                 }
                 conversationId = newConv.id;
+                conversationWasNew = true;
             }
 
             // ─── Insert Message ─────────────────────────────────────
-            await supabaseAdmin.from("messages").insert({
+            const { error: msgInsertError } = await supabaseAdmin.from("messages").insert({
                 conversation_id: conversationId,
                 direction: isEchoMessage ? "outbound" : "inbound",
                 content_type: messageType === "button_reply" ? "text" : (messageType === "contacts" ? "contact" : messageType),
@@ -330,9 +338,28 @@ export async function POST(request: NextRequest) {
                 source: isEchoMessage ? "mobile_app" : "customer",
                 created_at: timestamp,
             });
+            if (msgInsertError) {
+                console.error("[Meta Webhook] Insert message error:", msgInsertError);
+            }
 
             if (isEchoMessage) {
                 console.log(`[Meta Webhook] Echo message saved as outbound/mobile_app for conversation ${conversationId}`);
+            }
+
+            // ─── Staff push (first-new-message throttle) ─────────────
+            // Only for a genuine inbound customer message (not our own echo)
+            // whose row actually inserted (dedup returned above), and only when
+            // the conversation is new or had no unread backlog before this
+            // bump. Fire-and-forget — notifyStaffInbound swallows every error
+            // and is capped at 3s, so it can never delay or break the 200 ack.
+            if (!isEchoMessage && !msgInsertError && (conversationWasNew || priorUnreadCount === 0)) {
+                void notifyStaffInbound({
+                    contactName: contactName && contactName !== "Unknown" ? contactName : customerPhone,
+                    phone: customerPhone,
+                    preview: messageBody || `[${messageType}]`,
+                    conversationId,
+                    integratedNumber: integratedNum ? String(integratedNum) : undefined,
+                });
             }
 
             return NextResponse.json({ success: true }, { status: 200 });
