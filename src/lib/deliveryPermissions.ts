@@ -17,4 +17,6 @@ export const DELIVERY_PERMISSIONS: { key: string; label: string; icon: string }[
     // Lets a non-day-driver (e.g. a production supervisor) cover the day-time
     // delivery pool when the day driver is on leave.
     { key: 'day-delivery', label: 'Day Deliveries', icon: '🛵' },
+    { key: 'collection-approval', label: 'Collection Approval', icon: '✅' },
+    { key: 'dairy-receipt', label: 'Dairy Receipt (Milk Received)', icon: '🐄' },
 ];

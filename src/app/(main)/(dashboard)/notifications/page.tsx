@@ -83,7 +83,7 @@ export default function NotificationsPage() {
     const [titleBodyTouched, setTitleBodyTouched] = useState(false);
 
     // Audience state
-    const [audienceType, setAudienceType] = useState<AudienceType>('all');
+    const [audienceType, setAudienceType] = useState<AudienceType>('custom');
     const [userIds, setUserIds] = useState<number[]>([]);
     const [driverUserId, setDriverUserId] = useState<number | ''>('');
 
@@ -144,7 +144,7 @@ export default function NotificationsPage() {
         setBody('');
         setTokenValues({});
         setTitleBodyTouched(false);
-        setAudienceType('all');
+        setAudienceType('custom');
         setUserIds([]);
         setDriverUserId('');
         setWaTemplate(null);
