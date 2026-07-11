@@ -13,7 +13,7 @@ import type { Conversation } from "@/lib/whatsapp/types";
 import { SessionTimer } from "./session-timer";
 
 export function ChatList({ className, integratedNumber }: { className?: string; integratedNumber?: string }) {
-    const [status, setStatus] = useState("all");
+    const [status, setStatus] = useState("open");
     const [search, setSearch] = useState("");
     const { activeConversationId, setActiveConversation } = useAppStore();
     const { data: conversations, isLoading } = useConversations(status, search, integratedNumber);
@@ -39,12 +39,6 @@ export function ChatList({ className, integratedNumber }: { className?: string; 
                 <Tabs value={status} onValueChange={setStatus}>
                     <TabsList className="w-full h-9 bg-slate-100 p-0.5">
                         <TabsTrigger
-                            value="all"
-                            className="flex-1 text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm"
-                        >
-                            All
-                        </TabsTrigger>
-                        <TabsTrigger
                             value="open"
                             className="flex-1 text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm"
                         >
@@ -55,6 +49,12 @@ export function ChatList({ className, integratedNumber }: { className?: string; 
                             className="flex-1 text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm"
                         >
                             Resolved
+                        </TabsTrigger>
+                        <TabsTrigger
+                            value="all"
+                            className="flex-1 text-xs font-medium data-[state=active]:bg-white data-[state=active]:shadow-sm"
+                        >
+                            All
                         </TabsTrigger>
                     </TabsList>
                 </Tabs>

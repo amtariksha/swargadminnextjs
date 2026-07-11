@@ -23,25 +23,56 @@ const phonesMatch = (a: string, b: string): boolean => {
 // — which lacks it — is never touched), and render the text params instead. Any
 // other body passes through untouched. Mixed templates (e.g. an image header
 // param with no .text) still render their text params.
-const normalizeTemplateEcho = (body: string, templateName?: string | null): string => {
-    if (!body || !body.startsWith("{")) return body;
+// Returns `matched` alongside the (possibly rewritten) body: the caller feeds it
+// into the direction decision — a template-parameter payload can only be
+// business-originated, so it is also an outbound signal.
+const normalizeTemplateEcho = (
+    body: string,
+    templateName?: string | null
+): { body: string; matched: boolean } => {
+    if (!body || !body.startsWith("{")) return { body, matched: false };
     try {
         const parsed = JSON.parse(body);
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return body;
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { body, matched: false };
         const values = Object.values(parsed);
         if (
             values.length === 0 ||
             !values.every((v) => v && typeof v === "object" && !Array.isArray(v) && "parameter_name" in (v as object))
         ) {
-            return body;
+            return { body, matched: false };
         }
         const texts = values
             .map((v) => (v as { text?: unknown }).text)
             .filter((t): t is string => typeof t === "string" && t.length > 0);
         const label = templateName ? `[${templateName}]` : "[Template]";
-        return texts.length ? `${label} ${texts.join(" · ")}` : label;
+        return { body: texts.length ? `${label} ${texts.join(" · ")}` : label, matched: true };
     } catch {
-        return body;
+        return { body, matched: false };
+    }
+};
+
+// Best-effort webhook debug capture (migration 014_webhook_debug.sql): store the
+// raw payload + the direction we classified it as, so any future misclassification
+// is diagnosable from the DB instead of grepping Vercel logs. Default ON; set
+// WA_WEBHOOK_DEBUG=false to disable. EVERY error is swallowed — capture must
+// never block or fail webhook processing. A cheap 7-day prune runs before each
+// insert (fine at this volume).
+const captureWebhookDebug = async (payload: unknown, classifiedDirection: string): Promise<void> => {
+    if (process.env.WA_WEBHOOK_DEBUG === "false") return;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    try {
+        await supabaseAdmin.from("webhook_debug").delete().lt("created_at", sevenDaysAgo);
+    } catch {
+        // Prune is best-effort — never let it interfere with the capture.
+    }
+    try {
+        await supabaseAdmin.from("webhook_debug").insert({
+            provider: "msg91",
+            payload,
+            classified_direction: classifiedDirection,
+        });
+    } catch {
+        // Capture is best-effort — never let it interfere with the webhook.
     }
 };
 
@@ -146,8 +177,11 @@ export async function POST(request: NextRequest) {
         const msgCampaignName = body.campaignName || null;
 
         // Make template echoes readable BEFORE any dedup/content compare so both
-        // webhook events for the same message normalize to the same string.
-        messageBody = normalizeTemplateEcho(messageBody, msgTemplateName);
+        // webhook events for the same message normalize to the same string. The
+        // matched flag doubles as an outbound signal (see isExternalOutbound).
+        const templateEcho = normalizeTemplateEcho(messageBody, msgTemplateName);
+        messageBody = templateEcho.body;
+        const isTemplateEchoPayload = templateEcho.matched;
 
         // Use webhookType to identify the exact event type if present
         const webhookType = body.webhookType?.toString() || "";
@@ -240,8 +274,11 @@ export async function POST(request: NextRequest) {
 
         // ─── Handle Delivery Reports (Outbound Message Status) ───
 
-        // This denotes if the webhook represents an outbound message initiated from *outside* our CRM
-        let isExternalOutbound = isOutboundRequestReceived || isSenderBusinessNumber;
+        // This denotes if the webhook represents an outbound message initiated from *outside* our CRM.
+        // isTemplateEchoPayload counts too: a template-parameter payload can only be
+        // business-originated — customers cannot send one. It is a payload-only signal
+        // (no cross-direction content matching involved).
+        let isExternalOutbound = isOutboundRequestReceived || isSenderBusinessNumber || isTemplateEchoPayload;
 
         if (isDeliveryReport) {
             // Determine actual status
@@ -352,6 +389,9 @@ export async function POST(request: NextRequest) {
                 `to=${digitsOnly(receiverNumber) || "-"} keys=${Object.keys(body).join(",")}`
             );
         }
+
+        // Persist the raw payload + our classification (best-effort, never throws).
+        await captureWebhookDebug(body, messageDirection);
 
         // ─── ID-based echo dedup (the PRIMARY dedup, order-independent) ──────
         // MSG91 fires several events for ONE message (Inbound + Outbound Request
@@ -593,6 +633,20 @@ export async function POST(request: NextRequest) {
                     .from("messages").select("id")
                     .in("conversation_id", contactConvIds).eq("direction", "outbound")
                     .eq("body", messageBody).gte("created_at", recentWindow).limit(1).maybeSingle()).data;
+
+                // Template echo: the CRM's own row for a template send stores the
+                // placeholder body `[Template: <name>]` (chat/send), while the echo
+                // body renders the parameters — so the exact-body match above never
+                // fires. Match the recent OUTBOUND placeholder row by template name
+                // instead. Outbound-only, same window, same skip path.
+                if (!dupMsg && isTemplateEchoPayload && msgTemplateName) {
+                    const { data: m } = await supabaseAdmin
+                        .from("messages").select("id")
+                        .in("conversation_id", contactConvIds).eq("direction", "outbound")
+                        .like("body", `[Template: ${msgTemplateName}]%`)
+                        .gte("created_at", recentWindow).limit(1).maybeSingle();
+                    if (m) dupMsg = m;
+                }
 
                 if (!dupMsg) {
                     const urls = messageBody.match(/https?:\/\/[^\s]+/g) || [];
