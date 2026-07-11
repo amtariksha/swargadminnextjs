@@ -40,6 +40,8 @@ export function useConversation(id: string | null) {
         queryKey: ["conversation", id],
         queryFn: () => api.getConversation(id!),
         enabled: !!id,
+        refetchInterval: 5000,
+        refetchIntervalInBackground: false,
     });
 }
 
@@ -92,7 +94,7 @@ export function useSendMessage() {
                         ? payload.text
                         : `Template: ${(payload as { templateName: string }).templateName}`,
                 status: "sending",
-                isInternalNote: false,
+                isInternalNote: (payload as { isInternalNote?: boolean }).isInternalNote ?? false,
                 timestamp: new Date().toISOString(),
             };
 

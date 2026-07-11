@@ -2,14 +2,23 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Send, Bell, History, ImagePlus } from 'lucide-react';
+import { Send, Bell, History, ImagePlus, Smartphone, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { GET, POST, ApiError } from '@/lib/api';
 import { SCENARIO_BY_SLUG } from '@/lib/notificationScenarios';
 import ContentSelector from './_components/ContentSelector';
 import AudienceSelector from './_components/AudienceSelector';
 import BroadcastConfirmModal from './_components/BroadcastConfirmModal';
+import WhatsAppTemplateSelector, {
+    extractTemplateVariables,
+    renderTemplatePreview,
+    templateBodyText,
+    templateHasImageHeader,
+} from './_components/WhatsAppTemplateSelector';
 import { useAudienceCount, type AudienceType } from './_components/useAudienceCount';
+import type { Template } from '@/lib/whatsapp/types';
+
+type BroadcastChannel = 'push' | 'whatsapp';
 
 interface NotificationImageRow {
     scenario: string;
@@ -28,6 +37,12 @@ interface BroadcastRow {
     recipient_count: number | null;
     sent_at: string | null;
     created_at: string | null;
+    // Channel slider (migration 105) — 'whatsapp' or the legacy 'bell,push'.
+    // Nullable: rows dispatched before the migration have only recipient_count.
+    channels?: string | null;
+    sent_count?: number | null;
+    failed_count?: number | null;
+    suppressed_count?: number | null;
 }
 
 /**
@@ -46,6 +61,14 @@ interface BroadcastRow {
  */
 export default function NotificationsPage() {
     const queryClient = useQueryClient();
+
+    // Channel — In-App Push (FCM via the Node backend, the original flow) or
+    // WhatsApp (approved template via msg91; requires migration 105 + the
+    // backend channel support). Audience selection is identical for both.
+    const [channel, setChannel] = useState<BroadcastChannel>('push');
+    const [waTemplate, setWaTemplate] = useState<Template | null>(null);
+    const [waParams, setWaParams] = useState<Record<string, string>>({});
+    const [waHeaderImageUrl, setWaHeaderImageUrl] = useState('');
 
     // Content state
     const [mode, setMode] = useState<'custom' | 'template'>('custom');
@@ -83,6 +106,10 @@ export default function NotificationsPage() {
     const { data: broadcasts = [], isLoading: historyLoading } = useQuery({
         queryKey: ['broadcasts'],
         queryFn: async () => (await GET<BroadcastRow[]>('/broadcast')).data || [],
+        // Immediate dispatch runs off the response path — poll while any row
+        // is still 'sending' so the per-channel counts appear when it lands.
+        refetchInterval: (q) =>
+            (q.state.data ?? []).some((r) => r.status === 'sending') ? 5000 : false,
     });
 
     // The scenario + body_params we'll actually POST. `null` scenario =
@@ -120,23 +147,45 @@ export default function NotificationsPage() {
         setAudienceType('all');
         setUserIds([]);
         setDriverUserId('');
+        setWaTemplate(null);
+        setWaParams({});
+        setWaHeaderImageUrl('');
+        // Deliberately keep `channel` — operators sending several WhatsApp
+        // broadcasts in a row shouldn't re-flip the slider each time.
     };
 
     const canOpenConfirm = (): boolean => {
-        if (!title.trim()) {
-            toast.error('Title is required');
-            return false;
-        }
-        if (!body.trim()) {
-            toast.error('Message is required');
-            return false;
-        }
         if (audienceType === 'custom' && userIds.length === 0) {
             toast.error('Select at least one customer');
             return false;
         }
         if (audienceType === 'driver' && (typeof driverUserId !== 'number' || driverUserId <= 0)) {
             toast.error('Pick a driver');
+            return false;
+        }
+        if (channel === 'whatsapp') {
+            if (!waTemplate) {
+                toast.error('Pick an approved WhatsApp template');
+                return false;
+            }
+            for (const v of extractTemplateVariables(templateBodyText(waTemplate))) {
+                if (!waParams[v] || !waParams[v].trim()) {
+                    toast.error(`Fill in {{${v}}}`);
+                    return false;
+                }
+            }
+            if (templateHasImageHeader(waTemplate) && !waHeaderImageUrl.trim()) {
+                toast.error('This template needs a header image');
+                return false;
+            }
+            return true;
+        }
+        if (!title.trim()) {
+            toast.error('Title is required');
+            return false;
+        }
+        if (!body.trim()) {
+            toast.error('Message is required');
             return false;
         }
         if (effectiveScenario && selectedScenarioMeta?.tokens) {
@@ -166,20 +215,34 @@ export default function NotificationsPage() {
             if (audienceType === 'custom') payload.user_ids = userIds;
             if (audienceType === 'driver') payload.driver_user_id = driverUserId;
 
-            // Always carry the template's image when a template was picked,
-            // even if the operator tweaked title/body. Otherwise the
-            // dispatcher falls back to notification_image[scenario='broadcast']
-            // which usually has no row and the push arrives text-only.
-            if (effectiveTemplateImageUrl) payload.image_url = effectiveTemplateImageUrl;
+            if (channel === 'whatsapp' && waTemplate) {
+                // WhatsApp mode: the approved template supplies the content.
+                // title/body are set to the template name + rendered preview so
+                // the history table stays readable; the backend ignores them
+                // for the actual send.
+                payload.title = waTemplate.name;
+                payload.body = renderTemplatePreview(templateBodyText(waTemplate), waParams);
+                payload.channel = 'whatsapp';
+                payload.whatsapp_template_name = waTemplate.name;
+                payload.whatsapp_template_language = waTemplate.language || undefined;
+                if (Object.keys(waParams).length > 0) payload.whatsapp_body_params = waParams;
+                if (waHeaderImageUrl.trim()) payload.whatsapp_header_image_url = waHeaderImageUrl.trim();
+            } else {
+                // Always carry the template's image when a template was picked,
+                // even if the operator tweaked title/body. Otherwise the
+                // dispatcher falls back to notification_image[scenario='broadcast']
+                // which usually has no row and the push arrives text-only.
+                if (effectiveTemplateImageUrl) payload.image_url = effectiveTemplateImageUrl;
 
-            if (effectiveScenario) {
-                payload.scenario = effectiveScenario;
-                if (selectedScenarioMeta?.tokens?.length) {
-                    const params: Record<string, string> = {};
-                    for (const tok of selectedScenarioMeta.tokens) {
-                        params[tok] = tokenValues[tok] ?? '';
+                if (effectiveScenario) {
+                    payload.scenario = effectiveScenario;
+                    if (selectedScenarioMeta?.tokens?.length) {
+                        const params: Record<string, string> = {};
+                        for (const tok of selectedScenarioMeta.tokens) {
+                            params[tok] = tokenValues[tok] ?? '';
+                        }
+                        payload.body_params = params;
                     }
-                    payload.body_params = params;
                 }
             }
 
@@ -221,7 +284,48 @@ export default function NotificationsPage() {
                 </a>
             </div>
 
+            {/* Channel slider — In-App Push (FCM) vs WhatsApp (approved template).
+                Different pipes entirely: push goes through notify() with
+                per-category preferences; WhatsApp sends an approved msg91
+                template (business-initiated messages can't be free-text). */}
+            <div className="inline-flex rounded-xl bg-slate-800/50 border border-slate-700/50 p-1">
+                <button
+                    type="button"
+                    onClick={() => setChannel('push')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        channel === 'push'
+                            ? 'bg-purple-500/25 text-purple-300'
+                            : 'text-slate-400 hover:text-white'
+                    }`}
+                >
+                    <Smartphone className="w-4 h-4" />
+                    In-App Push
+                </button>
+                <button
+                    type="button"
+                    onClick={() => setChannel('whatsapp')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        channel === 'whatsapp'
+                            ? 'bg-emerald-500/25 text-emerald-300'
+                            : 'text-slate-400 hover:text-white'
+                    }`}
+                >
+                    <MessageCircle className="w-4 h-4" />
+                    WhatsApp
+                </button>
+            </div>
+
             <div className="grid lg:grid-cols-2 gap-6">
+                {channel === 'whatsapp' ? (
+                    <WhatsAppTemplateSelector
+                        template={waTemplate}
+                        onTemplateChange={setWaTemplate}
+                        params={waParams}
+                        onParamsChange={setWaParams}
+                        headerImageUrl={waHeaderImageUrl}
+                        onHeaderImageUrlChange={setWaHeaderImageUrl}
+                    />
+                ) : (
                 <ContentSelector
                     mode={mode}
                     onModeChange={(m) => {
@@ -246,6 +350,7 @@ export default function NotificationsPage() {
                     images={images}
                     onTouched={() => setTitleBodyTouched(true)}
                 />
+                )}
 
                 <AudienceSelector
                     audienceType={audienceType}
@@ -276,9 +381,13 @@ export default function NotificationsPage() {
                 onClose={() => setConfirmOpen(false)}
                 onConfirm={handleSend}
                 submitting={submitting}
-                title={title}
-                body={body}
-                scenario={effectiveScenario}
+                title={channel === 'whatsapp' && waTemplate ? `WhatsApp: ${waTemplate.name}` : title}
+                body={
+                    channel === 'whatsapp' && waTemplate
+                        ? renderTemplatePreview(templateBodyText(waTemplate), waParams)
+                        : body
+                }
+                scenario={channel === 'whatsapp' ? null : effectiveScenario}
                 audienceType={audienceType}
                 recipientCount={countReady && typeof count === 'number' ? count : null}
             />
@@ -310,6 +419,7 @@ function RecentBroadcasts({
                             <tr>
                                 <th className="py-2 pr-4 font-medium">When</th>
                                 <th className="py-2 pr-4 font-medium">Title</th>
+                                <th className="py-2 pr-4 font-medium">Channel</th>
                                 <th className="py-2 pr-4 font-medium">Audience</th>
                                 <th className="py-2 pr-4 font-medium">Template</th>
                                 <th className="py-2 pr-4 font-medium">Status</th>
@@ -323,6 +433,9 @@ function RecentBroadcasts({
                                         {r.sent_at || r.created_at || '—'}
                                     </td>
                                     <td className="py-2 pr-4">{r.title}</td>
+                                    <td className="py-2 pr-4">
+                                        <ChannelBadge channels={r.channels} />
+                                    </td>
                                     <td className="py-2 pr-4 capitalize">{r.audience_type}</td>
                                     <td className="py-2 pr-4">
                                         {r.scenario ? (
@@ -337,7 +450,7 @@ function RecentBroadcasts({
                                         <StatusPill status={r.status} />
                                     </td>
                                     <td className="py-2 pr-4">
-                                        {r.recipient_count ?? '—'}
+                                        <SentCell row={r} />
                                     </td>
                                 </tr>
                             ))}
@@ -346,6 +459,36 @@ function RecentBroadcasts({
                 </div>
             )}
         </div>
+    );
+}
+
+function ChannelBadge({ channels }: { channels?: string | null }) {
+    const isWhatsApp = String(channels || '').includes('whatsapp');
+    return isWhatsApp ? (
+        <span className="px-2 py-0.5 rounded-md text-xs bg-emerald-500/15 text-emerald-300">
+            WhatsApp
+        </span>
+    ) : (
+        <span className="px-2 py-0.5 rounded-md text-xs bg-purple-500/15 text-purple-300">
+            Push
+        </span>
+    );
+}
+
+/** "42" for legacy rows; "42 sent · 3 failed (+5 suppressed)" once the
+ *  per-channel tallies (migration 105) are stamped. */
+function SentCell({ row }: { row: BroadcastRow }) {
+    if (row.sent_count == null) return <>{row.recipient_count ?? '—'}</>;
+    return (
+        <span className="whitespace-nowrap">
+            {row.sent_count} sent
+            {row.failed_count ? (
+                <span className="text-red-400"> · {row.failed_count} failed</span>
+            ) : null}
+            {row.suppressed_count ? (
+                <span className="text-amber-400"> (+{row.suppressed_count} suppressed)</span>
+            ) : null}
+        </span>
     );
 }
 

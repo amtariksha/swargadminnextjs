@@ -11,6 +11,8 @@ const ALLOWED_TYPES: Record<string, string[]> = {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/vnd.ms-excel",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "text/csv",
+        "text/plain",
     ],
 };
 

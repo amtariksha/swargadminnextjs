@@ -8,7 +8,7 @@ import DaytimeOrderForm from '@/components/DaytimeOrderForm';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { PodImage } from '@/components/PodImage';
 import { POST, PUT, ApiError } from '@/lib/api';
-import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog, CalendarClock, RefreshCw, Truck, FileText } from 'lucide-react';
+import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog, CalendarClock, RefreshCw, Truck, FileText, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PAID_STATES = ['paid', 'cash', 'wallet_deducted'];
@@ -21,6 +21,13 @@ export default function DaytimeOrderDetailPage() {
     const [busy, setBusy] = useState<string | null>(null);
     const [confirmCancel, setConfirmCancel] = useState(false);
     const [confirmPay, setConfirmPay] = useState<'cash' | 'wallet' | null>(null);
+    // Mark-cash provenance: optional note (who took the cash) + screenshot.
+    const [paymentNote, setPaymentNote] = useState('');
+    const [proofFile, setProofFile] = useState<File | null>(null);
+    // After-the-fact edit of the payment note / proof on a paid order.
+    const [editingNote, setEditingNote] = useState(false);
+    const [noteDraft, setNoteDraft] = useState('');
+    const [noteProofFile, setNoteProofFile] = useState<File | null>(null);
     const [confirmDelivered, setConfirmDelivered] = useState(false);
     const [deliveredBy, setDeliveredBy] = useState<number | ''>('');
     // Customer-care override: reason saved with mark-delivered / release / reassign,
@@ -94,10 +101,67 @@ export default function DaytimeOrderDetailPage() {
             return d;
         }, 'Payment status checked');
 
+    // Validate a picked payment screenshot (≤10MB image) before accepting it.
+    const pickProofFile = (e: React.ChangeEvent<HTMLInputElement>, setFile: (f: File | null) => void) => {
+        const file = e.target.files?.[0] ?? null;
+        if (!file) { setFile(null); return; }
+        if (!file.type.startsWith('image/')) {
+            toast.error('Screenshot must be an image');
+            e.target.value = '';
+            setFile(null);
+            return;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+            toast.error('Screenshot must be 10MB or smaller');
+            e.target.value = '';
+            setFile(null);
+            return;
+        }
+        setFile(file);
+    };
+
+    // Upload a payment screenshot; returns the stored URL (null if R2 is unconfigured).
+    const uploadProof = async (file: File): Promise<string | null> => {
+        const fd = new FormData();
+        fd.append('photo', file);
+        const res = await POST<{ payment_proof_url?: string | null }>(`/daytime/orders/${id}/payment_proof`, fd);
+        return res.data?.payment_proof_url ?? null;
+    };
+
     const markPaid = (mode: 'cash' | 'wallet') =>
-        runAction(mode, () => POST(`/daytime/orders/${id}/mark_paid`, { payment_mode: mode }),
-            mode === 'cash' ? 'Marked paid in cash' : 'Wallet debited')
-            .then(() => setConfirmPay(null));
+        runAction(mode, async () => {
+            let proofUrl: string | null = null;
+            if (mode === 'cash' && proofFile) {
+                // A failed upload downgrades to marking cash without the
+                // screenshot rather than blocking the collection.
+                try {
+                    proofUrl = await uploadProof(proofFile);
+                } catch {
+                    toast.warning('Screenshot upload failed — marking cash without it');
+                }
+            }
+            return POST(`/daytime/orders/${id}/mark_paid`, {
+                payment_mode: mode,
+                note: paymentNote.trim() || undefined,
+                payment_proof_url: proofUrl || undefined,
+            });
+        }, mode === 'cash' ? 'Marked paid in cash' : 'Wallet debited')
+            .then(() => { setConfirmPay(null); setPaymentNote(''); setProofFile(null); });
+
+    // Add/edit the payment note (and optionally a new screenshot) on an
+    // already-paid order. `note: null` clears the note server-side.
+    const savePaymentNote = () =>
+        runAction('payment_note', async () => {
+            let proofUrl: string | null = null;
+            if (noteProofFile) {
+                proofUrl = await uploadProof(noteProofFile);
+            }
+            return POST(`/daytime/orders/${id}/payment_note`, {
+                note: noteDraft.trim() || null,
+                ...(proofUrl ? { payment_proof_url: proofUrl } : {}),
+            });
+        }, 'Payment note saved')
+            .then(() => { setEditingNote(false); setNoteProofFile(null); });
 
     const cancelOrder = () =>
         runAction('cancel', () => POST(`/daytime/orders/${id}/cancel`), 'Order cancelled')
@@ -198,7 +262,46 @@ export default function DaytimeOrderDetailPage() {
                         wallet when it&apos;s delivered. No separate day-network payment is taken here.
                     </p>
                 ) : isPaid ? (
-                    <p className="text-emerald-300 text-sm">Settled via {order.payment_mode || order.payment_status}.</p>
+                    <div className="space-y-2">
+                        <p className="text-emerald-300 text-sm">Settled via {order.payment_mode || order.payment_status}.</p>
+                        {order.payment_note && (
+                            <p className="text-sm text-amber-400/80">Payment note: {order.payment_note}</p>
+                        )}
+                        {order.payment_proof_url && (
+                            <span className="inline-block">
+                                <PodImage refValue={order.payment_proof_url} alt="Payment screenshot"
+                                    className="w-20 h-20 rounded-lg object-cover border border-slate-700 hover:ring-2 hover:ring-purple-500/50" />
+                            </span>
+                        )}
+                        {!editingNote ? (
+                            <button
+                                onClick={() => { setNoteDraft(order.payment_note ?? ''); setNoteProofFile(null); setEditingNote(true); }}
+                                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white">
+                                <Pencil className="w-3.5 h-3.5" />
+                                {order.payment_note || order.payment_proof_url ? 'Edit payment note' : 'Add payment note'}
+                            </button>
+                        ) : (
+                            <div className="space-y-2 max-w-md">
+                                <textarea value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)}
+                                    maxLength={300} rows={2}
+                                    placeholder="Payment note — who was it paid to? (optional)"
+                                    className="w-full px-3 py-2 text-sm bg-slate-900/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500" />
+                                <input type="file" accept="image/*"
+                                    onChange={(e) => pickProofFile(e, setNoteProofFile)}
+                                    className="block w-full text-xs text-slate-400 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-slate-800 file:text-slate-200 file:text-xs file:cursor-pointer" />
+                                <div className="flex gap-2">
+                                    <button onClick={savePaymentNote} disabled={busy !== null}
+                                        className="px-3 py-1.5 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-50">
+                                        {busy === 'payment_note' ? 'Saving…' : 'Save note'}
+                                    </button>
+                                    <button onClick={() => setEditingNote(false)} disabled={busy !== null}
+                                        className="px-3 py-1.5 text-xs text-slate-300 bg-slate-800/60 rounded-lg hover:bg-slate-800 disabled:opacity-50">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 ) : isCancelled ? (
                     <p className="text-slate-400 text-sm">This order is cancelled.</p>
                 ) : (
@@ -440,7 +543,19 @@ export default function DaytimeOrderDetailPage() {
                 onCancel={() => setConfirmPay(null)}
                 confirmText={confirmPay === 'wallet' ? 'Debit wallet' : 'Mark cash'}
                 isLoading={busy === confirmPay}
-            />
+            >
+                {confirmPay === 'cash' && (
+                    <div className="mt-3 space-y-2">
+                        <textarea value={paymentNote} onChange={(e) => setPaymentNote(e.target.value)}
+                            maxLength={300} rows={2}
+                            placeholder="Payment note — who was it paid to? (optional)"
+                            className="w-full px-3 py-2 text-sm bg-slate-900/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500" />
+                        <input type="file" accept="image/*"
+                            onChange={(e) => pickProofFile(e, setProofFile)}
+                            className="block w-full text-xs text-slate-400 file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:bg-slate-800 file:text-slate-200 file:text-xs file:cursor-pointer" />
+                    </div>
+                )}
+            </ConfirmDialog>
 
             <ConfirmDialog
                 isOpen={confirmReassign}

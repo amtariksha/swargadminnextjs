@@ -265,12 +265,15 @@ export async function POST(request: NextRequest) {
 
             if (existingConv) {
                 conversationId = existingConv.id;
+                // Only a genuine inbound message re-opens a resolved conversation —
+                // our own echoes update the preview but must NOT push it back into
+                // the action queue (mirrors the MSG91 webhook behaviour).
                 const updatePayload: Record<string, unknown> = {
-                    status: "open",
                     last_message: messageBody,
                     last_message_time: timestamp,
                 };
                 if (!isEchoMessage) {
+                    updatePayload.status = "open";
                     updatePayload.last_incoming_timestamp = timestamp;
                 }
                 await supabaseAdmin

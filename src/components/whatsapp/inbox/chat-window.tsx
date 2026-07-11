@@ -555,7 +555,7 @@ export function ChatWindow({ className }: { className?: string }) {
     const initials = getContactInitials(conversation.contact);
 
     const isAssignedToMe = conversation.assignedTo === currentUser?.id;
-    const isAdmin = currentUser?.role === "admin";
+    const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
     const canClose = isAssignedToMe || isAdmin;
     // Assignable agents = admin-panel users with WhatsApp access.
     const activeUsers = users || [];

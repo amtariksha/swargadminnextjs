@@ -52,6 +52,19 @@ interface MessageComposerProps {
     conversation: Conversation;
 }
 
+// Mirrors the server-side allow-list in /api/whatsapp/upload
+const MAX_FILE_SIZE = 16 * 1024 * 1024; // 16 MB
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const ALLOWED_DOCUMENT_TYPES = [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "text/csv",
+    "text/plain",
+];
+
 export function MessageComposer({ conversation }: MessageComposerProps) {
     const [text, setText] = useState("");
     const [isInternalNote, setIsInternalNote] = useState(false);
@@ -65,6 +78,8 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
     const [waPaymentDialogOpen, setWaPaymentDialogOpen] = useState(false);
     const [showQuickReplies, setShowQuickReplies] = useState(false);
     const [attachedFile, setAttachedFile] = useState<File | null>(null);
+    const [fileError, setFileError] = useState<string | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
     const [suggestions, setSuggestions] = useState<
         Array<{ text: string; tone: string; confidence: number }>
     >([]);
@@ -100,6 +115,7 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
         const file = e.target.files?.[0];
         if (file) {
             setAttachedFile(file);
+            setFileError(null);
         }
         // Reset input so the same file can be re-selected
         if (fileInputRef.current) fileInputRef.current.value = "";
@@ -144,7 +160,7 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
         setDoNotSendAlone(false);
     };
 
-    const handleSend = (e: FormEvent) => {
+    const handleSend = async (e: FormEvent) => {
         e.preventDefault();
         const hasText = text.trim().length > 0;
         const hasFile = attachedFile !== null;
@@ -152,23 +168,67 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
         if ((!hasText && !hasFile) || (sessionExpired && !isInternalNote)) return;
 
         if (isInternalNote) {
+            sendMessage.mutate({
+                to: conversation.contact.phone,
+                contentType: "text",
+                text: text.trim(),
+                conversationId: conversation.id,
+                integratedNumber: activeNumber?.number || conversation.integratedNumber,
+                isInternalNote: true,
+            });
             setText("");
             return;
         }
 
         if (hasFile) {
-            const isImage = attachedFile!.type.startsWith("image/");
+            const file = attachedFile!;
+            const isImage = file.type.startsWith("image/");
             const contentType = isImage ? "image" : "document";
 
-            sendMessage.mutate({
-                to: conversation.contact.phone,
-                contentType,
-                text: attachedFile!.name,
-                conversationId: conversation.id,
-                integratedNumber: activeNumber?.number || conversation.integratedNumber,
-            } as Parameters<typeof sendMessage.mutate>[0]);
-            setAttachedFile(null);
-            setText("");
+            const allowedTypes = isImage ? ALLOWED_IMAGE_TYPES : ALLOWED_DOCUMENT_TYPES;
+            if (!allowedTypes.includes(file.type)) {
+                setFileError(
+                    `Unsupported file type '${file.type || "unknown"}'. Allowed: images (JPEG, PNG, WebP) and documents (PDF, Word, Excel, CSV, TXT).`
+                );
+                return;
+            }
+            if (file.size > MAX_FILE_SIZE) {
+                setFileError(`File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB.`);
+                return;
+            }
+
+            setFileError(null);
+            setIsUploading(true);
+            try {
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("type", contentType);
+                const res = await wfetch("/api/whatsapp/upload", {
+                    method: "POST",
+                    body: formData,
+                });
+                const uploadBody = await res.json();
+                if (!res.ok) {
+                    throw new Error(uploadBody.error || `Upload failed (HTTP ${res.status})`);
+                }
+
+                sendMessage.mutate({
+                    to: conversation.contact.phone,
+                    contentType,
+                    text: text.trim() || file.name,
+                    conversationId: conversation.id,
+                    integratedNumber: activeNumber?.number || conversation.integratedNumber,
+                    mediaUrl: uploadBody.url,
+                    fileName: file.name,
+                });
+                setAttachedFile(null);
+                setText("");
+            } catch (err) {
+                // Keep the attachment so the user can retry
+                setFileError(err instanceof Error ? err.message : "Upload failed");
+            } finally {
+                setIsUploading(false);
+            }
         } else {
             sendMessage.mutate({
                 to: conversation.contact.phone,
@@ -270,8 +330,26 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
                             {(attachedFile.size / 1024).toFixed(0)} KB
                         </span>
                         <button
-                            onClick={() => setAttachedFile(null)}
+                            onClick={() => {
+                                setAttachedFile(null);
+                                setFileError(null);
+                            }}
                             className="text-slate-400 hover:text-red-500 transition-colors"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
+                )}
+
+                {/* Attachment validation / upload error */}
+                {fileError && (
+                    <div className="flex items-center gap-2 mb-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200">
+                        <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                        <span className="text-xs text-red-700 flex-1">{fileError}</span>
+                        <button
+                            type="button"
+                            onClick={() => setFileError(null)}
+                            className="text-red-400 hover:text-red-600 transition-colors"
                         >
                             <X className="w-3.5 h-3.5" />
                         </button>
@@ -593,7 +671,7 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
                             type="submit"
                             size="icon"
                             disabled={
-                                (!text.trim() && !attachedFile) || (sessionExpired && !isInternalNote) || sendMessage.isPending
+                                (!text.trim() && !attachedFile) || (sessionExpired && !isInternalNote) || sendMessage.isPending || isUploading
                             }
                             className={cn(
                                 "h-9 w-9 rounded-lg",

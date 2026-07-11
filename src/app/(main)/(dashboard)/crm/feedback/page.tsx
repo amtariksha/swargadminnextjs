@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import Modal from '@/components/Modal';
 import { selectClassName, inputClassName, dateInputClassName } from '@/components/FormField';
 import { ChevronDown, ChevronRight, Plus, Search } from 'lucide-react';
-import { useFeedbackList, useUsers, type CustomerFeedback, type FeedbackListFilters } from '@/hooks/useData';
+import { useFeedbackList, useUsers, useCallTypeOptions, type CustomerFeedback, type FeedbackListFilters } from '@/hooks/useData';
 import {
-    FEEDBACK_STATUS_OPTIONS, CALL_TYPE_OPTIONS, STATUS_BADGE_CLASS, statusLabel, callTypeLabel,
+    FEEDBACK_STATUS_OPTIONS, STATUS_BADGE_CLASS, statusLabel, callTypeLabel,
 } from '@/lib/crm';
 import { formatApiDate } from '@/lib/dateUtils';
 
@@ -44,6 +44,7 @@ export default function AllFeedbackPage() {
     const [search, setSearch] = useState('');
     const [expanded, setExpanded] = useState<Set<number>>(new Set());
     const { data: feedback = [], isLoading } = useFeedbackList(filters);
+    const callTypeOptions = useCallTypeOptions();
 
     // "New feedback" — pick a customer, then route into the guided call
     // screen. Reuses useUsers + a small inline search rather than the
@@ -141,7 +142,7 @@ export default function AllFeedbackPage() {
                     <label className="block text-xs text-slate-400 mb-1">Call type</label>
                     <select value={filters.call_type ?? ''} onChange={(e) => setFilter('call_type', e.target.value)} className={selectClassName}>
                         <option value="">All types</option>
-                        {CALL_TYPE_OPTIONS.map((o) => (
+                        {callTypeOptions.map((o) => (
                             <option key={o.value} value={o.value}>{o.label}</option>
                         ))}
                     </select>

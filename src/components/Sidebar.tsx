@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { BRANDING } from '@/config/tenant';
 import { useAuth } from '@/lib/auth';
 import { useFeatureFlag } from '@/hooks/useData';
@@ -32,7 +32,6 @@ import {
     Share2,
     ChevronDown,
     ChevronRight,
-    Menu,
     X,
     ClipboardList,
     BarChart3,
@@ -59,6 +58,7 @@ import {
     ShieldCheck,
     Calculator,
     IndianRupee,
+    Search,
 } from 'lucide-react';
 
 interface NavItem {
@@ -71,93 +71,85 @@ interface NavItem {
      *  entry below points at `/admin` (Payload's mount) but is gated by
      *  the explicit `cms` permission. */
     permissionKey?: string;
+    /** Open in a new tab (plain <a target="_blank">). Used by CMS — Payload
+     *  is a separate app shell; navigating in-tab would drop the operator
+     *  out of the admin panel. */
+    external?: boolean;
 }
 
+/**
+ * The whole nav is grouped into sections (2026-07 menu reorg): Reports /
+ * Deliveries / People / Products / Orders / Notifications / WhatsApp / CRM /
+ * LMS / Accounting / Settings / Archive. Groups are pure CONTAINERS — no
+ * permissionKey needed on a parent (filterNav keeps a group iff ≥1 child
+ * survives the role filter); gating happens per-leaf.
+ */
 const navItems: NavItem[] = [
-    // 0: Dashboard
-    { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
-    // Business Pulse (Phase 5) — CEO metrics over the v_pulse_* views. Gated
-    // by the 'business-pulse' permission (grant to the CEO role only).
-    { name: 'Business Pulse', href: '/business-pulse', icon: <Activity className="w-5 h-5" /> },
-    // --- Operations --- (divider after 0)
-    // 1
-    { name: 'Delivery List', href: '/delivery-list', icon: <ClipboardList className="w-5 h-5" /> },
-    // --- Reports --- (divider after 1)
-    // 2-3
-    { name: 'Delivery Report', href: '/delivery-report', icon: <BarChart3 className="w-5 h-5" /> },
-    { name: 'Performance Report', href: '/performance-report', icon: <TrendingUp className="w-5 h-5" /> },
-    { name: 'Recovery', href: '/recovery', icon: <IndianRupee className="w-5 h-5" /> },
-    // --- People --- (divider after 3)
-    // 4-5
-    { name: 'Users', href: '/users', icon: <Users className="w-5 h-5" /> },
-    { name: 'Drivers', href: '/drivers', icon: <Truck className="w-5 h-5" /> },
-    // --- Catalog --- (divider after 5)
-    // 6-9
-    { name: 'Categories', href: '/categories', icon: <FolderTree className="w-5 h-5" /> },
-    { name: 'Subcategories', href: '/subcategories', icon: <Layers className="w-5 h-5" /> },
-    { name: 'Products', href: '/products', icon: <Package className="w-5 h-5" /> },
-    // Product variations attribute library (migration 030 / D-7).
-    { name: 'Attributes', href: '/attributes', icon: <Tags className="w-5 h-5" /> },
-    // Customer reviews moderation (migration 033 / Phase H).
-    { name: 'Reviews', href: '/reviews', icon: <MessageSquare className="w-5 h-5" /> },
-    // --- Orders & Finance --- (divider after 8)
-    // 9-11
-    { name: 'Orders', href: '/orders', icon: <ShoppingCart className="w-5 h-5" /> },
-    { name: 'Day Orders', href: '/day-orders', icon: <Sun className="w-5 h-5" />, permissionKey: 'day-orders' },
-    { name: 'Transactions', href: '/transactions', icon: <CreditCard className="w-5 h-5" /> },
-    // 11
-    { name: 'Refunds', href: '/refunds', icon: <RotateCcw className="w-5 h-5" />, permissionKey: 'refunds' },
-    // 12
-    { name: 'Payroll', href: '/payroll', icon: <Banknote className="w-5 h-5" />, permissionKey: 'payroll' },
-    // 13 — Feature 07 returnable packaging (Packaging Types moved into Settings)
-    { name: 'Returns & Refunds', href: '/returns-refunds', icon: <RotateCcw className="w-5 h-5" />, permissionKey: 'packaging' },
-    // --- Settings --- (divider after 13)
-    // Catch-all for config screens. Five entries (App Updates, Delivery
-    // Locations, Drop Points, Notification Images, Packaging Types) were
-    // relocated here from the top-level nav to declutter the sidebar —
-    // they're all infrequently-edited config rather than daily ops.
-    // 14
     {
-        name: 'Settings',
-        icon: <Settings className="w-5 h-5" />,
+        name: 'Reports',
+        icon: <BarChart3 className="w-5 h-5" />,
         children: [
-            { name: 'General', href: '/settings', icon: <Settings className="w-4 h-4" /> },
-            { name: 'Server Health', href: '/settings/server-health', icon: <Activity className="w-4 h-4" /> },
-            { name: 'Automation', href: '/settings/automation', icon: <Clock className="w-4 h-4" /> },
-            { name: 'Notifications & Templates', href: '/settings/notifications', icon: <Bell className="w-4 h-4" /> },
-            { name: 'Notification Mapping', href: '/settings/notification-maps', icon: <Workflow className="w-4 h-4" /> },
-            { name: 'Web App', href: '/settings/webapp', icon: <Globe className="w-4 h-4" /> },
-            { name: 'Invoice', href: '/settings/invoice', icon: <Receipt className="w-4 h-4" /> },
-            { name: 'Payment Gateway', href: '/settings/payment', icon: <Banknote className="w-4 h-4" /> },
-            { name: 'Social Media', href: '/settings/social-media', icon: <Share2 className="w-4 h-4" /> },
-            { name: 'Refund Reasons', href: '/settings/refund-reasons', icon: <RotateCcw className="w-4 h-4" />, permissionKey: 'refunds' },
-            { name: 'Transaction Descriptions', href: '/settings/transaction-descriptions', icon: <Receipt className="w-4 h-4" /> },
-            { name: 'Banners', href: '/banners', icon: <Image className="w-4 h-4" /> },
-            { name: 'Testimonials', href: '/testimonials', icon: <MessageSquare className="w-4 h-4" /> },
-            { name: 'Pages', href: '/pages', icon: <FileText className="w-4 h-4" /> },
-            // Moved from top-level — config that's edited rarely.
-            { name: 'App Updates', href: '/app-updates', icon: <Smartphone className="w-4 h-4" />, permissionKey: 'app-updates' },
-            { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-4 h-4" /> },
-            { name: 'Drop Points', href: '/drop-points', icon: <MapPin className="w-4 h-4" />, permissionKey: 'drop-points' },
-            { name: 'Notification Images', href: '/notifications/images', icon: <Image className="w-4 h-4" />, permissionKey: 'notifications' },
-            { name: 'Packaging Types', href: '/packaging-types', icon: <PackageCheck className="w-4 h-4" />, permissionKey: 'packaging' },
-            // Phase I — multi-currency + multi-warehouse foundations.
-            // Admin housekeeping; no customer-facing consumer yet.
-            { name: 'Currencies', href: '/settings/currencies', icon: <Globe className="w-4 h-4" /> },
-            { name: 'Warehouses', href: '/settings/warehouses', icon: <Warehouse className="w-4 h-4" /> },
+            { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
+            // Business Pulse (Phase 5) — CEO metrics over the v_pulse_* views.
+            // Gated by the 'business-pulse' permission (grant to the CEO role only).
+            { name: 'Business Pulse', href: '/business-pulse', icon: <Activity className="w-4 h-4" /> },
+            { name: 'Performance Report', href: '/performance-report', icon: <TrendingUp className="w-4 h-4" /> },
+            { name: 'Delivery Report', href: '/delivery-report', icon: <BarChart3 className="w-4 h-4" /> },
+            { name: 'Recovery Report', href: '/recovery', icon: <IndianRupee className="w-4 h-4" /> },
+            { name: 'Refunds Report', href: '/refunds', icon: <RotateCcw className="w-4 h-4" />, permissionKey: 'refunds' },
+            { name: 'Payroll Reports', href: '/payroll', icon: <Banknote className="w-4 h-4" />, permissionKey: 'payroll' },
         ],
     },
-    // --- Location & Notifications --- (divider after 15)
-    // 16-18 (Delivery Locations, Drop Points, Notification Images, App Updates moved into Settings)
-    { name: 'Pincodes', href: '/pincodes', icon: <MapPin className="w-5 h-5" /> },
-    // The consolidated /notifications composer absorbed everything the
-    // standalone /broadcast page used to do (and that route now redirects
-    // here). Gate it behind the existing `broadcast` permission so roles
-    // that previously had /broadcast access keep it without any RBAC
-    // migration. /broadcast/page.tsx is a server-side redirect → here.
+    {
+        name: 'Deliveries',
+        icon: <Truck className="w-5 h-5" />,
+        children: [
+            { name: 'Delivery List', href: '/delivery-list', icon: <ClipboardList className="w-4 h-4" /> },
+        ],
+    },
+    {
+        name: 'People',
+        icon: <Users className="w-5 h-5" />,
+        children: [
+            // Customers = the /users page. App vs Day-order customers is the
+            // on-page filter dropdown (classified via has_app/day_orders).
+            { name: 'Customers', href: '/users', icon: <Users className="w-4 h-4" /> },
+            { name: 'Drivers', href: '/drivers', icon: <Truck className="w-4 h-4" /> },
+            { name: 'Admin Users', href: '/admin-users', icon: <UserPlus className="w-4 h-4" /> },
+            { name: 'Roles & Permissions', href: '/roles', icon: <ShieldCheck className="w-4 h-4" /> },
+        ],
+    },
+    {
+        name: 'Products',
+        icon: <Package className="w-5 h-5" />,
+        children: [
+            { name: 'Categories', href: '/categories', icon: <FolderTree className="w-4 h-4" /> },
+            { name: 'Sub Categories', href: '/subcategories', icon: <Layers className="w-4 h-4" /> },
+            { name: 'Products', href: '/products', icon: <Package className="w-4 h-4" /> },
+            // Product variations attribute library (migration 030 / D-7).
+            // Stripped RECURSIVELY when enable_variations is off — see stripByHref.
+            { name: 'Attributes', href: '/attributes', icon: <Tags className="w-4 h-4" /> },
+            // Customer reviews moderation (migration 033 / Phase H).
+            { name: 'Product Reviews', href: '/reviews', icon: <MessageSquare className="w-4 h-4" /> },
+        ],
+    },
+    {
+        name: 'Orders',
+        icon: <ShoppingCart className="w-5 h-5" />,
+        children: [
+            { name: 'Orders', href: '/orders', icon: <ShoppingCart className="w-4 h-4" /> },
+            { name: 'Day Orders', href: '/day-orders', icon: <Sun className="w-4 h-4" />, permissionKey: 'day-orders' },
+            { name: 'Transactions', href: '/transactions', icon: <CreditCard className="w-4 h-4" /> },
+            // Feature 07 — returnable packaging returns/refunds desk.
+            { name: 'Refunds & Returns', href: '/returns-refunds', icon: <RotateCcw className="w-4 h-4" />, permissionKey: 'packaging' },
+        ],
+    },
+    // The consolidated /notifications composer absorbed the standalone
+    // /broadcast page (that route redirects here) — gated by the existing
+    // `broadcast` permission so no RBAC migration. Deliberately TOP-LEVEL,
+    // not inside WhatsApp: since the channel slider it broadcasts on BOTH
+    // channels (in-app push via FCM and WhatsApp templates via msg91).
     { name: 'Notifications', href: '/notifications', icon: <Bell className="w-5 h-5" />, permissionKey: 'broadcast' },
-    // --- Communications (WhatsApp) --- (divider after 14)
-    // 15
     {
         name: 'WhatsApp',
         icon: <MessageCircle className="w-5 h-5" />,
@@ -173,8 +165,6 @@ const navItems: NavItem[] = [
             { name: 'Settings', href: '/whatsapp/settings', icon: <Settings className="w-4 h-4" /> },
         ],
     },
-    // --- CRM --- (divider after 15)
-    // 16
     {
         name: 'CRM',
         icon: <Phone className="w-5 h-5" />,
@@ -185,8 +175,9 @@ const navItems: NavItem[] = [
             { name: 'Call Scripts', href: '/crm/scripts', icon: <FileText className="w-4 h-4" /> },
         ],
     },
-    // --- LMS (Lead Management & Marketing System) --- (divider after 16)
-    // 17 — Phase 1 scaffolding; children populate as C-phases ship.
+    // LMS (Lead Management & Marketing System) — Phase 1 scaffolding;
+    // children populate as C-phases ship. (/lms/inbox was removed from the
+    // nav 2026-07 — that route was never built.)
     {
         name: 'LMS',
         icon: <Sparkles className="w-5 h-5" />,
@@ -201,7 +192,6 @@ const navItems: NavItem[] = [
             { name: 'Segments', href: '/lms/segments', icon: <Tags className="w-4 h-4" /> },
             { name: 'Campaigns', href: '/lms/campaigns', icon: <Megaphone className="w-4 h-4" /> },
             { name: 'Journeys', href: '/lms/journeys', icon: <Workflow className="w-4 h-4" /> },
-            { name: 'Inbox', href: '/lms/inbox', icon: <Inbox className="w-4 h-4" /> },
             { name: 'Inner Circle', href: '/lms/inner-circle', icon: <Sparkles className="w-4 h-4" /> },
             { name: 'WhatsApp Channels', href: '/lms/channels', icon: <Phone className="w-4 h-4" /> },
             { name: 'Privacy & Consent', href: '/lms/settings/privacy', icon: <ShieldCheck className="w-4 h-4" /> },
@@ -209,36 +199,10 @@ const navItems: NavItem[] = [
             { name: 'System & Jobs', href: '/lms/system', icon: <BarChart3 className="w-4 h-4" /> },
         ],
     },
-    // --- Archive --- (divider after 17)
-    // 18
-    {
-        name: 'Archive',
-        icon: <CalendarDays className="w-5 h-5" />,
-        children: [
-            { name: 'Upcoming Orders', href: '/upcoming-orders', icon: <ShoppingCart className="w-4 h-4" /> },
-            { name: 'Upcoming Subs', href: '/upcoming-subs-orders', icon: <CalendarDays className="w-4 h-4" /> },
-            { name: 'Pre-Packing List', href: '/production-delivery?tab=prepacking', icon: <Package className="w-4 h-4" /> },
-            { name: 'User Holidays', href: '/holidays', icon: <Calendar className="w-4 h-4" /> },
-            { name: 'Calendar', href: '/calendar', icon: <Calendar className="w-4 h-4" /> },
-            { name: 'Low Wallet', href: '/notifications/low-wallet', icon: <Wallet className="w-4 h-4" /> },
-            { name: 'Notification Log', href: '/notifications/log', icon: <Bell className="w-4 h-4" /> },
-        ],
-    },
-    // --- Admin --- (divider after 16)
-    // 17-18
-    { name: 'Admin Users', href: '/admin-users', icon: <Users className="w-5 h-5" /> },
-    { name: 'Roles & Permissions', href: '/roles', icon: <Settings className="w-5 h-5" /> },
-    // --- CMS --- (Payload, mounted at /admin via Next route group (payload))
-    // The Topbar Operations↔CMS toggle uses the same route. Adding a sidebar
-    // entry lets a role be granted CMS access without exposing the toggle to
-    // everyone — gated by the `cms` permission below.
-    { name: 'CMS', href: '/admin', icon: <Globe className="w-5 h-5" />, permissionKey: 'cms' },
-    // --- Accounting (AI-Accountant: GST invoicing, ledgers, Tally) ---
-    // One home for everything financial. The parent is a pure CONTAINER (no
-    // permissionKey) so inventory/production-only staff still reach their
-    // sections; gating happens per-leaf via the href segment (accounting /
-    // inventory / production). Inventory + Production were folded in here from
-    // their former top-level slots (Accounting ▸ Inventory ▸ Production).
+    // Accounting (AI-Accountant: GST invoicing, ledgers, Tally). The parent is
+    // a pure CONTAINER (no permissionKey) so inventory/production-only staff
+    // still reach their sections; gating happens per-leaf via the href segment
+    // (accounting / inventory / production).
     {
         name: 'Accounting',
         icon: <Calculator className="w-5 h-5" />,
@@ -311,23 +275,63 @@ const navItems: NavItem[] = [
             },
         ],
     },
+    // Catch-all for config screens (App Updates, Delivery Locations, Drop
+    // Points, Notification Images, Packaging Types were relocated here long
+    // ago; Pincodes + CMS joined in the 2026-07 reorg).
+    {
+        name: 'Settings',
+        icon: <Settings className="w-5 h-5" />,
+        children: [
+            { name: 'General', href: '/settings', icon: <Settings className="w-4 h-4" /> },
+            { name: 'Server Health', href: '/settings/server-health', icon: <Activity className="w-4 h-4" /> },
+            { name: 'Automation', href: '/settings/automation', icon: <Clock className="w-4 h-4" /> },
+            { name: 'Notifications & Templates', href: '/settings/notifications', icon: <Bell className="w-4 h-4" /> },
+            { name: 'Notification Mapping', href: '/settings/notification-maps', icon: <Workflow className="w-4 h-4" /> },
+            { name: 'Web App', href: '/settings/webapp', icon: <Globe className="w-4 h-4" /> },
+            { name: 'Invoice', href: '/settings/invoice', icon: <Receipt className="w-4 h-4" /> },
+            { name: 'Payment Gateway', href: '/settings/payment', icon: <Banknote className="w-4 h-4" /> },
+            { name: 'Social Media', href: '/settings/social-media', icon: <Share2 className="w-4 h-4" /> },
+            { name: 'Refund Reasons', href: '/settings/refund-reasons', icon: <RotateCcw className="w-4 h-4" />, permissionKey: 'refunds' },
+            { name: 'Transaction Descriptions', href: '/settings/transaction-descriptions', icon: <Receipt className="w-4 h-4" /> },
+            { name: 'Banners', href: '/banners', icon: <Image className="w-4 h-4" /> },
+            { name: 'Testimonials', href: '/testimonials', icon: <MessageSquare className="w-4 h-4" /> },
+            { name: 'Pages', href: '/pages', icon: <FileText className="w-4 h-4" /> },
+            { name: 'App Updates', href: '/app-updates', icon: <Smartphone className="w-4 h-4" />, permissionKey: 'app-updates' },
+            { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-4 h-4" /> },
+            { name: 'Drop Points', href: '/drop-points', icon: <MapPin className="w-4 h-4" />, permissionKey: 'drop-points' },
+            { name: 'Pincodes', href: '/pincodes', icon: <MapPin className="w-4 h-4" /> },
+            { name: 'Notification Images', href: '/notifications/images', icon: <Image className="w-4 h-4" />, permissionKey: 'notifications' },
+            { name: 'Packaging Types', href: '/packaging-types', icon: <PackageCheck className="w-4 h-4" />, permissionKey: 'packaging' },
+            // Phase I — multi-currency + multi-warehouse foundations.
+            { name: 'Currencies', href: '/settings/currencies', icon: <Globe className="w-4 h-4" /> },
+            { name: 'Warehouses', href: '/settings/warehouses', icon: <Warehouse className="w-4 h-4" /> },
+            // CMS (Payload, mounted at /admin via the (payload) route group) —
+            // gated by the `cms` permission, opens in a NEW TAB (external).
+            { name: 'CMS', href: '/admin', icon: <Globe className="w-4 h-4" />, permissionKey: 'cms', external: true },
+        ],
+    },
+    {
+        name: 'Archive',
+        icon: <CalendarDays className="w-5 h-5" />,
+        children: [
+            { name: 'Upcoming Orders', href: '/upcoming-orders', icon: <ShoppingCart className="w-4 h-4" /> },
+            { name: 'Upcoming Subs', href: '/upcoming-subs-orders', icon: <CalendarDays className="w-4 h-4" /> },
+            { name: 'Pre-Packing List', href: '/production-delivery?tab=prepacking', icon: <Package className="w-4 h-4" /> },
+            { name: 'User Holidays', href: '/holidays', icon: <Calendar className="w-4 h-4" /> },
+            { name: 'Calendar', href: '/calendar', icon: <Calendar className="w-4 h-4" /> },
+            { name: 'Low Wallet', href: '/notifications/low-wallet', icon: <Wallet className="w-4 h-4" /> },
+            { name: 'Notification Log', href: '/notifications/log', icon: <Bell className="w-4 h-4" /> },
+        ],
+    },
 ];
-
-/**
- * Top-level item names that get a trailing section divider. Declarative + keyed
- * by name (not array index) so reordering or re-parenting nav items can't shift
- * the dividers — replaces the old fragile positional `index === N` checks.
- */
-const DIVIDER_AFTER = new Set<string>([
-    'Dashboard', 'Business Pulse', 'Delivery List', 'Performance Report', 'Users', 'Products',
-    'Transactions', 'Refunds', 'Payroll', 'Settings', 'Notifications',
-    'WhatsApp', 'CRM', 'LMS', 'CMS',
-]);
 
 interface SidebarProps {
     isOpen: boolean;
     onToggle: () => void;
     collapsed?: boolean;
+    /** Un-collapse the desktop rail (used by the rail's search button so
+     *  focusing search always lands in a visible input). */
+    onExpandSidebar?: () => void;
 }
 
 /**
@@ -397,21 +401,77 @@ const filterNav = (
     return result;
 };
 
-/** First navigable href at/under an item — used for the collapsed icon-rail,
- *  where a group can't expand so its icon links to its first leaf. */
-const firstLeafHref = (item: NavItem): string | undefined => {
-    if (item.href) return item.href;
+/** Remove a leaf by href ANYWHERE in the tree, dropping groups that empty out.
+ *  (The old top-level `.filter()` silently stopped working once Attributes
+ *  moved into the Products group.) */
+const stripByHref = (items: NavItem[], href: string): NavItem[] =>
+    items.flatMap((item): NavItem[] => {
+        if (item.href === href) return [];
+        if (!item.children) return [item];
+        const kids = stripByHref(item.children, href);
+        return kids.length ? [{ ...item, children: kids }] : [];
+    });
+
+/** First navigable LEAF at/under an item — the collapsed icon-rail can't
+ *  expand groups, so its icon links to this leaf (honouring `external`). */
+const firstLeaf = (item: NavItem): NavItem | undefined => {
+    if (item.href) return item;
     for (const child of item.children ?? []) {
-        const h = firstLeafHref(child);
-        if (h) return h;
+        const leaf = firstLeaf(child);
+        if (leaf) return leaf;
     }
     return undefined;
 };
 
-export default function Sidebar({ isOpen, onToggle, collapsed = false }: SidebarProps) {
+/** Case-insensitive substring filter over item names. A matching group keeps
+ *  its whole subtree; a matching leaf keeps its ancestor chain. */
+const filterByQuery = (items: NavItem[], q: string): NavItem[] => {
+    const out: NavItem[] = [];
+    for (const item of items) {
+        const selfMatch = item.name.toLowerCase().includes(q);
+        if (item.children) {
+            if (selfMatch) {
+                out.push(item);
+                continue;
+            }
+            const kids = filterByQuery(item.children, q);
+            if (kids.length) out.push({ ...item, children: kids });
+            continue;
+        }
+        if (selfMatch) out.push(item);
+    }
+    return out;
+};
+
+/** Every group key (path-keyed like renderNode: "Accounting/Reports") in a
+ *  tree — search results render with all their groups forced open. */
+const collectGroupKeys = (
+    items: NavItem[],
+    parentKey = '',
+    acc: Set<string> = new Set(),
+): Set<string> => {
+    for (const item of items) {
+        const key = parentKey ? `${parentKey}/${item.name}` : item.name;
+        if (item.children && item.children.length) {
+            acc.add(key);
+            collectGroupKeys(item.children, key, acc);
+        }
+    }
+    return acc;
+};
+
+// Expanded-groups persistence (localStorage). Restored in a mount effect —
+// NOT the useState initializer — for the same SSR-hydration reason the layout
+// restores 'sidebar-collapsed' in an effect.
+const EXPANDED_STORAGE_KEY = 'sidebar-expanded';
+
+export default function Sidebar({ isOpen, onToggle, collapsed = false, onExpandSidebar }: SidebarProps) {
     const pathname = usePathname();
     const { hasPermission } = useAuth();
     const [expandedItems, setExpandedItems] = useState<string[]>([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const hydratedRef = useRef(false);
     // Variations (migration 030). app_setting key `enable_variations` gates
     // the Attributes nav entry per-tenant. Default OFF until the operator
     // opts in — keeps the admin clean for tenants that don't use variations.
@@ -423,8 +483,22 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
     const visibleNavItems = useMemo(() => {
         const roleFiltered = filterNav(navItems, hasPermission);
         if (variationsEnabled) return roleFiltered;
-        return roleFiltered.filter((item) => item.href !== '/attributes');
+        return stripByHref(roleFiltered, '/attributes');
     }, [hasPermission, variationsEnabled]);
+
+    // Sidebar search — filters the permission-filtered tree; while searching,
+    // every surviving group is forced open (forcedExpanded overrides the
+    // user's expandedItems without mutating it).
+    const query = searchQuery.trim().toLowerCase();
+    const searching = query.length > 0;
+    const displayedNavItems = useMemo(
+        () => (searching ? filterByQuery(visibleNavItems, query) : visibleNavItems),
+        [visibleNavItems, query, searching],
+    );
+    const forcedExpanded = useMemo(
+        () => (searching ? collectGroupKeys(displayedNavItems) : null),
+        [displayedNavItems, searching],
+    );
 
     // Expansion is keyed by the '/'-joined name PATH (e.g. "Accounting/Settings")
     // not the bare name, so duplicate labels at different depths (two "Settings",
@@ -435,8 +509,40 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
         );
     };
 
+    // Restore persisted expanded groups once on mount, then persist on change.
+    // The restore merges (union) so the active-route auto-expand below never
+    // fights it; the hydratedRef guard keeps the first render's empty state
+    // from mattering (we already read the stored value into memory).
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(EXPANDED_STORAGE_KEY);
+            if (raw) {
+                const saved: unknown = JSON.parse(raw);
+                if (Array.isArray(saved)) {
+                    const keys = saved.filter((s): s is string => typeof s === 'string');
+                    if (keys.length) {
+                        setExpandedItems(prev => Array.from(new Set([...prev, ...keys])));
+                    }
+                }
+            }
+        } catch {
+            // Corrupted stored state — start fresh.
+        }
+        hydratedRef.current = true;
+    }, []);
+    useEffect(() => {
+        if (!hydratedRef.current) return;
+        try {
+            localStorage.setItem(EXPANDED_STORAGE_KEY, JSON.stringify(expandedItems));
+        } catch {
+            // Storage unavailable (private mode / quota) — expansion just won't persist.
+        }
+    }, [expandedItems]);
+
     // Every href anywhere in the visible tree (recursive) — used to decide whether
     // a prefix match is safe (don't light up a parent route when a child is active).
+    // Reads the FULL visible tree (not the search-filtered one) so active-route
+    // detection stays stable mid-search.
     const allHrefs = useMemo(() => {
         const acc: string[] = [];
         const walk = (items: NavItem[]) => items.forEach((i) => {
@@ -452,6 +558,12 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
         const hasSibling = allHrefs.some(h => h !== href && h.startsWith(href + '/'));
         if (hasSibling) return false;
         return pathname.startsWith(href + '/');
+    };
+
+    /** Any leaf under this item active? Lights the collapsed rail's group icons. */
+    const subtreeHasActive = (item: NavItem): boolean => {
+        if (item.href && !item.external && isActive(item.href)) return true;
+        return (item.children ?? []).some(subtreeHasActive);
     };
 
     // Auto-expand the FULL ancestor chain (Accounting ▸ Inventory ▸ Production …)
@@ -482,7 +594,7 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
     const renderNode = (item: NavItem, depth: number, parentKey: string): React.ReactNode => {
         const key = parentKey ? `${parentKey}/${item.name}` : item.name;
         if (item.children && item.children.length) {
-            const expanded = expandedItems.includes(key);
+            const expanded = forcedExpanded ? forcedExpanded.has(key) : expandedItems.includes(key);
             return (
                 <div>
                     <button
@@ -505,14 +617,21 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                 </div>
             );
         }
-        const active = isActive(item.href!);
+        const active = !item.external && isActive(item.href!);
+        const leafClasses = `flex items-center gap-3 px-3 ${depth === 0 ? 'py-2.5' : 'py-2'} rounded-lg transition-all duration-200 ${active
+            ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+            : `${depth === 0 ? 'text-slate-300' : 'text-slate-400'} hover:bg-slate-800/50 hover:text-white`}`;
+        const clearSearch = () => { if (searchQuery) setSearchQuery(''); };
+        if (item.external) {
+            return (
+                <a href={item.href!} target="_blank" rel="noopener noreferrer" className={leafClasses} onClick={clearSearch}>
+                    {item.icon}
+                    <span className={depth === 0 ? 'font-medium' : 'text-sm'}>{item.name}</span>
+                </a>
+            );
+        }
         return (
-            <Link
-                href={item.href!}
-                className={`flex items-center gap-3 px-3 ${depth === 0 ? 'py-2.5' : 'py-2'} rounded-lg transition-all duration-200 ${active
-                    ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                    : `${depth === 0 ? 'text-slate-300' : 'text-slate-400'} hover:bg-slate-800/50 hover:text-white`}`}
-            >
+            <Link href={item.href!} className={leafClasses} onClick={clearSearch}>
                 {item.icon}
                 <span className={depth === 0 ? 'font-medium' : 'text-sm'}>{item.name}</span>
             </Link>
@@ -568,38 +687,90 @@ export default function Sidebar({ isOpen, onToggle, collapsed = false }: Sidebar
                     </div>
                 </div>
 
+                {/* Menu search */}
+                {!collapsed && (
+                    <div className="px-3 pt-4">
+                        <div className="relative">
+                            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <input
+                                ref={searchInputRef}
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Escape') {
+                                        setSearchQuery('');
+                                        (e.target as HTMLInputElement).blur();
+                                    }
+                                }}
+                                placeholder="Search menu…"
+                                className="w-full bg-slate-800/50 border border-slate-700/50 rounded-lg pl-9 pr-8 py-2 text-sm text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-purple-500/50"
+                            />
+                            {searchQuery && (
+                                <button
+                                    onClick={() => setSearchQuery('')}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-slate-500 hover:text-white transition-colors"
+                                    title="Clear search"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+                {collapsed && (
+                    <div className="px-2 pt-3">
+                        <button
+                            onClick={() => {
+                                onExpandSidebar?.();
+                                setTimeout(() => searchInputRef.current?.focus(), 50);
+                            }}
+                            className="w-full flex items-center justify-center p-2.5 rounded-lg text-slate-300 hover:bg-slate-800/50 hover:text-white transition-all duration-200"
+                            title="Search menu"
+                        >
+                            <Search className="w-5 h-5" />
+                        </button>
+                    </div>
+                )}
+
                 {/* Navigation */}
                 <nav className={`flex-1 overflow-y-auto py-4 ${collapsed ? 'px-2' : 'px-3'}`}>
                     <ul className="space-y-1">
-                        {visibleNavItems.map((item) => (
-                            <li key={item.name}>
-                                {collapsed ? (
-                                    /* Collapsed icon-rail: groups can't expand, so link to
-                                       the first navigable leaf at/under the item. */
-                                    <Link
-                                        href={firstLeafHref(item) || '#'}
-                                        className={`
-                                            flex items-center justify-center p-2.5 rounded-lg
-                                            transition-all duration-200
-                                            ${item.href && isActive(item.href)
-                                                ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                                                : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'
-                                            }
-                                        `}
-                                        title={item.name}
-                                    >
-                                        {item.icon}
-                                    </Link>
-                                ) : (
-                                    renderNode(item, 0, '')
-                                )}
-                                {/* Declarative section divider — see DIVIDER_AFTER. */}
-                                {!collapsed && DIVIDER_AFTER.has(item.name) && (
-                                    <div className="my-3 border-t border-slate-800/50" />
-                                )}
-                            </li>
-                        ))}
+                        {displayedNavItems.map((item) => {
+                            const railLeaf = collapsed ? firstLeaf(item) : undefined;
+                            return (
+                                <li key={item.name}>
+                                    {collapsed ? (
+                                        /* Collapsed icon-rail: groups can't expand, so link to
+                                           the first navigable leaf at/under the item. */
+                                        <Link
+                                            href={railLeaf?.href || '#'}
+                                            target={railLeaf?.external ? '_blank' : undefined}
+                                            rel={railLeaf?.external ? 'noopener noreferrer' : undefined}
+                                            className={`
+                                                flex items-center justify-center p-2.5 rounded-lg
+                                                transition-all duration-200
+                                                ${subtreeHasActive(item)
+                                                    ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                                                    : 'text-slate-300 hover:bg-slate-800/50 hover:text-white'
+                                                }
+                                            `}
+                                            title={item.name}
+                                        >
+                                            {item.icon}
+                                        </Link>
+                                    ) : (
+                                        renderNode(item, 0, '')
+                                    )}
+                                </li>
+                            );
+                        })}
                     </ul>
+                    {searching && displayedNavItems.length === 0 && (
+                        <p className="px-3 py-6 text-sm text-slate-500 text-center">
+                            No menu items match &ldquo;{searchQuery}&rdquo;
+                        </p>
+                    )}
                 </nav>
             </aside>
         </>

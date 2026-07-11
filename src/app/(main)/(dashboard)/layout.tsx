@@ -58,7 +58,15 @@ export default function DashboardLayout({
 
     return (
         <div className="min-h-screen bg-slate-950 flex">
-            <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} collapsed={sidebarCollapsed} />
+            <Sidebar
+                isOpen={sidebarOpen}
+                onToggle={() => setSidebarOpen(!sidebarOpen)}
+                collapsed={sidebarCollapsed}
+                onExpandSidebar={() => {
+                    setSidebarCollapsed(false);
+                    localStorage.setItem('sidebar-collapsed', 'false');
+                }}
+            />
 
             <div className="flex-1 flex flex-col min-w-0">
                 <Topbar

@@ -7,6 +7,51 @@ import { getAppSetting } from "@/lib/whatsapp/settings";
 export async function POST(request: NextRequest) {
     const { orgId } = getRequestContext(request.headers);
     const body = await request.json();
+
+    // ─── Internal note: persist only, never hits a provider ──
+    // Handled before number/provider resolution so notes work even when no
+    // integrated number is configured.
+    if (body.isInternalNote === true && body.conversationId) {
+        const { data: note, error: noteError } = await supabaseAdmin
+            .from("messages")
+            .insert({
+                conversation_id: body.conversationId,
+                direction: "outbound",
+                content_type: "text",
+                body: body.text,
+                status: "sent",
+                is_internal_note: true,
+                integrated_number: body.integratedNumber || null,
+                source: "webapp",
+            })
+            .select()
+            .single();
+
+        if (noteError) {
+            console.error("[Chat Send] Internal note persist error:", noteError);
+            return NextResponse.json(
+                { error: noteError.message },
+                { status: 500 }
+            );
+        }
+
+        // Deliberately no conversations.last_message / status update — notes
+        // are team-only and must not alter the customer-facing thread state.
+        return NextResponse.json({
+            id: note.id,
+            conversationId: note.conversation_id,
+            direction: note.direction,
+            contentType: note.content_type || "text",
+            body: note.body || "",
+            mediaUrl: note.media_url || undefined,
+            fileName: note.file_name || undefined,
+            status: note.status || "sent",
+            isInternalNote: note.is_internal_note || false,
+            timestamp: note.created_at,
+            source: note.source || "webapp",
+        });
+    }
+
     const {
         to,
         contentType,

@@ -13,6 +13,8 @@ interface ConfirmDialogProps {
     cancelText?: string;
     variant?: 'danger' | 'default';
     isLoading?: boolean;
+    /** Optional extra content (inputs, notes…) rendered below the message. */
+    children?: React.ReactNode;
 }
 
 export default function ConfirmDialog({
@@ -25,6 +27,7 @@ export default function ConfirmDialog({
     cancelText = 'Cancel',
     variant = 'default',
     isLoading = false,
+    children,
 }: ConfirmDialogProps) {
     const modalRef = useRef<HTMLDivElement>(null);
 
@@ -81,6 +84,7 @@ export default function ConfirmDialog({
 
                 <div className="p-4">
                     <p className="text-slate-300 text-sm">{message}</p>
+                    {children}
                 </div>
 
                 <div className="flex gap-3 p-4 border-t border-slate-800/50">

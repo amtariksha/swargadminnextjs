@@ -159,7 +159,7 @@ function ConversationItem({
                         <span className="text-[9px] font-medium text-slate-400 uppercase tracking-wider">Resolved</span>
                     )}
                     {conversation.assignedTo && (
-                        <span className="text-[9px] font-medium text-indigo-400 uppercase tracking-wider">Assigned</span>
+                        <span className="text-[9px] font-medium text-indigo-400 uppercase tracking-wider">{conversation.assignedName || "Assigned"}</span>
                     )}
                 </div>
             )}
