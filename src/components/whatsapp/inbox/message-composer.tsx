@@ -17,6 +17,9 @@ import {
     LayoutList,
     ShoppingBag,
     CreditCard,
+    Plus,
+    MapPin,
+    Users,
 } from "lucide-react";
 import { Button } from "@/components/whatsapp/ui/button";
 import { Textarea } from "@/components/whatsapp/ui/textarea";
@@ -509,28 +512,32 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
                             </div>
                         )}
 
+                        {/* Secondary action (desktop-only wrapper): below md this moves
+                            into the "+" menu rendered after the template button. */}
                         {!sessionExpired && !isInternalNote && (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={handleSuggest}
-                                        disabled={suggestLoading}
-                                        className="h-9 w-9 text-slate-400 hover:text-purple-500"
-                                    >
-                                        {suggestLoading ? (
-                                            <Loader2 className="w-4.5 h-4.5 animate-spin" />
-                                        ) : (
-                                            <Sparkles className="w-4.5 h-4.5" />
-                                        )}
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                    Suggest reply (AI draft — you send it)
-                                </TooltipContent>
-                            </Tooltip>
+                            <div className="hidden md:flex items-center gap-1.5">
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={handleSuggest}
+                                            disabled={suggestLoading}
+                                            className="h-9 w-9 text-slate-400 hover:text-purple-500"
+                                        >
+                                            {suggestLoading ? (
+                                                <Loader2 className="w-4.5 h-4.5 animate-spin" />
+                                            ) : (
+                                                <Sparkles className="w-4.5 h-4.5" />
+                                            )}
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        Suggest reply (AI draft — you send it)
+                                    </TooltipContent>
+                                </Tooltip>
+                            </div>
                         )}
 
                         {!sessionExpired && (
@@ -550,109 +557,178 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
                             </Tooltip>
                         )}
 
-                        {!sessionExpired && !isInternalNote && (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => setInteractiveDialogOpen(true)}
-                                        className="h-9 w-9 text-slate-400 hover:text-indigo-500"
-                                    >
-                                        <MessageSquareText className="w-4.5 h-4.5" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Add Buttons / Interactive Message</TooltipContent>
-                            </Tooltip>
-                        )}
-
-                        {!sessionExpired && !isInternalNote && (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => setListDialogOpen(true)}
-                                        className="h-9 w-9 text-slate-400 hover:text-indigo-500"
-                                    >
-                                        <LayoutList className="w-4.5 h-4.5" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Send List Message</TooltipContent>
-                            </Tooltip>
-                        )}
-
-                        {!sessionExpired && !isInternalNote && (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => setCatalogDialogOpen(true)}
-                                        className="h-9 w-9 text-slate-400 hover:text-emerald-500"
-                                    >
-                                        <ShoppingBag className="w-4.5 h-4.5" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Send Product Catalog</TooltipContent>
-                            </Tooltip>
-                        )}
-
-                        {!sessionExpired && !isInternalNote && (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => setLocationDialogOpen(true)}
-                                        className="h-9 w-9 text-slate-400 hover:text-indigo-500"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" /></svg>
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Share Location</TooltipContent>
-                            </Tooltip>
-                        )}
-
-                        {!sessionExpired && !isInternalNote && (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => setContactDialogOpen(true)}
-                                        className="h-9 w-9 text-slate-400 hover:text-indigo-500"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Share Contact (vCard)</TooltipContent>
-                            </Tooltip>
-                        )}
-
+                        {/* Secondary actions (desktop-only wrapper): inline on md+
+                            exactly as before; below md they collapse into the "+"
+                            menu below. Inner conditions unchanged. */}
                         {!isInternalNote && (
-                            <DropdownMenu>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <DropdownMenuTrigger asChild>
+                            <div className="hidden md:flex items-center gap-1.5">
+                                {!sessionExpired && !isInternalNote && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
                                             <Button
                                                 type="button"
                                                 variant="ghost"
                                                 size="icon"
-                                                className="h-9 w-9 text-slate-400 hover:text-emerald-600"
+                                                onClick={() => setInteractiveDialogOpen(true)}
+                                                className="h-9 w-9 text-slate-400 hover:text-indigo-500"
                                             >
-                                                <IndianRupee className="w-4.5 h-4.5" />
+                                                <MessageSquareText className="w-4.5 h-4.5" />
                                             </Button>
-                                        </DropdownMenuTrigger>
-                                    </TooltipTrigger>
-                                    <TooltipContent>Payment Options</TooltipContent>
-                                </Tooltip>
-                                <DropdownMenuContent align="end" className="w-48">
+                                        </TooltipTrigger>
+                                        <TooltipContent>Add Buttons / Interactive Message</TooltipContent>
+                                    </Tooltip>
+                                )}
+
+                                {!sessionExpired && !isInternalNote && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setListDialogOpen(true)}
+                                                className="h-9 w-9 text-slate-400 hover:text-indigo-500"
+                                            >
+                                                <LayoutList className="w-4.5 h-4.5" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Send List Message</TooltipContent>
+                                    </Tooltip>
+                                )}
+
+                                {!sessionExpired && !isInternalNote && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setCatalogDialogOpen(true)}
+                                                className="h-9 w-9 text-slate-400 hover:text-emerald-500"
+                                            >
+                                                <ShoppingBag className="w-4.5 h-4.5" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Send Product Catalog</TooltipContent>
+                                    </Tooltip>
+                                )}
+
+                                {!sessionExpired && !isInternalNote && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setLocationDialogOpen(true)}
+                                                className="h-9 w-9 text-slate-400 hover:text-indigo-500"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" /></svg>
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Share Location</TooltipContent>
+                                    </Tooltip>
+                                )}
+
+                                {!sessionExpired && !isInternalNote && (
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button
+                                                type="button"
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => setContactDialogOpen(true)}
+                                                className="h-9 w-9 text-slate-400 hover:text-indigo-500"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>Share Contact (vCard)</TooltipContent>
+                                    </Tooltip>
+                                )}
+
+                                {!isInternalNote && (
+                                    <DropdownMenu>
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-9 w-9 text-slate-400 hover:text-emerald-600"
+                                                    >
+                                                        <IndianRupee className="w-4.5 h-4.5" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                            </TooltipTrigger>
+                                            <TooltipContent>Payment Options</TooltipContent>
+                                        </Tooltip>
+                                        <DropdownMenuContent align="end" className="w-48">
+                                            <DropdownMenuItem onClick={() => setPaymentDialogOpen(true)}>
+                                                <IndianRupee className="w-4 h-4 mr-2" />
+                                                Razorpay Link
+                                            </DropdownMenuItem>
+                                            {!sessionExpired && (
+                                                <DropdownMenuItem onClick={() => setWaPaymentDialogOpen(true)}>
+                                                    <CreditCard className="w-4 h-4 mr-2" />
+                                                    WA Payment
+                                                </DropdownMenuItem>
+                                            )}
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Secondary actions (mobile): one "+" trigger opening a menu of
+                            labeled rows. Same handlers and session-expired gating as the
+                            desktop buttons above — layout-only split. */}
+                        {!isInternalNote && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-9 w-9 md:hidden text-slate-400 hover:text-slate-600"
+                                    >
+                                        <Plus className="w-4.5 h-4.5" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56">
+                                    {!sessionExpired && (
+                                        <>
+                                            <DropdownMenuItem onClick={handleSuggest} disabled={suggestLoading}>
+                                                {suggestLoading ? (
+                                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                ) : (
+                                                    <Sparkles className="w-4 h-4 mr-2" />
+                                                )}
+                                                Suggest Reply (AI)
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => setInteractiveDialogOpen(true)}>
+                                                <MessageSquareText className="w-4 h-4 mr-2" />
+                                                Interactive Message
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => setListDialogOpen(true)}>
+                                                <LayoutList className="w-4 h-4 mr-2" />
+                                                List Message
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => setCatalogDialogOpen(true)}>
+                                                <ShoppingBag className="w-4 h-4 mr-2" />
+                                                Product Catalog
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => setLocationDialogOpen(true)}>
+                                                <MapPin className="w-4 h-4 mr-2" />
+                                                Share Location
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => setContactDialogOpen(true)}>
+                                                <Users className="w-4 h-4 mr-2" />
+                                                Share Contact (vCard)
+                                            </DropdownMenuItem>
+                                        </>
+                                    )}
                                     <DropdownMenuItem onClick={() => setPaymentDialogOpen(true)}>
                                         <IndianRupee className="w-4 h-4 mr-2" />
                                         Razorpay Link
