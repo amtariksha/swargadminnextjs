@@ -8,7 +8,7 @@ import DaytimeOrderForm from '@/components/DaytimeOrderForm';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { PodImage } from '@/components/PodImage';
 import { POST, PUT, ApiError } from '@/lib/api';
-import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog, CalendarClock, RefreshCw, Truck, FileText, Pencil } from 'lucide-react';
+import { ArrowLeft, Sun, Link2, Banknote, Wallet, XCircle, ExternalLink, CheckCircle2, MessageCircle, RotateCcw, UserCog, CalendarClock, RefreshCw, Truck, FileText, Pencil, SlidersHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 
 const PAID_STATES = ['paid', 'cash', 'wallet_deducted'];
@@ -21,6 +21,14 @@ export default function DaytimeOrderDetailPage() {
     const [busy, setBusy] = useState<string | null>(null);
     const [confirmCancel, setConfirmCancel] = useState(false);
     const [confirmPay, setConfirmPay] = useState<'cash' | 'wallet' | null>(null);
+    // Post-delivery adjustment (unpaid orders only): edit qty/price + reason.
+    // Saving cancels an outstanding payment link server-side — the exec then
+    // generates a fresh one at the corrected amount.
+    const [adjustOpen, setAdjustOpen] = useState(false);
+    const [adjustRows, setAdjustRows] = useState<{ id: number; title: string; qty: string; unit_price: string }[]>([]);
+    const [adjustDiscount, setAdjustDiscount] = useState('0');
+    const [adjustShipping, setAdjustShipping] = useState('0');
+    const [adjustReason, setAdjustReason] = useState('');
     // Mark-cash provenance: optional note (who took the cash) + screenshot.
     const [paymentNote, setPaymentNote] = useState('');
     const [proofFile, setProofFile] = useState<File | null>(null);
@@ -215,6 +223,34 @@ export default function DaytimeOrderDetailPage() {
             <button onClick={() => router.push('/day-orders')} className="mt-4 text-purple-400">Back to Day Orders</button></div>;
     }
 
+    const openAdjust = () => {
+        setAdjustRows((order?.items || []).filter((it) => it.id != null).map((it) => ({
+            id: it.id as number,
+            title: it.product_title || `#${it.product_id}`,
+            qty: String(it.qty),
+            unit_price: String(it.unit_price),
+        })));
+        setAdjustDiscount(String(order?.discount_flat ?? 0));
+        setAdjustShipping(String(order?.shipping_charges ?? 0));
+        setAdjustReason('');
+        setAdjustOpen(true);
+    };
+
+    const adjustTotal = () => {
+        const sub = adjustRows.reduce((s, r) => s + (Number(r.qty) || 0) * (Number(r.unit_price) || 0), 0);
+        return Math.max(0, sub - (Number(adjustDiscount) || 0) + (Number(adjustShipping) || 0));
+    };
+
+    const submitAdjust = () => {
+        if (!adjustReason.trim()) { toast.error('A reason for the adjustment is required'); return; }
+        runAction('adjust', () => POST(`/daytime/orders/${id}/adjust`, {
+            items: adjustRows.map((r) => ({ id: r.id, qty: Number(r.qty), unit_price: Number(r.unit_price) })),
+            discount_flat: Number(adjustDiscount) || 0,
+            shipping_charges: Number(adjustShipping) || 0,
+            reason: adjustReason.trim(),
+        }), 'Order adjusted — send a fresh payment link if needed').then(() => setAdjustOpen(false));
+    };
+
     const isPaid = PAID_STATES.includes(order.payment_status);
     const isCancelled = order.order_status === 'cancelled';
     const isDelivered = order.order_status === 'delivered';
@@ -334,6 +370,13 @@ export default function DaytimeOrderDetailPage() {
                             className="flex items-center gap-2 px-4 py-2 text-sm bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl hover:bg-amber-500/30 disabled:opacity-50">
                             <MessageCircle className="w-4 h-4" /> {busy === 'reminder' ? 'Sending…' : 'Send reminder'}
                         </button>
+                        {order.entry_type !== 'b2b_catering' && (
+                            <button onClick={openAdjust} disabled={busy !== null || adjustOpen}
+                                title="Correct cost/quantity after delivery — cancels an outstanding payment link"
+                                className="flex items-center gap-2 px-4 py-2 text-sm bg-slate-800/60 text-slate-200 rounded-xl hover:bg-slate-800 disabled:opacity-50">
+                                <SlidersHorizontal className="w-4 h-4" /> Adjust order
+                            </button>
+                        )}
                         {!isDelivered && (
                             <button onClick={() => setConfirmCancel(true)} disabled={busy !== null}
                                 className="flex items-center gap-2 px-4 py-2 text-sm bg-red-500/20 text-red-300 border border-red-500/30 rounded-xl hover:bg-red-500/30 disabled:opacity-50">
@@ -341,6 +384,61 @@ export default function DaytimeOrderDetailPage() {
                             </button>
                         )}
                     </div>
+                    {order.payment_note && !adjustOpen && (
+                        <p className="text-sm text-amber-400/80">Note: {order.payment_note}</p>
+                    )}
+                    {adjustOpen && (
+                        <div className="space-y-3 max-w-2xl border border-slate-700/50 rounded-xl p-4 bg-slate-900/40">
+                            <div className="flex items-center justify-between gap-3">
+                                <h4 className="text-sm font-semibold text-white">Adjust order — quantity & cost</h4>
+                                {order.payment_short_url && (
+                                    <span className="text-xs text-amber-300/90">The sent payment link will be cancelled</span>
+                                )}
+                            </div>
+                            {adjustRows.map((r, i) => (
+                                <div key={r.id} className="grid grid-cols-[1fr_90px_110px_90px] gap-2 items-center">
+                                    <span className="text-sm text-slate-300 truncate" title={r.title}>{r.title}</span>
+                                    <input type="number" min="0" step="any" value={r.qty} placeholder="Qty"
+                                        onChange={(e) => setAdjustRows((rows) => rows.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))}
+                                        className="px-2 py-1.5 text-sm bg-slate-900/50 border border-slate-700/50 rounded-lg text-white" />
+                                    <input type="number" min="0" step="any" value={r.unit_price} placeholder="Price ₹"
+                                        onChange={(e) => setAdjustRows((rows) => rows.map((x, j) => (j === i ? { ...x, unit_price: e.target.value } : x)))}
+                                        className="px-2 py-1.5 text-sm bg-slate-900/50 border border-slate-700/50 rounded-lg text-white" />
+                                    <span className="text-sm text-slate-400 text-right">
+                                        ₹{((Number(r.qty) || 0) * (Number(r.unit_price) || 0)).toFixed(2)}
+                                    </span>
+                                </div>
+                            ))}
+                            <div className="flex flex-wrap items-center gap-3 text-sm">
+                                <label className="flex items-center gap-1.5 text-slate-400">Discount ₹
+                                    <input type="number" min="0" step="any" value={adjustDiscount} onChange={(e) => setAdjustDiscount(e.target.value)}
+                                        className="w-20 px-2 py-1 bg-slate-900/50 border border-slate-700/50 rounded-lg text-white" />
+                                </label>
+                                <label className="flex items-center gap-1.5 text-slate-400">Shipping ₹
+                                    <input type="number" min="0" step="any" value={adjustShipping} onChange={(e) => setAdjustShipping(e.target.value)}
+                                        className="w-20 px-2 py-1 bg-slate-900/50 border border-slate-700/50 rounded-lg text-white" />
+                                </label>
+                                <span className="ml-auto text-white font-medium">
+                                    New total: ₹{adjustTotal().toFixed(2)}
+                                    <span className="text-slate-500 font-normal"> (was ₹{Number(order.total_amount).toFixed(2)})</span>
+                                </span>
+                            </div>
+                            <textarea value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} maxLength={200} rows={2}
+                                placeholder="Reason for the adjustment (required — e.g. delivered 150gm instead of 200gm)"
+                                className="w-full px-3 py-2 text-sm bg-slate-900/50 border border-slate-700/50 rounded-xl text-white placeholder-slate-500" />
+                            <div className="flex gap-2">
+                                <button onClick={submitAdjust}
+                                    disabled={busy !== null || !adjustReason.trim() || adjustTotal() <= 0}
+                                    className="px-3 py-1.5 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded-lg disabled:opacity-50">
+                                    {busy === 'adjust' ? 'Saving…' : 'Save adjustment'}
+                                </button>
+                                <button onClick={() => setAdjustOpen(false)} disabled={busy !== null}
+                                    className="px-3 py-1.5 text-xs text-slate-300 bg-slate-800/60 rounded-lg hover:bg-slate-800 disabled:opacity-50">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     </div>
                 )}
                 {order.order_status !== 'cancelled' && order.order_status !== 'delivered' && (
