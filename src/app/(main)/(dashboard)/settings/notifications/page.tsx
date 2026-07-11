@@ -112,6 +112,13 @@ const TEMPLATE_FIELDS: { title: string; description: string; placeholder: string
         placeholder: 'e.g. swarg_internal_notification',
     },
     {
+        title: 'New Customer Registered',
+        description: 'Welcome WhatsApp sent to the CUSTOMER on first signup (the admin alert '
+            + 'above is separate). Approved template needs one variable: {{name}}. Leave blank '
+            + 'to disable the WhatsApp welcome — the in-app bell + push still fire.',
+        placeholder: 'e.g. swarg_newcustomer_welcome',
+    },
+    {
         title: 'Invoice WhatsApp Template',
         description: 'Phase 7 — sends the tax-invoice PDF to the customer when a day/website '
             + 'order is invoiced (and via the "Resend invoice" button). Approved MSG91 template '
