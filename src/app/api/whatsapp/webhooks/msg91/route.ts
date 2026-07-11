@@ -202,9 +202,32 @@ export async function POST(request: NextRequest) {
             body.isFromMe === true || body.is_from_me === true ||
             String(body.fromMe ?? body.from_me ?? "").toLowerCase() === "true";
 
+        // Business-send echo shape pinned from a REAL captured payload
+        // (webhook_debug, 2026-07-11): the echo of a business-originated send
+        // arrives with NO messages[] array, direction:"1" (numeric-string
+        // enum — NOT the "outbound" literal this code used to look for),
+        // eventName:"submitted", the operator's emailId, and the text tucked
+        // in `content` ('{"text":"Hi sir"}'). Genuine customer messages ALWAYS
+        // carry the messages[] array (from = the customer), so requiring the
+        // array to be ABSENT makes each marker safe on its own.
+        const hasInboundMessagesArray = (() => {
+            try {
+                const arr = typeof body.messages === "string" ? JSON.parse(body.messages) : body.messages;
+                return Array.isArray(arr) && arr.length > 0;
+            } catch {
+                return false;
+            }
+        })();
+        const isOutboundSubmissionEvent =
+            !hasInboundMessagesArray &&
+            (String(body.direction ?? "") === "1" ||
+                eventName.toLowerCase() === "submitted" ||
+                (typeof body.emailId === "string" && body.emailId.trim().length > 0));
+
         const isOutboundRequestReceived =
             webhookType === "2" ||
-            (!isDeliveryReport && (body.direction === "outbound" || explicitFromMe));
+            (!isDeliveryReport &&
+                (body.direction === "outbound" || isOutboundSubmissionEvent || explicitFromMe));
 
         if (!senderPhone && !isDeliveryReport) {
             console.log("[MSG91 Webhook] No sender phone found. Payload keys:", Object.keys(body));
@@ -401,11 +424,25 @@ export async function POST(request: NextRequest) {
         // conversation upsert so a duplicate never re-opens or unread-bumps a
         // resolved conversation. Two exact-match lookups (NOT string interpolation
         // into PostgREST .or() — this endpoint is unauthenticated).
+        // A webapp/API send stores external_id = the MSG91 requestId, but its
+        // echo arrives under a DIFFERENT uuid — the echo's own requestId field
+        // is the join key back to the stored row (both ids verified present on
+        // the captured echo payload). Same strict charset guard as externalId.
+        const echoRequestId = (() => {
+            const rid = String(body.requestId ?? body.request_id ?? "").trim();
+            return rid && rid !== externalId && /^[A-Za-z0-9._:-]+$/.test(rid) ? rid : "";
+        })();
         if (externalId && /^[A-Za-z0-9._:-]+$/.test(externalId)) {
             const byExt = await supabaseAdmin.from("messages")
                 .select("id, direction, conversation_id").eq("external_id", externalId).limit(1).maybeSingle();
-            const existingById = byExt.data || (await supabaseAdmin.from("messages")
+            let existingById = byExt.data || (await supabaseAdmin.from("messages")
                 .select("id, direction, conversation_id").eq("request_id", externalId).limit(1).maybeSingle()).data;
+            if (!existingById && echoRequestId) {
+                existingById = (await supabaseAdmin.from("messages")
+                    .select("id, direction, conversation_id").eq("external_id", echoRequestId).limit(1).maybeSingle()).data
+                    || (await supabaseAdmin.from("messages")
+                        .select("id, direction, conversation_id").eq("request_id", echoRequestId).limit(1).maybeSingle()).data;
+            }
             if (existingById) {
                 // Same message already stored. If it landed FIRST misclassified as
                 // inbound and THIS event is authoritatively outbound, flip it — and
