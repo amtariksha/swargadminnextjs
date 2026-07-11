@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
     Check,
     CheckCheck,
@@ -11,6 +12,7 @@ import {
     UserPlus,
     XCircle,
     Bell,
+    RefreshCw,
     ChevronDown,
     ChevronLeft,
     MessageSquareText,
@@ -492,9 +494,13 @@ function formatDateSeparator(date: Date): string {
 export function ChatWindow({ className }: { className?: string }) {
     const { activeConversationId, setActiveConversation } = useAppStore();
     const toggleContactPanel = useAppStore((s) => s.toggleContactPanel);
-    const { data: conversation, isLoading } = useConversation(
-        activeConversationId
-    );
+    const {
+        data: conversation,
+        isLoading,
+        isFetching,
+        refetch: refetchConversation,
+    } = useConversation(activeConversationId);
+    const queryClient = useQueryClient();
     const updateStatus = useUpdateConversationStatus();
     const assignConversation = useAssignConversation();
     const voiceCall = useVoiceCall();
@@ -719,6 +725,22 @@ export function ChatWindow({ className }: { className?: string }) {
                             {voiceCall.isPending ? "Calling..." : "WhatsApp Voice Call"}
                         </TooltipContent>
                     </Tooltip>
+
+                    {/* Refresh — re-pull THIS conversation on demand (the open
+                        chat also auto-polls every 5s while the tab is focused;
+                        this covers the impatient path + an unfocused tab). */}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                            refetchConversation();
+                            queryClient.invalidateQueries({ queryKey: ["conversations"] });
+                        }}
+                        className="text-xs h-8"
+                        title="Refresh conversation"
+                    >
+                        <RefreshCw className={cn("w-3.5 h-3.5", isFetching && "animate-spin")} />
+                    </Button>
 
                     {/* Reminder button */}
                     <Button
