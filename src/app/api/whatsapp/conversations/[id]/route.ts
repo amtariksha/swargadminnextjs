@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
+import { renderTemplateBody } from "@/lib/whatsapp/utils";
 
 function mapMessage(row: Record<string, unknown>) {
     return {
@@ -7,7 +8,9 @@ function mapMessage(row: Record<string, unknown>) {
         conversationId: row.conversation_id,
         direction: row.direction,
         contentType: row.content_type || "text",
-        body: row.body || "",
+        // Render template component-JSON bodies as readable text (see
+        // renderTemplateBody) — covers rows persisted with raw MSG91 params.
+        body: renderTemplateBody(row.body),
         mediaUrl: row.media_url || undefined,
         fileName: row.file_name || undefined,
         status: row.status || "sent",

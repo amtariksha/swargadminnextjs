@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
+import { renderTemplateBody } from "@/lib/whatsapp/utils";
 
 // ─── Supabase row → app Contact type mapper ───────────────
 function mapContact(row: Record<string, unknown>) {
@@ -34,7 +35,8 @@ function mapConversation(row: Record<string, unknown>) {
         assignedTo: (row.assigned_to as string) || undefined,
         assignedAt: (row.assigned_at as string) || undefined,
         assignedName: (row.assigned_name as string) || undefined,
-        lastMessage: (row.last_message as string) || "",
+        // Template component-JSON previews render as readable text — see renderTemplateBody.
+        lastMessage: renderTemplateBody(row.last_message),
         lastMessageTime: row.last_message_time as string,
         lastIncomingTimestamp: (row.last_incoming_timestamp as string) || (row.last_message_time as string),
         unreadCount: (row.unread_count as number) || 0,
