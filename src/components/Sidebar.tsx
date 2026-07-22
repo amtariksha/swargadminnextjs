@@ -214,6 +214,7 @@ const navItems: NavItem[] = [
                 children: [
                     { name: 'Vouchers', href: '/accounting/vouchers', icon: <FileText className="w-4 h-4" /> },
                     { name: 'Invoices', href: '/accounting/invoices', icon: <FileText className="w-4 h-4" /> },
+                    { name: 'Shops Billing', href: '/accounting/shops', icon: <Banknote className="w-4 h-4" /> },
                     { name: 'Purchases / Bills', href: '/accounting/purchases', icon: <Receipt className="w-4 h-4" /> },
                     { name: 'Customers', href: '/accounting/customers', icon: <Users className="w-4 h-4" /> },
                     { name: 'HSN & Rates', href: '/accounting/hsn', icon: <Tags className="w-4 h-4" /> },

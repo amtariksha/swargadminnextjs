@@ -11,6 +11,16 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GET, POST } from '@/lib/api';
+import {
+    DeviationAction,
+    fetchPaymentDeviations,
+    fetchShopsBilling,
+    generateShopInvoice,
+    resolveDeviation,
+    sendInvoicePaymentLink,
+    sendInvoiceReminder,
+    syncInvoicePayment,
+} from '@/lib/accounting';
 
 export interface Meta {
     total?: number;
@@ -678,5 +688,74 @@ export function useOpeningBalances(fy?: string) {
     return useQuery({
         queryKey: ['accounting', 'opening', fy],
         queryFn: async () => (await GET<OpeningBalances>('/accounting/opening-balances', fy ? { fy } : {})).data,
+    });
+}
+
+// ── Shops billing (B2B roster · invoices · payment deviations) ──────────────
+// Types + typed API functions live in @/lib/accounting; these hooks add the
+// react-query caching layer and post-mutation invalidation.
+
+export function useShopsBilling(month: string) {
+    return useQuery({
+        queryKey: ['accounting', 'shops', month],
+        queryFn: () => fetchShopsBilling(month),
+        enabled: !!month,
+    });
+}
+
+export function usePaymentDeviations(status = 'pending') {
+    return useQuery({
+        queryKey: ['accounting', 'deviations', status],
+        queryFn: () => fetchPaymentDeviations(status),
+    });
+}
+
+export function useGenerateShopInvoice() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ userId, from, to }: { userId: number; from: string; to: string }) =>
+            generateShopInvoice(userId, { from, to }),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['accounting', 'shops'] });
+            qc.invalidateQueries({ queryKey: ['accounting', 'invoices'] });
+        },
+    });
+}
+
+export function useSendPaymentLink() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (invoiceId: number) => sendInvoicePaymentLink(invoiceId),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['accounting', 'shops'] }),
+    });
+}
+
+export function useSyncInvoicePayment() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: (invoiceId: number) => syncInvoicePayment(invoiceId),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['accounting', 'shops'] });
+            qc.invalidateQueries({ queryKey: ['accounting', 'invoices'] });
+            qc.invalidateQueries({ queryKey: ['accounting', 'deviations'] });
+        },
+    });
+}
+
+export function useSendInvoiceReminder() {
+    return useMutation({
+        mutationFn: (invoiceId: number) => sendInvoiceReminder(invoiceId),
+    });
+}
+
+export function useResolveDeviation() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, action, notes }: { id: number; action: DeviationAction; notes?: string }) =>
+            resolveDeviation(id, action, notes),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['accounting', 'deviations'] });
+            qc.invalidateQueries({ queryKey: ['accounting', 'shops'] });
+        },
     });
 }

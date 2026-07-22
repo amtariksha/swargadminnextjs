@@ -8,7 +8,7 @@ import { PUT } from '@/lib/api';
 import { toast } from 'sonner';
 import {
     Users, FileText, BookText, Calculator, Building2, Banknote,
-    CalendarRange, BellRing, Power, AlertTriangle,
+    CalendarRange, BellRing, Power, AlertTriangle, Store,
 } from 'lucide-react';
 
 const inputCls =
@@ -23,6 +23,7 @@ const QUICK_LINKS = [
     { href: '/accounting/customers', label: 'Customers', icon: Users, desc: 'GST profiles' },
     { href: '/accounting/hsn', label: 'HSN & Rates', icon: Calculator, desc: 'Codes, rates, product mapping' },
     { href: '/accounting/invoices', label: 'Invoices', icon: FileText, desc: 'GST system of record' },
+    { href: '/accounting/shops', label: 'Shops Billing', icon: Store, desc: 'B2B roster · invoices · collections' },
     { href: '/accounting/ledgers', label: 'Ledgers', icon: BookText, desc: 'Customer statement + ageing' },
     { href: '/accounting/tally-settings', label: 'Tally', icon: Building2, desc: 'Bridge + voucher queue' },
     { href: '/accounting/bank-reconciliation', label: 'Bank Recon', icon: Banknote, desc: 'Upload → match → confirm' },

@@ -7,6 +7,8 @@
  * maths and use the money/percent helpers for display.
  */
 
+import { GET, POST } from './api';
+
 export interface Option {
     value: string;
     label: string;
@@ -235,4 +237,143 @@ export function fyOptions(count = 4): Option[] {
 export function fyBounds(fy: string): { from: string; to: string } {
     const [a, b] = fy.split('-');
     return { from: `${a}-04-01`, to: `${b}-03-31` };
+}
+
+// ══ Shops billing (B2B roster · invoices · payment deviations) ═══════════════
+
+/** shops-billing invoice.status (string enum, unlike the numeric invoice.status). */
+export type ShopInvoiceStatus = 'issued' | 'partial' | 'paid';
+
+export const SHOP_INVOICE_STATUS_BADGE: Record<ShopInvoiceStatus, string> = {
+    issued: 'bg-blue-500/20 text-blue-400',
+    partial: 'bg-yellow-500/20 text-yellow-400',
+    paid: 'bg-green-500/20 text-green-400',
+};
+
+export interface ShopsBillingSummary {
+    shops: number;
+    billed_total: number | string;
+    collected_total: number | string;
+    outstanding_total: number | string;
+    overdue_total: number | string;
+}
+
+export interface ShopAgeing {
+    current: number | string;
+    d31_60: number | string;
+    d61_90: number | string;
+    d90_plus: number | string;
+}
+
+export interface ShopInvoiceRef {
+    id: number;
+    invoice_number: string;
+    total_amount: number | string;
+    outstanding: number | string;
+    status: ShopInvoiceStatus;
+}
+
+export interface ShopBillingRow {
+    user_id: number;
+    name: string;
+    shop_name?: string | null;
+    phone?: string | null;
+    billing_cycle?: string | null;
+    delivered_qty: number | string;
+    delivered_value: number | string;
+    invoice: ShopInvoiceRef | null;
+    outstanding_total: number | string;
+    ageing: ShopAgeing;
+    pending_deviations: number;
+    last_receipt_at?: string | null;
+    payment_short_url?: string | null;
+}
+
+export interface ShopsBillingData {
+    month: string;
+    from: string;
+    to: string;
+    summary: ShopsBillingSummary;
+    shops: ShopBillingRow[];
+}
+
+export interface PaymentDeviation {
+    id: number;
+    invoice_id: number;
+    invoice_number: string;
+    user_id: number;
+    shop_name: string;
+    expected_amount: number | string;
+    received_amount: number | string;
+    shortfall: number | string;
+    status: string;
+    notes?: string | null;
+    created_at: string;
+}
+
+export interface GenerateShopInvoiceResult {
+    invoice_id?: number;
+    invoice_number?: string;
+    total_amount?: number | string;
+    nothing_to_bill?: boolean;
+}
+
+export interface PaymentLinkResult {
+    payment_link_id: number | string;
+    payment_short_url: string;
+    outstanding: number | string;
+    whatsapp: { sent: boolean; skipped?: string; error?: string };
+}
+
+export interface SyncPaymentResult {
+    status: string;
+    amount_paid: number | string;
+    receipt_id?: number;
+}
+
+export type DeviationAction = 'accept' | 'credit_note';
+
+/** Whole-days elapsed since a timestamp (deviation age); null when unparseable. */
+export function daysSince(value: string | null | undefined): number | null {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return Math.max(0, Math.floor((Date.now() - d.getTime()) / 86_400_000));
+}
+
+export async function fetchShopsBilling(month: string): Promise<ShopsBillingData> {
+    return (await GET<ShopsBillingData>('/accounting/shops', { month })).data;
+}
+
+export async function fetchPaymentDeviations(status?: string): Promise<PaymentDeviation[]> {
+    return (await GET<PaymentDeviation[]>('/accounting/deviations', status ? { status } : undefined)).data || [];
+}
+
+export async function generateShopInvoice(
+    userId: number,
+    period: { from: string; to: string },
+): Promise<GenerateShopInvoiceResult> {
+    return (await POST<GenerateShopInvoiceResult>(`/accounting/shops/${userId}/generate_invoice`, period)).data;
+}
+
+export async function sendInvoicePaymentLink(invoiceId: number): Promise<PaymentLinkResult> {
+    return (await POST<PaymentLinkResult>(`/accounting/invoices/${invoiceId}/payment_link`)).data;
+}
+
+export async function syncInvoicePayment(invoiceId: number): Promise<SyncPaymentResult> {
+    return (await POST<SyncPaymentResult>(`/accounting/invoices/${invoiceId}/sync_payment`)).data;
+}
+
+/** Any 2xx counts as "sent" — `channels` is informational only. */
+export async function sendInvoiceReminder(invoiceId: number): Promise<{ channels?: string[] | string }> {
+    return (await POST<{ channels?: string[] | string }>(`/accounting/invoices/${invoiceId}/send_reminder`)).data;
+}
+
+export async function resolveDeviation(
+    id: number,
+    action: DeviationAction,
+    notes?: string,
+): Promise<{ id: number; status: string }> {
+    const body = notes && notes.trim() ? { notes: notes.trim() } : {};
+    return (await POST<{ id: number; status: string }>(`/accounting/deviations/${id}/${action}`, body)).data;
 }
