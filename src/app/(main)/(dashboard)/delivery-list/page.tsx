@@ -11,6 +11,7 @@ import DataTable, { Column } from '@/components/DataTable';
 import DriverGroupTable from '@/components/DriverGroupTable';
 import { PodImage } from '@/components/PodImage';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import RouteInsightsModal from '@/components/RouteInsightsModal';
 import {
     type DeliveryItem,
     type DriverGroup,
@@ -229,6 +230,8 @@ export default function DeliveryListPage() {
     const today = format(new Date(), 'yyyy-MM-dd');
     const [selectedDate, setSelectedDate] = useState(today);
     const [selectedDriver, setSelectedDriver] = useState<number | ''>('');
+    // Route insights modal (per-driver timing + Google Maps links); needs a specific driver.
+    const [showRouteInsights, setShowRouteInsights] = useState(false);
     const [activeTab, setActiveTab] = useState<TabId>('orders');
     const [editQtyModal, setEditQtyModal] = useState<{ item: DeliveryItem; newQty: number } | null>(null);
     const [reasonModal, setReasonModal] = useState<{ item: DeliveryItem; reason_category: number | ''; reason: string; markNotDelivered: boolean } | null>(null);
@@ -768,13 +771,20 @@ export default function DeliveryListPage() {
                             className="pl-10 pr-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer" />
                     </div>
                     {activeTab === 'orders' && (
-                        <select value={selectedDriver} onChange={(e) => setSelectedDriver(e.target.value ? Number(e.target.value) : '')}
-                            className="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white">
-                            <option value="">All Drivers</option>
-                            {[...drivers].sort((a, b) => a.name.localeCompare(b.name)).map(d => (
-                                <option key={d.id} value={d.user_id}>{d.name}</option>
-                            ))}
-                        </select>
+                        <>
+                            <select value={selectedDriver} onChange={(e) => setSelectedDriver(e.target.value ? Number(e.target.value) : '')}
+                                className="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white">
+                                <option value="">All Drivers</option>
+                                {[...drivers].sort((a, b) => a.name.localeCompare(b.name)).map(d => (
+                                    <option key={d.id} value={d.user_id}>{d.name}</option>
+                                ))}
+                            </select>
+                            <button type="button" onClick={() => setShowRouteInsights(true)} disabled={!selectedDriver}
+                                title={selectedDriver ? 'Route timing + Google Maps links for this driver' : 'Select a specific driver first'}
+                                className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-xl text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed">
+                                <Navigation className="w-4 h-4" /> Route insights
+                            </button>
+                        </>
                     )}
                     <button onClick={() => refetch()} className="p-2 bg-slate-800/50 border border-slate-700/50 rounded-xl hover:bg-slate-700/50">
                         <RefreshCw className={`w-5 h-5 text-slate-400 ${isFetching ? 'animate-spin' : ''}`} />
@@ -1171,6 +1181,14 @@ export default function DeliveryListPage() {
             )}
 
             {/* Dialogs */}
+            {showRouteInsights && selectedDriver !== '' && (
+                <RouteInsightsModal
+                    date={selectedDate}
+                    driverUserId={selectedDriver}
+                    driverName={drivers.find((d) => d.user_id === selectedDriver)?.name || `Driver #${selectedDriver}`}
+                    onClose={() => setShowRouteInsights(false)}
+                />
+            )}
             {generateDialog && <PasscodeDialog title="Generate Delivery List" selectedDate={selectedDate} onConfirm={handleGenerateList} onCancel={() => setGenerateDialog(false)} />}
             {deleteDialog && <PasscodeDialog title="Delete Delivery List" selectedDate={selectedDate} onConfirm={handleDeleteList} onCancel={() => setDeleteDialog(false)} strictToday />}
             {genProgress && (
