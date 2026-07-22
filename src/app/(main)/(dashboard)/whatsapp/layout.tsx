@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { TooltipProvider } from "@/components/whatsapp/ui/tooltip";
 
 /**
@@ -18,6 +18,17 @@ export default function WhatsappSectionLayout({
 }: {
     children: ReactNode;
 }) {
+    // The 64px offset accounts for the admin Topbar; in embed mode (delivery
+    // app WebView — no Topbar) the shell takes the full dynamic viewport.
+    const [embedMode, setEmbedMode] = useState(false);
+    useEffect(() => {
+        try {
+            setEmbedMode(localStorage.getItem("embed_mode") === "wa");
+        } catch {
+            // Storage unavailable — keep the Topbar offset.
+        }
+    }, []);
+
     return (
         <TooltipProvider delayDuration={200}>
             {/*
@@ -31,7 +42,9 @@ export default function WhatsappSectionLayout({
               mode. Without this class WhatsApp pages stay light-themed even
               when the rest of the admin is dark.
             */}
-            <div className="whatsapp-shell -m-4 lg:-m-6 h-[calc(100vh-64px)] flex flex-col">
+            <div className={`whatsapp-shell -m-4 lg:-m-6 flex flex-col ${
+                embedMode ? "h-dvh" : "h-[calc(100vh-64px)]"
+            }`}>
                 {children}
             </div>
         </TooltipProvider>

@@ -1,0 +1,881 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Swarg Food admin operations manual — this month's changes plus how-to for Accounting, Last-Mile and CRM.">
+<meta name="color-scheme" content="light dark">
+<title>Swarg Food — Admin Operations Manual</title>
+<style>
+  :root {
+    --bg:#FAFBF6; --surface:#FFFFFF; --surface-2:#F2F5EC; --surface-3:#EBF0E1;
+    --ink:#1B211A; --ink-2:#4A5347; --ink-3:#727E6C;
+    --line:#E1E7D8; --line-2:#D2DAC5;
+    --accent:#3C6B2C; --accent-2:#2E5322; --accent-soft:#EAF2E0;
+    --lime:#A7D500; --lime-ink:#31420A;
+    --warn:#9A6414; --warn-bg:#FaF1DD; --warn-line:#EAD6A6;
+    --danger:#A5332A; --danger-bg:#F8E8E5; --danger-line:#EBC7C1;
+    --op:#345C86; --op-bg:#E8EFF7; --op-line:#CADEF0;
+    --shadow:0 1px 2px rgba(27,33,26,.05), 0 4px 16px rgba(27,33,26,.05);
+    --font-head:ui-serif,"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --font-body:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --maxw:74ch;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#12160F; --surface:#191E14; --surface-2:#1E241A; --surface-3:#252C1F;
+      --ink:#E9EEE2; --ink-2:#B0BAA6; --ink-3:#828E78;
+      --line:#2C3324; --line-2:#3A432F;
+      --accent:#9ECC6E; --accent-2:#B4DA8A; --accent-soft:#20291A;
+      --lime:#A7D500; --lime-ink:#0E1403;
+      --warn:#E0AC5C; --warn-bg:#271F10; --warn-line:#4A3A1B;
+      --danger:#EC978B; --danger-bg:#2A1613; --danger-line:#4A2721;
+      --op:#8FB6E0; --op-bg:#141F2B; --op-line:#26384B;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#FAFBF6; --surface:#FFFFFF; --surface-2:#F2F5EC; --surface-3:#EBF0E1;
+    --ink:#1B211A; --ink-2:#4A5347; --ink-3:#727E6C;
+    --line:#E1E7D8; --line-2:#D2DAC5;
+    --accent:#3C6B2C; --accent-2:#2E5322; --accent-soft:#EAF2E0;
+    --warn:#9A6414; --warn-bg:#FAF1DD; --warn-line:#EAD6A6;
+    --danger:#A5332A; --danger-bg:#F8E8E5; --danger-line:#EBC7C1;
+    --op:#345C86; --op-bg:#E8EFF7; --op-line:#CADEF0;
+    --shadow:0 1px 2px rgba(27,33,26,.05), 0 4px 16px rgba(27,33,26,.05);
+  }
+  :root[data-theme="dark"]{
+    --bg:#12160F; --surface:#191E14; --surface-2:#1E241A; --surface-3:#252C1F;
+    --ink:#E9EEE2; --ink-2:#B0BAA6; --ink-3:#828E78;
+    --line:#2C3324; --line-2:#3A432F;
+    --accent:#9ECC6E; --accent-2:#B4DA8A; --accent-soft:#20291A;
+    --warn:#E0AC5C; --warn-bg:#271F10; --warn-line:#4A3A1B;
+    --danger:#EC978B; --danger-bg:#2A1613; --danger-line:#4A2721;
+    --op:#8FB6E0; --op-bg:#141F2B; --op-line:#26384B;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.3);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);
+    font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased;
+    text-underline-offset:2px;}
+  ::selection{background:var(--lime);color:var(--lime-ink);}
+
+  .wrap{display:grid;grid-template-columns:clamp(230px,22vw,290px) minmax(0,1fr);
+    gap:0;align-items:start;max-width:1240px;margin:0 auto;}
+
+  /* ---- Table of contents rail ---- */
+  .toc{position:sticky;top:0;align-self:start;height:100dvh;overflow-y:auto;
+    padding:2rem 1.1rem 3rem 1.4rem;border-right:1px solid var(--line);
+    background:var(--surface);}
+  .toc__brand{font-family:var(--font-head);font-weight:600;font-size:1.02rem;
+    letter-spacing:-.01em;line-height:1.25;color:var(--ink);margin:0 0 .15rem;}
+  .toc__tag{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;
+    color:var(--accent);font-weight:600;margin-bottom:1.4rem;}
+  .toc nav{display:flex;flex-direction:column;gap:.05rem;}
+  .toc a{color:var(--ink-2);text-decoration:none;font-size:.855rem;
+    padding:.32rem .55rem;border-radius:6px;display:block;line-height:1.35;}
+  .toc a:hover{background:var(--surface-2);color:var(--ink);}
+  .toc a.grp{margin-top:1.05rem;font-family:var(--font-head);font-size:.94rem;
+    color:var(--ink);font-weight:600;}
+  .toc a.sub{padding-left:1.15rem;font-size:.8rem;color:var(--ink-3);}
+  .toc a.sub:hover{color:var(--ink);}
+  .toc a:focus-visible,main a:focus-visible,.tog:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+  /* ---- Main column ---- */
+  main{padding:2.4rem clamp(1.1rem,4vw,3.2rem) 6rem;min-width:0;}
+  .col{max-width:var(--maxw);}
+  main :is(h1,h2,h3,h4){font-family:var(--font-head);text-wrap:balance;
+    letter-spacing:-.015em;line-height:1.18;color:var(--ink);}
+  h1{font-size:clamp(1.9rem,4vw,2.7rem);margin:.2rem 0 .5rem;font-weight:600;}
+  .lede{font-size:1.08rem;color:var(--ink-2);max-width:64ch;margin:.4rem 0 1.6rem;}
+  h2.sec{font-size:clamp(1.5rem,3vw,2rem);margin:3.4rem 0 .3rem;font-weight:600;
+    padding-top:1.2rem;border-top:2px solid var(--accent);}
+  .sec-kicker{font-size:.74rem;text-transform:uppercase;letter-spacing:.1em;
+    font-weight:700;color:var(--accent);margin-top:2.6rem;}
+  .sec-kicker + h2.sec{margin-top:.15rem;border-top:none;padding-top:0;}
+  .sec-intro{color:var(--ink-2);margin:.5rem 0 1.4rem;}
+  h3{font-size:1.22rem;margin:0;font-weight:600;}
+
+  a{color:var(--accent-2);}
+  code{font-family:var(--font-mono);font-size:.85em;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:5px;padding:.08em .38em;
+    color:var(--ink);word-break:break-word;}
+
+  /* ---- Meta / masthead ---- */
+  .masthead{display:flex;flex-wrap:wrap;gap:.6rem 1.4rem;align-items:baseline;
+    font-size:.82rem;color:var(--ink-3);margin-bottom:.4rem;}
+  .masthead b{color:var(--ink-2);font-weight:600;}
+
+  /* ---- Badges ---- */
+  .badge{display:inline-flex;align-items:center;gap:.3em;font-size:.66rem;
+    font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    padding:.16em .5em;border-radius:999px;vertical-align:middle;white-space:nowrap;
+    font-family:var(--font-body);}
+  .badge--new{background:var(--lime);color:var(--lime-ink);}
+  .badge--off{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-line);}
+  .badge--op{background:var(--op-bg);color:var(--op);border:1px solid var(--op-line);}
+  .badge--danger{background:var(--danger-bg);color:var(--danger);border:1px solid var(--danger-line);}
+
+  /* ---- Legend ---- */
+  .legend{display:flex;flex-wrap:wrap;gap:.5rem .9rem;background:var(--surface);
+    border:1px solid var(--line);border-radius:12px;padding:1rem 1.15rem;
+    box-shadow:var(--shadow);margin:1.4rem 0 0;}
+  .legend div{display:flex;align-items:center;gap:.5rem;font-size:.82rem;color:var(--ink-2);}
+
+  /* ---- Digest cards (what's new) ---- */
+  .digest{display:grid;gap:1rem;margin-top:1.2rem;}
+  @media (min-width:640px){.digest{grid-template-columns:1fr 1fr;}}
+  .dcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:1.15rem 1.25rem;box-shadow:var(--shadow);}
+  .dcard h4{font-size:1.02rem;margin:0 0 .5rem;display:flex;align-items:center;gap:.5rem;}
+  .dcard h4 .dot{width:.6rem;height:.6rem;border-radius:50%;background:var(--accent);flex:none;}
+  .dcard ul{margin:0;padding-left:1.05rem;font-size:.87rem;color:var(--ink-2);line-height:1.5;}
+  .dcard li{margin:.35rem 0;}
+  .dcard li::marker{color:var(--accent);}
+
+  /* ---- App-wise ---- */
+  .app{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:1.15rem 1.3rem;box-shadow:var(--shadow);margin-top:1rem;}
+  .app__head{display:flex;flex-wrap:wrap;gap:.4rem .7rem;align-items:baseline;margin-bottom:.5rem;}
+  .app__head h3{font-size:1.08rem;}
+  .app__aud{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;font-weight:700;
+    color:var(--accent);}
+  .app ul{margin:.3rem 0 0;padding-left:1.1rem;font-size:.9rem;color:var(--ink-2);}
+  .app li{margin:.32rem 0;}
+  .rel{font-size:.68rem;font-weight:700;letter-spacing:.03em;padding:.05em .45em;border-radius:5px;
+    white-space:nowrap;font-family:var(--font-body);}
+  .rel--live{background:var(--accent-soft);color:var(--accent-2);}
+  .rel--pending{background:var(--warn-bg);color:var(--warn);}
+
+  /* ---- Feature blocks ---- */
+  .feature{background:var(--surface);border:1px solid var(--line);border-radius:14px;
+    padding:1.3rem 1.45rem 1.4rem;box-shadow:var(--shadow);margin-top:1.15rem;}
+  .feature__head{display:flex;flex-wrap:wrap;gap:.5rem;align-items:baseline;
+    justify-content:space-between;}
+  .feature__head h3{display:flex;flex-wrap:wrap;align-items:center;gap:.55rem;}
+  .navpath{font-family:var(--font-mono);font-size:.78rem;color:var(--ink-2);
+    background:var(--surface-2);border:1px solid var(--line);border-radius:7px;
+    padding:.32em .6em;margin:.55rem 0 .1rem;display:inline-flex;flex-wrap:wrap;gap:.15em .35em;
+    line-height:1.5;}
+  .navpath .arw{color:var(--accent);}
+  .navpath .url{color:var(--accent-2);}
+  .purpose{color:var(--ink-2);margin:.7rem 0 .1rem;}
+  .steps{counter-reset:s;list-style:none;margin:.9rem 0 0;padding:0;
+    display:flex;flex-direction:column;gap:.5rem;}
+  .steps li{counter-increment:s;position:relative;padding-left:2.1rem;font-size:.925rem;color:var(--ink);}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:-.05rem;
+    width:1.5rem;height:1.5rem;border-radius:50%;background:var(--accent-soft);
+    color:var(--accent-2);font-size:.76rem;font-weight:700;
+    display:flex;align-items:center;justify-content:center;font-family:var(--font-body);}
+  .callout{border-radius:10px;padding:.75rem .95rem;margin-top:.95rem;font-size:.875rem;line-height:1.5;}
+  .callout strong{font-weight:700;}
+  .callout--prereq{background:var(--surface-2);border:1px solid var(--line-2);color:var(--ink-2);}
+  .callout--prereq strong{color:var(--ink);}
+  .callout--tip{background:var(--surface-2);border:1px solid var(--line-2);}
+  .callout--tip strong{color:var(--accent-2);}
+  .callout--warn{background:var(--warn-bg);border:1px solid var(--warn-line);color:var(--warn);}
+  .callout ul{margin:.35rem 0 0;padding-left:1.05rem;}
+  .callout li{margin:.28rem 0;}
+  kbd{font-family:var(--font-body);font-weight:600;color:var(--ink);
+    background:var(--surface-3);border:1px solid var(--line-2);border-bottom-width:2px;
+    border-radius:5px;padding:.05em .4em;font-size:.85em;}
+
+  .note{background:var(--op-bg);border:1px solid var(--op-line);color:var(--op);
+    border-radius:12px;padding:1rem 1.2rem;margin-top:1.2rem;font-size:.9rem;line-height:1.55;}
+  .note strong{font-weight:700;}
+  .note--warn{background:var(--warn-bg);border-color:var(--warn-line);color:var(--warn);}
+
+  .backtop{position:fixed;right:1.1rem;bottom:1.1rem;z-index:20;background:var(--accent);
+    color:#fff;border:none;border-radius:999px;padding:.6rem .9rem;font-size:.8rem;font-weight:600;
+    box-shadow:var(--shadow);cursor:pointer;opacity:0;pointer-events:none;transition:opacity .25s;}
+  .backtop.show{opacity:1;pointer-events:auto;}
+  :root[data-theme="dark"] .backtop, @media(prefers-color-scheme:dark){.backtop{color:#0E1403;}}
+
+  .tog{display:none;}
+
+  /* ---- Mobile ---- */
+  @media (max-width:900px){
+    .wrap{grid-template-columns:1fr;}
+    .toc{position:static;height:auto;border-right:none;border-bottom:1px solid var(--line);
+      padding:1.1rem 1.2rem;}
+    .toc__panel{display:none;}
+    .toc__panel.open{display:block;margin-top:.9rem;}
+    .tog{display:inline-flex;align-items:center;gap:.4rem;background:var(--surface-2);
+      border:1px solid var(--line);border-radius:8px;padding:.5rem .8rem;font-size:.85rem;
+      font-weight:600;color:var(--ink);cursor:pointer;font-family:var(--font-body);}
+    main{padding:1.6rem 1.15rem 5rem;}
+  }
+
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important;}}
+  html{scroll-behavior:smooth;}
+  main :is(h2,h3){scroll-margin-top:1rem;}
+
+  @media print{
+    .toc,.backtop,.tog{display:none;}
+    .wrap{display:block;max-width:none;}
+    body{background:#fff;color:#000;font-size:11pt;}
+    .feature,.dcard,.app,.note,.legend{box-shadow:none;break-inside:avoid;border-color:#ccc;}
+    h2.sec{break-before:page;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <aside class="toc">
+    <p class="toc__brand">Swarg Food</p>
+    <p class="toc__tag">Admin Operations Manual</p>
+    <button class="tog" aria-expanded="false" aria-controls="tocnav">☰ Contents</button>
+    <nav id="tocnav" class="toc__panel">
+      <a href="#top">Introduction &amp; legend</a>
+      <a href="#whatsnew">What changed this month</a>
+      <a href="#apps">Changes app-by-app</a>
+
+      <a class="grp" href="#accounting">1 · Accounting</a>
+      <a class="sub" href="#ac-setup">Setup &amp; master switch</a>
+      <a class="sub" href="#ac-coa">Chart of Accounts</a>
+      <a class="sub" href="#ac-vouchers">Vouchers</a>
+      <a class="sub" href="#ac-invoices">Invoices &amp; corrections</a>
+      <a class="sub" href="#ac-purchases">Purchases / Bills</a>
+      <a class="sub" href="#ac-customers">Customers &amp; HSN</a>
+      <a class="sub" href="#ac-b2c">B2C consolidation</a>
+      <a class="sub" href="#ac-reports">Reports &amp; GST returns</a>
+      <a class="sub" href="#ac-ledgers">Ledgers &amp; receipts</a>
+      <a class="sub" href="#ac-bank">Bank reconciliation</a>
+      <a class="sub" href="#ac-tally">Tally &amp; opening balances</a>
+      <a class="sub" href="#ac-reminders">Payment reminders</a>
+
+      <a class="grp" href="#lms">2 · Last-Mile (dispatch)</a>
+      <a class="sub" href="#lms-drop">Drop points &amp; warehouses</a>
+      <a class="sub" href="#lms-drivers">Assign drivers</a>
+      <a class="sub" href="#lms-list">Delivery List</a>
+      <a class="sub" href="#lms-truck">Drop-point / Shop tabs</a>
+      <a class="sub" href="#lms-pack">Packing &amp; pre-packing</a>
+      <a class="sub" href="#lms-returns">Returns &amp; day orders</a>
+      <a class="sub" href="#lms-merge">Link lead to customer</a>
+
+      <a class="grp" href="#crm">3 · CRM &amp; leads</a>
+      <a class="sub" href="#crm-worklist">Call worklist</a>
+      <a class="sub" href="#crm-call">Guided call screen</a>
+      <a class="sub" href="#crm-feedback">Feedback log &amp; scripts</a>
+      <a class="sub" href="#crm-leads">LMS lead pipeline</a>
+      <a class="sub" href="#crm-people">People, RFM &amp; at-risk</a>
+      <a class="sub" href="#crm-pulse">Business Pulse</a>
+
+      <a class="grp" href="#admin">Admin tasks</a>
+      <a class="sub" href="#admin-perms">Granting access</a>
+      <a class="sub" href="#admin-auto">Turning on automations</a>
+      <a class="grp" href="#confirm">Before you publish</a>
+    </nav>
+  </aside>
+
+  <main id="top">
+    <div class="col">
+      <div class="masthead">
+        <span><b>Scope</b> changes shipped in the last month</span>
+        <span><b>Applies to</b> admin.desicowmilk.com</span>
+        <span><b>Audience</b> ops, accounts, dispatch, CEO</span>
+      </div>
+      <h1>Admin Operations Manual</h1>
+      <p class="lede">A practical guide to everything that changed across the Swarg platform this past month — with full click-by-click instructions for the three big new areas: <strong>Accounting</strong>, the <strong>Last-Mile dispatch</strong> tools, and <strong>CRM &amp; leads</strong>.</p>
+
+      <div class="legend" aria-label="Badge legend">
+        <div><span class="badge badge--new">New</span> Added or changed this month</div>
+        <div><span class="badge badge--off">Default-off</span> You must switch it on</div>
+        <div><span class="badge badge--op">Operator step</span> Needs a back-end change first</div>
+        <div><span class="badge badge--danger">Irreversible</span> Can't be undone from the screen</div>
+      </div>
+      <p class="purpose" style="margin-top:.9rem;font-size:.85rem;color:var(--ink-3)">Every screen lists its exact <b>Where to click</b> path and URL. Wherever a step names a button or field, that is the real label you'll see on screen.</p>
+
+      <!-- ============ WHAT'S NEW ============ -->
+      <h2 class="sec" id="whatsnew">What changed this month</h2>
+      <p class="sec-intro">The headlines, grouped by area. Each links into the full how-to further down.</p>
+      <div class="digest">
+        <div class="dcard">
+          <h4><span class="dot"></span>Accounting</h4>
+          <ul>
+            <li><b>Accountant self-serve pack</b> — a new Sales Register report, a Tally control panel with an <b>Import-from-Tally</b> tab, and OCR-confidence badges on scanned bills.</li>
+            <li><b>Correct a posted purchase bill</b> — reverse &amp; re-post a bill's cost after it's been posted, with a reason.</li>
+            <li><b>Bank Reconciliation</b> screen — upload a statement, auto-match to invoices/ledgers, confirm each row; Razorpay settlements auto-match.</li>
+            <li><b>Credit / Debit notes &amp; Reprice</b> on B2B invoices; per-customer B2B pricing.</li>
+            <li><b>B2C consolidation</b> (monthly self-serve + daily operator switch) and <b>monthly B2B consolidated invoicing</b> — both off by default.</li>
+            <li>Reliability: cancelling an invoice now reverses its ledger entry; GSTR-9 generation fixed.</li>
+          </ul>
+        </div>
+        <div class="dcard">
+          <h4><span class="dot"></span>Last-Mile dispatch</h4>
+          <ul>
+            <li><b>B2B shops split out</b> onto their own <b>Shops</b> tab in the Delivery List, with a "Send to day pool" action.</li>
+            <li><b>Drop points</b> redesigned with route-order reordering, up to 5 photos, and a <b>Warehouse (supply)</b> field driving a Truck vs Dairy-pickup chip.</li>
+            <li>New <b>Warehouses</b> screen; new <b>Packing Runs</b> reconciliation log; a 28-day forecast on Pre-Packing.</li>
+            <li>Driver Type is now editable, with new delivery-app capabilities (Dairy Receipt, Collection Approval, Scan Bill).</li>
+            <li>Returns desk gained a manual Refund button; Day Orders can log a cash note + payment screenshot.</li>
+          </ul>
+        </div>
+        <div class="dcard">
+          <h4><span class="dot"></span>CRM &amp; leads</h4>
+          <ul>
+            <li><b>Custom call types</b> — any script you add (Welcome, Seasonal, Offer…) becomes a call type automatically.</li>
+            <li><b>Lead pipeline upgrades</b> — B2C/B2B tabs, an Owner column, rule-based Score with a "Hottest" sort, tags, and "Sync from contacts".</li>
+            <li>New AI screens: <b>Insights</b> (action feed) and <b>At-Risk Today</b> (churn-save call list).</li>
+            <li>New <b>Business Pulse</b> CEO dashboard (revenue, subscriptions, wastage, drivers, vendor variance).</li>
+            <li>Nightly RFM, weekly CEO digest, daily sales nudge — all shipped <b>off</b> for an operator to enable.</li>
+          </ul>
+        </div>
+        <div class="dcard">
+          <h4><span class="dot"></span>Apps &amp; websites</h4>
+          <ul>
+            <li><b>Customer app 2.0</b> — redesigned Orders (Active/Paused tabs), a 90-day Deliveries view, "Pay from Wallet", server-synced profile photo.</li>
+            <li><b>Delivery app</b> — Scan Bill (Inventory vs Expense), editable per-shop delivered qty with over-delivery billing, offline mark-delivered.</li>
+            <li><b>Admin</b> — sidebar reorganised with a search box; Notifications absorbed Broadcast and gained a Push/WhatsApp channel switch.</li>
+            <li><b>Websites</b> — swargfood.com homepage rebuilt; cookie-consent + ad-attribution live on both sites.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ============ APP-WISE ============ -->
+      <h2 class="sec" id="apps">Changes app-by-app</h2>
+      <p class="sec-intro">Who sees what. <span class="rel rel--live">Live</span> means it's already out; <span class="rel rel--pending">Pending build</span> means it's finished but waiting on the next app-store release.</p>
+
+      <div class="app">
+        <div class="app__head"><h3>Customer app</h3><span class="app__aud">Customers · Play Store</span></div>
+        <ul>
+          <li><span class="rel rel--live">Live 2.0</span> Redesigned Orders screen with <b>Active / Paused</b> tabs and All / Active / Paused / One-time filter chips — paused subscriptions now stay in the Active list instead of vanishing.</li>
+          <li><span class="rel rel--live">Live 2.0</span> A separate <b>Deliveries</b> view (last 90 days) opened from the top-right of Orders.</li>
+          <li><span class="rel rel--live">Live</span> Subscription labels renamed on the customer's screen: <b>Weekly → "Custom"</b>, <b>Monthly → "Daily"</b>; placing a subscription pre-selects the start date and explains the per-delivery wallet deduction.</li>
+          <li><span class="rel rel--live">Live</span> New <b>Pay from Wallet</b> option at checkout when the balance fully covers the order — skips card/UPI entirely.</li>
+          <li><span class="rel rel--live">Live</span> Product variations show correctly on Buy-Once &amp; payment screens; profile photo now saves to the server; wallet history uses infinite scroll.</li>
+          <li><span class="rel rel--live">Live 2.0.0+45</span> Speed overhaul (single bootstrap call, no home-screen flicker on tab-switch, shared network client with timeouts), faster wallet recharge (5-second post-payment freeze removed), a clear "session expired" dialog on 401, address street auto-fill from the map, the buy-once order-placed animation, and a one-shot notification-permission prompt — all shipped in the June 29 release.</li>
+        </ul>
+        <div class="callout callout--tip" style="margin-top:.9rem"><strong>Tell customers:</strong> "Pay from Wallet" only appears when their balance covers the whole order — one tap and they're done, no card needed.</div>
+      </div>
+
+      <div class="app">
+        <div class="app__head"><h3>Delivery app</h3><span class="app__aud">Drivers · Play Store</span></div>
+        <ul>
+          <li><span class="rel rel--live">Live 1.0.36</span> <b>Scan Bill</b>: photograph a purchase bill and choose a <b>Bill type</b> — <b>Inventory purchase</b> (adds stock on approval) or <b>Expense</b> (booked to Misc Expenses, no stock). Per-line GST% is editable.</li>
+          <li><span class="rel rel--live">Live 1.0.36</span> Truck/B2B delivery: delivered quantity is editable per shop and <b>over-delivery is allowed</b> — it bills what was actually delivered.</li>
+          <li><span class="rel rel--live">Live 1.0.36</span> Offline mark-delivered with correct IST time + location gating; delivery-proof photos upload to secure storage; drop-list date stepper.</li>
+          <li><span class="rel rel--pending">Pending build</span> Auto-sync of offline marks when back online, offline collection capture, and two new screens: <b>Collection Approval</b> and <b>Dairy Receipt</b>.</li>
+        </ul>
+        <div class="callout callout--warn" style="margin-top:.9rem"><strong>Driver tiles are permission-gated.</strong> Scan Bill, Collection Approval and Dairy Receipt only appear for drivers whose role has that capability — grant it under <b>People → Drivers</b> (see Assign drivers). Drivers must log out and back in after a change.</div>
+      </div>
+
+      <div class="app">
+        <div class="app__head"><h3>Admin panel</h3><span class="app__aud">Staff · web</span><span style="font-size:.78rem;color:var(--ink-3)">(outside the big three)</span></div>
+        <ul>
+          <li>Sidebar reorganised into groups — Reports / Deliveries / People / Products / Orders / Notifications / WhatsApp / CRM / LMS / Accounting / Settings / Archive — with a new <b>Search menu…</b> box at the top; expanded groups are remembered.</li>
+          <li><b>Notifications</b> (<code>/notifications</code>) absorbed the old Broadcast page and gained an <b>In-App Push ↔ WhatsApp</b> channel switch; history shows per-row channel badges and live "X sent · Y failed (+Z suppressed)" counts.</li>
+          <li><b>Orders</b>: subscription labels renamed (Custom/Daily), editable quantity on one-time orders, an admin <b>end date</b> field, B2B-aware create/edit + B2B filter, and a <b>B2B / Catering</b> order button.</li>
+          <li>Day-order <b>Mark cash</b> now takes a note (who collected) + an optional payment screenshot; Recovery report gained a "Marked recovered (manual)" tile and "View txns" deep links.</li>
+          <li>Proof/POD/collection photos now open through signed private links; catalog uploads route through secure storage.</li>
+        </ul>
+        <div class="callout callout--tip" style="margin-top:.9rem"><strong>Send a WhatsApp broadcast:</strong> open <b>Notifications</b>, flip the channel from <b>In-App Push</b> to <b>WhatsApp</b>, pick an approved template, fill each <code>{{variable}}</code>, add a header image if needed, check the preview, choose the audience, then <b>Send notification</b>. WhatsApp mode can only send pre-approved templates — no free text.</div>
+      </div>
+
+      <div class="app">
+        <div class="app__head"><h3>Websites</h3><span class="app__aud">Public / customers</span></div>
+        <ul>
+          <li><b>swargfood.com</b>: homepage rebuilt with a hero banner carousel and server-rendered sections; nav restructured; checkout hardened (real Razorpay errors, no double-charge, delivery date/slot honoured); new <code>/terms</code> and <code>/shipping-policy</code> pages; SEO groundwork.</li>
+          <li><b>desicowmilk web</b>: cookie-consent banner (analytics fire only after consent); ad-click/UTM attribution captured through checkout &amp; signup; subscription start-date now shows as a date, not a time.</li>
+        </ul>
+        <div class="note note--warn" style="margin-top:.9rem"><strong>Coordination note for whoever deploys:</strong> the website attribution capture is live, but the back-end attribution rails (migration&nbsp;104) must be applied <em>before</em> the next backend deploy, or order creation can error. Likewise the WhatsApp notification channel needs its back-end support (migration&nbsp;105) live before it will dispatch.</div>
+      </div>
+
+      <!-- ==================================================== -->
+      <!-- SECTION 1 · ACCOUNTING -->
+      <!-- ==================================================== -->
+      <p class="sec-kicker">Section 1</p>
+      <h2 class="sec" id="accounting">Accounting</h2>
+      <p class="sec-intro">A full GST accounting system inside the admin — invoicing, double-entry ledgers, purchase-bill capture with photo scanning (OCR), GST returns, bank reconciliation, and a two-way bridge to Tally. It keeps its own books but reads live orders, purchases and stock from the business. Find it under the <b>Accounting</b> group in the sidebar.</p>
+      <div class="note"><strong>Two things must be right or nothing invoices — silently.</strong> On the Overview page, <b>Accounting</b> must read <b>Enabled</b>, and the <b>Supplier state code</b> must be set (Karnataka&nbsp;=&nbsp;29). A missing state code is the number-one cause of "invoices aren't generating," and it shows no error.</div>
+
+      <!-- Setup -->
+      <article class="feature" id="ac-setup">
+        <div class="feature__head"><h3>Overview &amp; setup <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">Accounting <span class="arw">→</span> Settings <span class="arw">→</span> Overview <span class="url">/accounting</span></p>
+        <p class="purpose">The control room: turn accounting on/off, set the company's GST identity, and jump to every other screen from the quick-link cards.</p>
+        <ol class="steps">
+          <li>Open <b>Accounting → Settings → Overview</b>.</li>
+          <li>Check the top-right toggle. If it reads <b>Accounting Disabled</b>, click it once so it turns green and reads <b>Accounting Enabled</b>. Nothing invoices or posts while it's off.</li>
+          <li>Fill <b>Supplier identity (org GST profile)</b>: Legal name, Trade name, GSTIN, and — critically — <b>Supplier state code</b> (Karnataka = 29; the field is marked required). This code decides whether tax splits into CGST+SGST or IGST.</li>
+          <li>Optionally set <b>Default HSN</b> and <b>Default rate %</b> (used only until products are mapped on the HSN page).</li>
+          <li>Click <b>Save profile</b>.</li>
+          <li>Use the quick-link cards to jump to Customers, HSN &amp; Rates, Invoices, Ledgers, Tally, Bank Recon, B2C Consolidation or Reminders.</li>
+        </ol>
+        <div class="callout callout--prereq"><strong>Before you start:</strong> you need the <code>accounting</code> role permission. The Supplier state code is mandatory.</div>
+        <div class="callout callout--tip"><strong>Good to know</strong>
+          <ul><li><b>Accounting Enabled</b> is fail-closed — off means no invoices anywhere, and no error is shown.</li>
+          <li>GSTIN auto-uppercases; the state code is 2 digits.</li></ul></div>
+      </article>
+
+      <!-- Chart of accounts -->
+      <article class="feature" id="ac-coa">
+        <div class="feature__head"><h3>Chart of Accounts</h3></div>
+        <p class="navpath">Accounting <span class="arw">→</span> Chart of Accounts <span class="url">/accounting/accounts</span></p>
+        <p class="purpose">The tree of account groups and ledgers with live balances, and where you create new ledgers, groups, banks, tax ledgers, suppliers and customers.</p>
+        <ol class="steps">
+          <li>Open <b>Accounting → Chart of Accounts</b>.</li>
+          <li>Use the left <b>Groups</b> rail to drill into a group and its sub-groups; click a group to see only its ledgers, or <b>Show all</b> for the full chart.</li>
+          <li>Read the top <b>Total Debit / Credit</b> bar and each group's subtotal to sanity-check.</li>
+          <li>To add a ledger, click <b>New Ledger</b>, pick the Group, enter an Opening balance, choose Debit or Credit, then <b>Create</b>.</li>
+          <li>Use <b>New Group</b>, <b>New Bank</b> (pre-targets Bank Accounts) or <b>New Tax Ledger</b> (pre-targets Duties &amp; Taxes) as needed.</li>
+          <li><b>New Supplier</b> creates a vendor and auto-adds its payable ledger; <b>New Customer</b> jumps to the Customers page for a GST profile.</li>
+        </ol>
+        <div class="callout callout--tip"><strong>Tip:</strong> creating a supplier here makes its Sundry Creditors ledger automatically — you don't add it by hand.</div>
+      </article>
+
+      <!-- Vouchers -->
+      <article class="feature" id="ac-vouchers">
+        <div class="feature__head"><h3>Vouchers &amp; journal entries</h3></div>
+        <p class="navpath">Accounting <span class="arw">→</span> Transactions <span class="arw">→</span> Vouchers <span class="url">/accounting/vouchers</span></p>
+        <p class="purpose">Lists every journal entry — auto-posted and manual — and lets you hand-post a balanced double-entry voucher.</p>
+        <ol class="steps">
+          <li>Open <b>Accounting → Transactions → Vouchers</b> to see all entries (Date, Number, Type, Party, Narration, Source, Amount).</li>
+          <li>Click <b>+ New Voucher</b>.</li>
+          <li>Pick a kind: Payment, Contra, Expense, Income or Journal.</li>
+          <li>For <b>Payment/Contra</b>: choose "Paid To" and "Paid From" accounts and the Amount.</li>
+          <li>For <b>Expense/Income</b>: choose the bank/cash account, then add ledger lines with <b>+ add line</b>.</li>
+          <li>For <b>Journal</b>: choose the document type (Journal / Credit Note / Debit Note) and fill the Dr/Cr grid until the footer reads <b>balanced</b>.</li>
+          <li>Set the Date and optional Narration, then click <b>Post voucher</b>.</li>
+        </ol>
+        <div class="callout callout--warn"><strong>Don't record customer receipts here.</strong> The <b>Receipt</b> tab sends you to Customer Ledgers instead, so the money is allocated against the right open invoices. The server rejects an unbalanced journal.</div>
+      </article>
+
+      <!-- Invoices -->
+      <article class="feature" id="ac-invoices">
+        <div class="feature__head"><h3>Invoices — view, cancel, credit/debit note, reprice <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">Accounting <span class="arw">→</span> Transactions <span class="arw">→</span> Invoices <span class="url">/accounting/invoices</span></p>
+        <p class="purpose">The GST system of record. Invoices are created <em>automatically</em> when B2B deliveries are marked delivered, or by the consolidation jobs — this screen isn't where you type a new one; it's where you find, view and correct them.</p>
+        <ol class="steps">
+          <li>Open <b>Invoices</b>; set Status (All / Issued / Cancelled), a date range, or search a number/customer, then <b>Apply</b>.</li>
+          <li>Click a row to open the full invoice.</li>
+          <li>Click <b>PDF</b> for the printable GST invoice; click <b>Ledger</b> to jump to that customer's statement.</li>
+          <li>To return/adjust: click <b>Issue Credit Note</b> (reduces what they owe) or <b>Issue Debit Note</b> (increases it), enter the adjusted quantity per line, a Reason and a Note date, then confirm.</li>
+          <li>To fix a wrong price: click <b>Reprice</b>, edit the unit prices, then <b>Save &amp; reissue</b> — this saves the new agreed price for that customer <em>and</em> cancels-and-reissues a fresh GST-numbered invoice.</li>
+          <li>To void: click <b>Cancel</b>, add a reason, and confirm.</li>
+        </ol>
+        <div class="callout callout--warn"><strong><span class="badge badge--danger" style="vertical-align:baseline">Irreversible</span> Cancel keeps the invoice number (never reused) and posts a reversing ledger entry — it can't be undone.</strong> Credit/Debit note and Reprice are only on issued B2B tax invoices, not on B2C-consolidated or already-cancelled ones; a note's adjusted quantity can never exceed the invoiced quantity.</div>
+      </article>
+
+      <!-- Purchases -->
+      <article class="feature" id="ac-purchases">
+        <div class="feature__head"><h3>Purchases / Bills — review, import, scan &amp; correct <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">Accounting <span class="arw">→</span> Transactions <span class="arw">→</span> Purchases / Bills <span class="url">/accounting/purchases</span></p>
+        <p class="purpose">Review raw-material purchase bills — typed, imported, or photo-scanned — then post them as stock plus a Purchase voucher; and correct a bill after it's posted.</p>
+        <ol class="steps">
+          <li>Open <b>Purchases / Bills</b>. Use the tabs <b>To review</b>, <b>Posted</b>, <b>Rejected</b>, <b>All</b>.</li>
+          <li>Click the pencil to open a draft: check Vendor, Material, <b>Account head</b> (GL ledger; blank = Purchase account), Qty, Unit price, GST rate %, Supply (Intra/Inter-state), HSN, Invoice no.</li>
+          <li>If a cyan fat-pricing hint appears, click <b>Apply suggested price</b> to use fat × rate.</li>
+          <li>Click <b>Approve &amp; Post</b> (posts stock + Purchase voucher + Tally queue) or <b>Reject</b>. Use <b>Save changes</b> to keep editing.</li>
+          <li>To handle many at once, tick rows on <b>To review</b> and use <b>Approve selected (n)</b> / <b>Reject selected (n)</b>.</li>
+          <li>To bulk-load: <b>Import bills</b> → <b>Spreadsheet (CSV/Excel)</b> (upload, review the dry-run, "Import n drafts") or <b>Scan bills (photos)</b> (up to 20 images/PDFs; OCR creates drafts).</li>
+          <li>To fix a <b>posted</b> bill: open it, click <b>Correct cost</b>, enter a Reason (required) + optional date, then <b>Post correction</b>.</li>
+        </ol>
+        <div class="callout callout--warn"><strong>Correcting a posted bill:</strong> it <em>reverses</em> the live ledger entry and re-posts the new amount in the correction period; the original is preserved. If it reports "ledger sync is pending", <b>do not re-submit</b> — it self-heals; re-submitting double-applies.</div>
+        <div class="callout callout--tip"><strong>OCR badges:</strong> red (under 50%) or amber (below the auto-post threshold) both mean "open the photo and verify before approving." Bills at/above the confidence threshold (Tally settings, default 0.9) post automatically; lower ones wait in <b>To review</b>.</div>
+      </article>
+
+      <!-- Customers + HSN -->
+      <article class="feature" id="ac-customers">
+        <div class="feature__head"><h3>Customers &amp; HSN rates <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">Accounting <span class="arw">→</span> Transactions <span class="arw">→</span> Customers <span class="url">/accounting/customers</span> · HSN &amp; Rates <span class="url">/accounting/hsn</span></p>
+        <p class="purpose">Maintain each customer's GST identity (B2B vs B2C) and price overrides; and define HSN codes + GST rates so invoices calculate the right tax.</p>
+        <ol class="steps">
+          <li>On <b>Customers</b>, B2B loads immediately; expand <b>B2C Customers</b> for that (large) set. Search by name / phone / GSTIN.</li>
+          <li>Click the pencil to edit: set Customer type, <b>Credit terms (days)</b>, Legal name, <b>GSTIN (sets B2B)</b>, PAN, <b>Place of supply (state code)</b>, and addresses; click <b>Save</b>.</li>
+          <li>For a B2B customer, click the amber Tag icon or <b>Manage B2B price overrides</b> to set agreed per-product prices; click the book icon to open their ledger.</li>
+          <li>On <b>HSN &amp; Rates</b>, click <b>Add HSN code</b> (e.g. 0401), then on the HSN card click <b>Rate</b> to add a GST %; tick <b>Set as default rate for this HSN</b> for the usual one.</li>
+          <li>Switch to <b>Map Products</b>, choose an HSN+rate, tick <b>Unmapped only</b> to find products with no rate, select them, and click <b>Map n product(s)</b>.</li>
+        </ol>
+        <div class="callout callout--tip"><strong>Notes:</strong> entering a GSTIN auto-flags the customer as B2B. B2B prices are GST-inclusive (tax is back-calculated). Until a product is HSN-mapped, invoices fall back to the org default rate.</div>
+      </article>
+
+      <!-- B2C consolidation -->
+      <article class="feature" id="ac-b2c">
+        <div class="feature__head"><h3>B2C consolidation <span class="badge badge--new">New</span> <span class="badge badge--off">Default-off</span></h3></div>
+        <p class="navpath">Overview card <span class="url">/accounting</span> · review &amp; post <span class="url">/accounting/b2c-consolidation</span></p>
+        <p class="purpose">Rolls up many tiny unregistered (B2C) retail sales into one consolidated GST invoice instead of one per sale.</p>
+        <ol class="steps">
+          <li>On the Overview page, find the <b>B2C consolidation</b> card.</li>
+          <li>To enable the monthly roll-up, click <b>Monthly consolidation</b> so it reads <b>Enabled</b>, set the <b>Run time (IST)</b>, and <b>Save</b>. The job runs on the 1st for the prior month.</li>
+          <li>On the 1st, open <b>Accounting → Transactions → B2C Consolidation</b>, pick the <b>Period</b> month, and review the Taxable / CGST / SGST / IGST / Total tiles and per-slab lines.</li>
+          <li>For a Draft, click <b>Post consolidated invoice</b> and confirm.</li>
+        </ol>
+        <div class="callout callout--warn"><strong>Two separate switches, both off by default.</strong> <b>Monthly</b> consolidation is self-serve here. The <b>daily</b> switch — which changes how <em>every</em> B2C sale is invoiced — is read-only on the card on purpose: it's a back-end change, so raise it with Pradeep, not on-screen. <span class="badge badge--op" style="vertical-align:baseline">Operator step</span> Posting a consolidated run is irreversible and needs the <b>B2C Consolidation User Id</b> setting configured.</div>
+      </article>
+
+      <!-- Reports -->
+      <article class="feature" id="ac-reports">
+        <div class="feature__head"><h3>Reports &amp; GST returns <span class="badge badge--new">New: Sales Register</span></h3></div>
+        <p class="navpath">Accounting <span class="arw">→</span> Reports <span class="url">/accounting/reports/…</span> · GST Returns <span class="url">/accounting/gst-returns</span></p>
+        <p class="purpose">Read the books and generate portal-ready GST returns.</p>
+        <ol class="steps">
+          <li><b>Trial Balance</b> — pick the financial year; confirm the badge reads <b>Balanced</b>. "Out of balance" means investigate a posting before filing anything.</li>
+          <li><b>Balance Sheet</b> — Assets vs Liabilities &amp; Equity as on today (the P&amp;L net profit is carried into the equity side); confirm <b>Balanced</b>.</li>
+          <li><b>Profit &amp; Loss</b> — pick the FY; read Income vs Expenses down to the Net Profit/Loss line.</li>
+          <li><b>Day Book</b> — pick a date to see every voucher posted that day, expanded to its Dr/Cr lines (great for auditing what hit the ledgers).</li>
+          <li><b>Sales Register</b> <span class="badge badge--new" style="vertical-align:baseline">New</span> — pick a month range; read the full GST break-up per invoice and the "Total (issued only)" footer (cancelled invoices are listed but excluded).</li>
+          <li><b>GST Returns</b> — enter the period as <code>YYYY-MM</code>, click <b>Generate GSTR-1</b> / <b>GSTR-3B</b> / <b>GSTR-9 (annual)</b>, then <b>Download</b> the JSON. To reconcile input tax, upload the portal's GSTR-2B JSON and click <b>Import &amp; reconcile</b> for matched / mismatch / missing counts.</li>
+        </ol>
+        <div class="callout callout--prereq"><strong>Before you start:</strong> invoices and purchases for the period must already be posted, or the returns come out empty.</div>
+      </article>
+
+      <!-- Ledgers -->
+      <article class="feature" id="ac-ledgers">
+        <div class="feature__head"><h3>Customer ledgers &amp; recording a receipt</h3></div>
+        <p class="navpath">Accounting <span class="arw">→</span> Reports <span class="arw">→</span> Ledgers <span class="url">/accounting/ledgers</span></p>
+        <p class="purpose">A customer's running statement with outstanding balance and ageing — and the <em>correct</em> place to record a payment received, so it clears the right invoices.</p>
+        <ol class="steps">
+          <li>Open <b>Ledgers</b>, choose B2B or B2C, then search and select the customer.</li>
+          <li>Read the Outstanding tile and the Current / 31–60 / 61–90 / 90+ ageing tiles, then the entry-by-entry statement.</li>
+          <li>Click <b>Record receipt</b>: enter Amount, Mode (Online / Cash / Wallet / Bank Transfer) and a Reference (UTR / cheque / txn id).</li>
+          <li>Under <b>Allocate to open invoices</b>, enter how much of the receipt clears each open invoice (leave blank for an on-account receipt), then <b>Record receipt</b>.</li>
+        </ol>
+        <div class="callout callout--tip"><strong>Tip:</strong> record receipts here, not in the Voucher modal, so the receivable is matched to the correct invoices. Allocated amounts can't exceed the receipt total. You can deep-link here from an invoice's <b>Ledger</b> button.</div>
+      </article>
+
+      <!-- Bank recon -->
+      <article class="feature" id="ac-bank">
+        <div class="feature__head"><h3>Bank reconciliation <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">Accounting <span class="arw">→</span> Settings <span class="arw">→</span> Bank Recon <span class="url">/accounting/bank-reconciliation</span></p>
+        <p class="purpose">Import a bank statement, let the system suggest matches to invoices/ledgers, and confirm each row so a voucher posts against the mapped bank ledger — nothing posts unreviewed.</p>
+        <ol class="steps">
+          <li>Open <b>Bank Recon</b>. Optionally pick a <b>Bank account</b> (or click <b>Manage</b> to add one and map it to its GL ledger).</li>
+          <li>Click <b>Upload statement</b> and choose a CSV / Excel / PDF file.</li>
+          <li>Click the imported statement row to open the review panel (tabs: <b>Suggested</b>, <b>Needs review</b>, <b>Reconciled / ignored</b>).</li>
+          <li>On <b>Suggested</b>, click <b>Confirm</b> per row (or <b>Confirm all suggested</b>).</li>
+          <li>For unmatched rows, click <b>Match</b> (pick an invoice or ledger), <b>Suspense</b> (park against Bank Suspense) or <b>Ignore</b>. Use <b>Assign all → Suspense</b> to clear a batch.</li>
+        </ol>
+        <div class="callout callout--prereq"><strong>Before you start:</strong> add at least one bank account and map it to a GL bank ledger (via <b>Manage</b>), so reconciled rows have somewhere to post.</div>
+        <div class="callout callout--tip"><strong>Auto-match:</strong> Razorpay settlement deposits are matched automatically once the bank ledger is configured. Money-in rows can match an invoice or ledger; money-out rows go to a ledger only.</div>
+      </article>
+
+      <!-- Tally + opening -->
+      <article class="feature" id="ac-tally">
+        <div class="feature__head"><h3>Tally bridge, reconcile &amp; opening balances <span class="badge badge--new">New: import</span> <span class="badge badge--off">Default-off</span></h3></div>
+        <p class="navpath">Tally <span class="url">/accounting/tally-settings</span> · Reconcile <span class="url">/accounting/reconcile</span> · Opening Balances <span class="url">/accounting/opening-balances</span></p>
+        <p class="purpose">Configure the Tally bridge, turn posting/import on or off, watch the sync queue, pull data back from Tally, and enter opening balances.</p>
+        <ol class="steps">
+          <li>On <b>Tally → Settings</b>, toggle <b>Posting to Tally</b> on only after the Windows bridge host is verified; toggle <b>Importing from Tally</b> on to allow the Import tab.</li>
+          <li>Set <b>Purchase auto-post confidence</b> (0–1, default 0.9) and fill the Bridge connection + Company &amp; ledger mappings (Sales, Default debtor, CGST, SGST, IGST, Round-off, B2C ledgers). Click <b>Save settings</b>.</li>
+          <li>On <b>Sync queue</b>, filter by status and click <b>Retry</b> on any failed/pending voucher.</li>
+          <li>On <b>Import from Tally</b>, run a day-book import (From/To + Mode: <b>Sync</b> skips Swarg-owned vouchers, <b>Seed</b> imports everything for a one-time cutover), or take a Trial-balance snapshot.</li>
+          <li>On <b>Opening Balances</b>, pick the FY, add ledgers, type each Debit/Credit until the footer reads <b>balanced</b>, then <b>Save draft</b> or <b>Finalise &amp; post</b>.</li>
+        </ol>
+        <div class="callout callout--warn"><strong>When posting is off, vouchers pile up as "pending" — that's expected, not a bug.</strong> Use <b>Seed</b> mode only for a one-time cutover; use <b>Sync</b> for ongoing pulls so Swarg's own vouchers aren't re-imported. Finalising an opening voucher when one already exists voids the prior one and re-posts (a yellow banner warns you).</div>
+      </article>
+
+      <!-- Reminders -->
+      <article class="feature" id="ac-reminders">
+        <div class="feature__head"><h3>Payment reminders</h3></div>
+        <p class="navpath">Accounting <span class="arw">→</span> Settings <span class="arw">→</span> Reminders <span class="url">/accounting/reminders</span></p>
+        <p class="purpose">Cadence rules (relative to an invoice's due date) that automatically nudge customers about overdue payments through the notification engine.</p>
+        <ol class="steps">
+          <li>Open <b>Reminders</b> and click <b>Add rule</b>.</li>
+          <li>Enter <b>Offset days</b> (negative = before due, 0 = on due date, positive = overdue) — the label under the field confirms the meaning.</li>
+          <li>Toggle the Channels (whatsapp / email / sms / bell), set a Template title, tick <b>Active</b>, and save.</li>
+          <li>Check the <b>Recent sends</b> log to confirm reminders are going out.</li>
+        </ol>
+        <div class="callout callout--prereq"><strong>Before you start:</strong> a matching notification template (e.g. an approved WhatsApp template) should exist for the channel and title you use.</div>
+      </article>
+
+      <!-- ==================================================== -->
+      <!-- SECTION 2 · LMS / LAST-MILE -->
+      <!-- ==================================================== -->
+      <p class="sec-kicker">Section 2</p>
+      <h2 class="sec" id="lms">Last-Mile dispatch</h2>
+      <p class="sec-intro">Everything between "an order exists" and "a box reaches the door": truck-route drop points, last-mile driver assignments, the daily Delivery List, packing, and returns. The daily rhythm is — production packs against the pre-packing quantity check, the Delivery List is generated, the truck drops boxes at each drop point where last-mile drivers collect them, drivers mark deliveries in the app, and admins monitor and handle exceptions.</p>
+
+      <!-- Drop points + warehouses -->
+      <article class="feature" id="lms-drop">
+        <div class="feature__head"><h3>Drop points &amp; warehouses <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">Settings <span class="arw">→</span> Drop Points <span class="url">/drop-points</span> · Settings <span class="arw">→</span> Warehouses <span class="url">/settings/warehouses</span></p>
+        <p class="purpose">The physical truck-route hand-off points where the truck drops boxes for last-mile drivers to collect — with GPS pin, route order, photos, and which warehouse supplies each stop.</p>
+        <ol class="steps">
+          <li>First, under <b>Settings → Warehouses</b>, create a warehouse for each supply source and choose its supply mode — <b>Truck</b> (with the truck driver's name) or <b>Factory/Dairy pickup</b>.</li>
+          <li>Open <b>Settings → Drop Points</b> (or type "drop" in the Search menu box) and click <b>Add New</b>.</li>
+          <li>Enter a <b>Title</b> (required, e.g. the apartment/landmark), optional <b>Latitude/Longitude</b> for driver navigation, an optional <b>Route Order</b> number, Notes, and pick the <b>Warehouse (supply)</b>.</li>
+          <li>Click <b>Create</b> — the dialog stays open so you can <b>Add Photo</b> (up to 5 reference images).</li>
+          <li>Later, click <b>Edit</b> on a row to change it. The table shows each stop's Route Order, assigned Drivers count and photo count.</li>
+        </ol>
+        <div class="callout callout--warn"><strong>Only create "stock" hand-off points here.</strong> B2B shop stops are a different kind (created through the B2B customer setup) — never delete a shop-type row from this page. A drop point with no warehouse shows no supply mode; <code>factory_pickup</code> renders as the "Dairy pickup" chip, truck warehouses as "Truck · &lt;driver&gt;". Deleting a stop that still has drivers/orders can break assignments — reassign first.</div>
+      </article>
+
+      <!-- Assign drivers -->
+      <article class="feature" id="lms-drivers">
+        <div class="feature__head"><h3>Assign a last-mile driver &amp; grant app capabilities <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">People <span class="arw">→</span> Drivers <span class="url">/drivers</span></p>
+        <p class="purpose">Attach a last-mile (milk) driver to the drop point they collect from, and grant delivery-app capabilities such as Milk Delivery, Truck Deliveries, Collection Pickup, Scan Bill or Dairy Receipt.</p>
+        <ol class="steps">
+          <li>Open <b>People → Drivers</b> and click <b>Edit</b> on the driver's row.</li>
+          <li>Set <b>Driver Type</b> to <b>Last-mile</b> (the drop-point picker only appears for last-mile drivers; Truck and Day are the other types).</li>
+          <li>Pick the driver's <b>Drop Point</b> from the dropdown that appears (or leave "— Not assigned —").</li>
+          <li>Optionally toggle <b>Driver Location On</b> to require GPS capture when they mark a delivery.</li>
+          <li>Under <b>Delivery App Capabilities</b>, toggle extras: Milk Delivery, Truck Deliveries, Collection Pickup, <b>Scan Bill (purchase capture)</b>, <b>Dairy Receipt (Milk Received)</b>, Collection Approval.</li>
+          <li>Click <b>Update</b>, then tell the driver to log out and back in so changes take effect.</li>
+        </ol>
+        <div class="callout callout--warn"><strong>The system won't let you assign a last-mile driver to a B2B shop drop point</strong> ("Drop point must be a stock hand-off point") — shops are truck-delivered. Capability and location changes always require a log-out/log-in.</div>
+      </article>
+
+      <!-- Delivery list -->
+      <article class="feature" id="lms-list">
+        <div class="feature__head"><h3>Delivery List — the daily dispatch hub <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">Deliveries <span class="arw">→</span> Delivery List <span class="url">/delivery-list</span></p>
+        <p class="purpose">Generate the day's deliveries from active subscriptions/orders, then read and manage the list across six tabs: Customer Orders, Routewise Products, Packing List, Dairy Pickup, Drop Points, Shops.</p>
+        <ol class="steps">
+          <li>Open <b>Deliveries → Delivery List</b> and pick the date (defaults to today).</li>
+          <li>On <b>Customer Orders</b>, click <b>Generate List</b>, enter the passcode when prompted (type <kbd>TODAY</kbd> for today, or the 8-digit <kbd>YYYYMMDD</kbd> for a future date), and confirm. A progress overlay shows created vs skipped.</li>
+          <li>Use <b>Check deliveries</b> to dry-run <em>tomorrow's</em> generation — it lists low-balance/partial orders and orders with no driver, creating nothing.</li>
+          <li>Switch tabs to read the list different ways (products per driver, total qty per product, pickup groups, drop points, shops).</li>
+          <li>On Customer Orders, filter with the checkboxes (Delivered Only, Not Delivered Only, Different Qty Delivered) or the All-Drivers dropdown; tick rows + <b>Mark Selected Delivered</b> for bulk.</li>
+          <li>Click the blue pencil (<b>Qty Edit</b>) to change a scheduled quantity (0 = skip); click the amber warning icon to set a non-delivery reason.</li>
+          <li><b>Export CSV</b> exports any tab. <b>Delete List</b> is passcode-gated (deleting today's list needs the longer safety code).</li>
+        </ol>
+        <div class="callout callout--tip"><strong>Reading the columns:</strong> <b>Qty</b> = scheduled; <b>Del Qty</b> = what the driver actually marked (red when different, amber strike-through when 0). Driver marks never overwrite the scheduled qty — only Qty Edit does. Generate is safe to re-run: it skips existing entries. B2B shops live on the Shops tab but are still counted in Packing List totals.</div>
+        <div class="callout callout--prereq"><strong>Before you start:</strong> the auto-generate cron normally builds tomorrow's list overnight — manual Generate is for corrections or a missed run. Subscriptions and driver assignments must exist first.</div>
+      </article>
+
+      <!-- truck / shop tabs -->
+      <article class="feature" id="lms-truck">
+        <div class="feature__head"><h3>Drop-point &amp; Shop tabs — monitor the truck stage <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">Deliveries <span class="arw">→</span> Delivery List <span class="arw">→</span> Drop Points / Shops tabs <span class="url">/delivery-list</span></p>
+        <p class="purpose">See the truck's box hand-off per drop point and per B2B shop, and push undelivered items to the day-time pool.</p>
+        <ol class="steps">
+          <li>On <b>Drop Points</b>, each stop is one collapsed line (route order, title, a Dairy-pickup / "Truck · &lt;driver&gt;" chip, customer count, total qty).</li>
+          <li>Click a line to expand it — per-customer delivery lines, each driver's "boxes" with a Delivered / Short / Not-delivered outcome, and any returnable-box photos and counts.</li>
+          <li>On <b>Shops</b>, each B2B shop card shows route order, customer, truck driver, per-product delivered quantities, and a Pending / Done / "In Day Pool" status.</li>
+          <li>If a shop has undelivered lines, click <b>Send to day pool</b> → confirm <b>Send to Day Net</b>. A day driver can then claim and deliver it (billed by GST invoice, no wallet).</li>
+          <li>For a single missed morning order, use <b>Send to Day Net</b> in that row's Day Net column on Customer Orders.</li>
+        </ol>
+        <div class="callout callout--tip"><strong>These tabs are read-only monitors</strong> for the truck stage — the actual marks and returnable photos are entered by drivers in the app. "Send to day pool" is the only write action; clicking it twice is treated as "already in pool," not an error.</div>
+      </article>
+
+      <!-- Packing -->
+      <article class="feature" id="lms-pack">
+        <div class="feature__head"><h3>Pre-packing forecast &amp; packing runs <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">Archive <span class="arw">→</span> Pre-Packing List <span class="url">/production-delivery</span> · Accounting <span class="arw">→</span> Inventory <span class="arw">→</span> Production <span class="arw">→</span> Packing <span class="url">/production/packing</span></p>
+        <p class="purpose">Decide how much to pack tomorrow morning (a dry run), and log how many packets were sealed from bulk as a reconciliation record.</p>
+        <ol class="steps">
+          <li>On <b>Pre-Packing List</b>, click <b>Run quantity check</b> — a dry run of tomorrow's generation (nothing saved) showing exact <b>Qty to pack</b> per product, net of wallet allocation, next to a 28-day forecast and a Δ column.</li>
+          <li>Use the <b>Delivery Truck</b> tab for the truck-load summary + per-driver route groups; <b>Packing List</b> and <b>Dairy Pickup</b> for a generated date's totals.</li>
+          <li>To record a packing run: <b>Production → Packing → Record packing</b>, choose the Packed product, set <b>Packed from</b> (Intermediate made in-house / Raw material repacked), pick the Source, enter Packets packed + Date, then <b>Record packing</b>.</li>
+        </ol>
+        <div class="callout callout--tip"><strong>Both are non-destructive.</strong> Pre-Packing never writes anything — it's just the tool for deciding quantities. Recording a packing run does <em>not</em> change sellable stock; it's purely a reconciliation/wastage log. The 28-day forecast covers subscriptions only; "~" marks products with under 14 days of history.</div>
+      </article>
+
+      <!-- returns + day orders -->
+      <article class="feature" id="lms-returns">
+        <div class="feature__head"><h3>Returns &amp; refunds · Day orders <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">Orders <span class="arw">→</span> Refunds &amp; Returns <span class="url">/returns-refunds</span> · Orders <span class="arw">→</span> Day Orders <span class="url">/day-orders</span></p>
+        <p class="purpose">Track returnable-packaging pickups (bottles, crates) and refund the deposit to the wallet; and manage one-off day-time (11 AM–6 PM) deliveries including cash settlement.</p>
+        <ol class="steps">
+          <li>On <b>Refunds &amp; Returns</b>, set the <b>Refund Mode</b> toggle — <b>auto</b> credits the wallet on pickup, <b>manual</b> requires admin approval.</li>
+          <li>Filter by status; for a <b>Pending approval</b> row click <b>Approve</b> (credits the wallet, shows the new balance).</li>
+          <li>For a return still in flight you want to settle now, click <b>Refund</b> to issue the wallet credit manually.</li>
+          <li>On <b>Day Orders</b>, review the Orders / Revenue / Not-delivered / Collected / To-collect tiles.</li>
+          <li>Click <b>New Order</b> for a one-time day order, or <b>B2B / Catering</b> for an institutional order (the modal also saves the org as a reusable B2B customer).</li>
+          <li>When a day order is paid in cash, use <b>Mark cash</b> — you can now attach a cash note (who collected) and a payment screenshot.</li>
+        </ol>
+        <div class="callout callout--warn"><strong><span class="badge badge--danger" style="vertical-align:baseline">Irreversible</span> The manual Refund button issues the wallet credit immediately — there's no undo.</strong> Undelivered morning orders and B2B shops arrive in Day Orders automatically when someone clicks "Send to Day Net". Set up returnable items first under <b>Settings → Packaging Types</b>.</div>
+      </article>
+
+      <!-- merge -->
+      <article class="feature" id="lms-merge">
+        <div class="feature__head"><h3>Link a lead to an existing customer <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">LMS <span class="arw">→</span> Leads <span class="arw">→</span> open a lead <span class="url">/lms/leads/[id]</span></p>
+        <p class="purpose">When a "new lead" is really an existing customer messaging from a second number, record that number as an alternate on the real customer so future logins, orders and messages resolve to them.</p>
+        <ol class="steps">
+          <li>Open the lead from <b>LMS → Leads</b>.</li>
+          <li>Find the <b>Link to existing customer</b> card (amber link icon) — it only shows while the lead isn't already Converted or Duplicate.</li>
+          <li>In <b>Customer ID</b>, type the existing customer's backend user ID (look it up under People → Customers).</li>
+          <li>Click <b>Link</b> and confirm the prompt.</li>
+        </ol>
+        <div class="callout callout--warn"><strong><span class="badge badge--danger" style="vertical-align:baseline">Irreversible</span> from the UI — double-check the Customer ID before clicking Link.</strong> It records the lead's phone as an <em>alternate</em> number on the customer (it doesn't merge or delete order history) and marks the lead a duplicate.</div>
+      </article>
+
+      <!-- ==================================================== -->
+      <!-- SECTION 3 · CRM -->
+      <!-- ==================================================== -->
+      <p class="sec-kicker">Section 3</p>
+      <h2 class="sec" id="crm">CRM &amp; leads</h2>
+      <p class="sec-intro">Three related but separate areas. <b>CRM</b> is the phone-call desk for <em>existing</em> customers. <b>LMS</b> is the newer lead pipeline plus AI (insights, at-risk, digests). <b>Business Pulse</b> is a CEO financial dashboard. Live WhatsApp messaging is a fourth, separate module. In short: <strong>CRM = calls, LMS = leads + AI, WhatsApp = chat.</strong></p>
+
+      <!-- worklist -->
+      <article class="feature" id="crm-worklist">
+        <div class="feature__head"><h3>Call worklist — "Customers due for a call"</h3></div>
+        <p class="navpath">CRM <span class="arw">→</span> Worklist <span class="url">/crm/worklist</span></p>
+        <p class="purpose">The daily relationship-call to-do list: existing customers with no completed call inside the cadence window, plus any follow-ups due today.</p>
+        <ol class="steps">
+          <li>Open <b>CRM → Worklist</b> (opening CRM lands here).</li>
+          <li>Read the sub-heading for how many are due and the cadence (e.g. "no completed call in the last 30 days").</li>
+          <li>Scan each row: Reason badge (orange "Follow-up" / blue "Due for call"), Customer, Phone, Route, an activity strip (7/15/30/60/90/180-day chips), Last Call, and Wallet (red under ₹250).</li>
+          <li>Click a row or the purple <b>Start call</b> button to open the guided call screen.</li>
+          <li>Use <b>Refresh</b> after logging calls. If empty, read the "Why is this empty?" panel.</li>
+        </ol>
+        <div class="callout callout--tip"><strong>Worklist is about existing customers</strong> (relationship / reactivation care). New prospects live under LMS → Leads. Cadence is controlled by the <code>crm_call_cadence_days</code> setting.</div>
+      </article>
+
+      <!-- guided call -->
+      <article class="feature" id="crm-call">
+        <div class="feature__head"><h3>Guided call screen — log feedback</h3></div>
+        <p class="navpath">Opened from Worklist "Start call", All Feedback, or a customer's Feedback tab <span class="url">/crm/call/&lt;userId&gt;</span></p>
+        <p class="purpose">A one-screen call cockpit: the customer's context, the script to read, and a 9-section checklist to record what they say.</p>
+        <ol class="steps">
+          <li>At the top, review the context card — tap the phone number to dial, see wallet (red under ₹250), route, and the activity strip.</li>
+          <li>Open the <b>"📞 Before the call — read the script"</b> panel; use the call-type toggle (Feedback / Reactivation / any active script type) to load the right script.</li>
+          <li>Work down the numbered <b>During the call</b> sections: Greeting, Problems, Product feedback, Delivery feedback, Preferences (call/delivery time, ring-bell, drop place), App feedback, Care notes, Occupation.</li>
+          <li>In section 9 <b>Call outcome</b>, choose a <b>Status</b> (required): Done, No Response, Call Later, Discontinued or Invalid Number. Set the Call date.</li>
+          <li>If you pick <b>Call Later</b>, a required <b>Follow-up date</b> appears — that date puts the customer back on the Worklist.</li>
+          <li>Click <b>Save call</b>.</li>
+        </ol>
+        <div class="callout callout--warn"><strong>Saving fails</strong> (with a toast) if you don't choose a Status, or choose Call Later without a follow-up date. At least one Call Script must exist for the chosen type, or the panel shows "No script configured".</div>
+      </article>
+
+      <!-- feedback log + scripts -->
+      <article class="feature" id="crm-feedback">
+        <div class="feature__head"><h3>Feedback log &amp; call scripts <span class="badge badge--new">New: custom types</span></h3></div>
+        <p class="navpath">CRM <span class="arw">→</span> All Feedback <span class="url">/crm/feedback</span> · CRM <span class="arw">→</span> Call Scripts <span class="url">/crm/scripts</span></p>
+        <p class="purpose">The searchable master log of every call, and the editor where a manager writes the scripts callers read.</p>
+        <ol class="steps">
+          <li>On <b>All Feedback</b>, filter by Status, Call type, and date range, or free-text search across customer, caller and notes.</li>
+          <li>Click the chevron on a row to expand long-text fields inline; click elsewhere on a row to open it for editing.</li>
+          <li>To log fresh, click <b>New feedback</b> (or <b>New reactivation</b>), search the customer, and select them.</li>
+          <li>On <b>Call Scripts</b>, use the script-type buttons to select a script, edit Title and Body (markdown, with a live preview), and <b>Save script</b>.</li>
+          <li>To add a type, click <b>Add Script</b>, pick a preset or <b>Other (custom)…</b>, name it, fill Title/Body, then <b>Add script</b>.</li>
+        </ol>
+        <div class="callout callout--tip"><strong>New this month:</strong> call types are no longer capped at Feedback/Reactivation — <em>any</em> active script you add (Welcome, Seasonal, Offer, or a custom name up to 20 lowercase chars) automatically becomes a call-type option and an All-Feedback filter, with no developer change. Each customer's history also shows on their profile's <b>Feedback</b> tab (People → Customers → open a customer).</div>
+      </article>
+
+      <!-- leads -->
+      <article class="feature" id="crm-leads">
+        <div class="feature__head"><h3>Lead pipeline — sources, owner, score <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">LMS <span class="arw">→</span> Leads <span class="url">/lms/leads</span> · open one <span class="url">/lms/leads/&lt;id&gt;</span></p>
+        <p class="purpose">The prospect pipeline: every lead from WhatsApp, website, stalls, app installs, referrals or manual entry, with its source, owner, score and stage.</p>
+        <ol class="steps">
+          <li>Pick the pipeline with the <b>B2C / B2B / All</b> tabs.</li>
+          <li>Filter by <b>Source</b> (this is the lead-source attribution), status chips (New, Contacted, Qualified, Converted, Lost, Duplicate), or the search box.</li>
+          <li>Toggle sort between <b>Newest</b> and <b>Hottest</b> (ranks by the rule-based 0–100 score).</li>
+          <li>Read the columns — including <b>Expires</b> (days until an untouched open lead auto-lapses to Lost at 30 days).</li>
+          <li>Click <b>Sync from contacts</b> to backfill leads from your WhatsApp contacts (safe to re-run), or <b>New lead</b> to add manually.</li>
+          <li>Open a lead to change Status, set the <b>Pipeline</b> (B2C/B2B), assign an <b>Owner</b>, add Notes/Tags, or use <b>Link to existing customer</b>.</li>
+        </ol>
+        <div class="callout callout--tip"><strong>New this month:</strong> B2C/B2B tabs, an Owner column with assign-to-staff, rule-based Score with "Hottest" sort, tag editing, and "Sync from contacts." Assigning an owner can fire an opt-in WhatsApp "new lead" alert to that salesperson. Leads live in a separate store from the main customer/order database.</div>
+      </article>
+
+      <!-- people + at-risk -->
+      <article class="feature" id="crm-people">
+        <div class="feature__head"><h3>People, RFM &amp; At-Risk Today <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">LMS <span class="arw">→</span> People <span class="url">/lms/people</span> · At-Risk Today <span class="url">/lms/at-risk</span> · Today <span class="url">/lms</span> · Insights <span class="url">/lms/insights</span> · System &amp; Jobs <span class="url">/lms/system</span></p>
+        <p class="purpose">A unified contact list enriched with RFM segment, health score and churn risk — plus the AI action feed and a ranked churn-save call list.</p>
+        <ol class="steps">
+          <li>On <b>People</b>, filter by <b>RFM Segment</b> (Champions, Loyal, Promising, At-Risk, Hibernating, Lost) and Churn risk to build call lists.</li>
+          <li>On <b>At-Risk Today</b>, work the numbered list top-to-bottom; each row shows risk, health, days-since-last-order and a "Suggested:" next action, with one-tap <b>Call</b> / <b>WhatsApp</b>.</li>
+          <li>On <b>Today</b>, read the five metric cards and act on each AI insight with <b>Approve / Snooze / Dismiss</b>; click <b>Run insights</b> to generate a fresh batch now.</li>
+          <li>If segment/health columns are blank, open <b>System &amp; Jobs</b> and click <b>Recompute now</b> to rebuild scores from real order history.</li>
+        </ol>
+        <div class="callout callout--warn"><strong>Two different call lists — don't confuse them.</strong> <b>At-Risk Today</b> is driven by RFM/health (churn saves); the CRM <b>Worklist</b> is driven by call cadence + follow-ups (routine care). <span class="badge badge--danger" style="vertical-align:baseline">Danger</span> On <b>System &amp; Jobs</b>, never click <b>Seed demo</b> on production — it overwrites everyone's scores with random values; use Recompute now instead.</div>
+      </article>
+
+      <!-- pulse -->
+      <article class="feature" id="crm-pulse">
+        <div class="feature__head"><h3>Business Pulse — CEO dashboard <span class="badge badge--new">New</span></h3></div>
+        <p class="navpath">Reports <span class="arw">→</span> Business Pulse <span class="url">/business-pulse</span></p>
+        <p class="purpose">A CEO-level overview of Revenue, Subscriptions, Wastage, Drivers and Vendor price variance.</p>
+        <ol class="steps">
+          <li>Open <b>Reports → Business Pulse</b>.</li>
+          <li>Choose the window with the <b>6 / 12 / 24 months</b> buttons.</li>
+          <li>Read the sections top to bottom.</li>
+        </ol>
+        <div class="callout callout--prereq"><strong>Before you start:</strong> grant the <code>business-pulse</code> permission narrowly (the CEO role) at <code>/roles</code> — it exposes company-wide financials. It's backed by reporting views that need their migrations (101/102) applied before data shows.</div>
+      </article>
+
+      <!-- ==================================================== -->
+      <!-- ADMIN TASKS -->
+      <!-- ==================================================== -->
+      <p class="sec-kicker">For administrators</p>
+      <h2 class="sec" id="admin">Admin tasks</h2>
+
+      <article class="feature" id="admin-perms">
+        <div class="feature__head"><h3>Granting a user access to a section</h3></div>
+        <p class="navpath">People <span class="arw">→</span> Roles &amp; Permissions <span class="url">/roles</span></p>
+        <p class="purpose">Each sidebar area is gated by a permission key. Add the key to a role and everyone in that role sees the area.</p>
+        <ol class="steps">
+          <li>Open <b>People → Roles &amp; Permissions</b> and edit (or create) a role.</li>
+          <li>Tick the permission for the area you want to grant, then save. The relevant keys:</li>
+        </ol>
+        <div class="callout callout--tip"><strong>Permission keys by area</strong>
+          <ul>
+            <li><code>accounting</code> — the whole Accounting section</li>
+            <li><code>crm</code> — CRM (Worklist, Feedback, Call Scripts) · <code>lms</code> — LMS (Today, Insights, At-Risk, People, Leads…)</li>
+            <li><code>business-pulse</code> — the CEO dashboard (grant narrowly) · <code>whatsapp</code> — the WhatsApp inbox</li>
+            <li><code>delivery-list</code>, <code>drop-points</code>, <code>drivers</code>, <code>packaging</code>, <code>day-orders</code>, <code>production</code>, <code>settings</code> — the last-mile screens</li>
+            <li><code>production-delivery</code> — pins backup packing staff to the Pre-Packing page only</li>
+          </ul>
+          A role with an empty permissions list (full access) automatically sees everything.</div>
+      </article>
+
+      <article class="feature" id="admin-auto">
+        <div class="feature__head"><h3>Turning on the nightly AI automations <span class="badge badge--off">Default-off</span> <span class="badge badge--op">Operator step</span></h3></div>
+        <p class="navpath">Back-end app settings + Settings <span class="arw">→</span> Automation <span class="url">/settings/automation/runs</span> (run history)</p>
+        <p class="purpose">The Phase-4 AI/marketing automations all shipped <em>off</em>. There are four separate switches.</p>
+        <ol class="steps">
+          <li>Decide which to enable: <b>RFM Nightly</b> (score recompute), <b>Insights Agent Nightly</b> (AI insights), <b>CEO Digest</b> (weekly WhatsApp digest, Mondays), <b>Daily Sales Nudge</b> (each lead-owner's hottest leads).</li>
+          <li>Have an engineer flip the chosen setting from <code>0</code> to <code>1</code> — these are <em>not</em> on the on-screen Automation toggle page; they're set in the database (seeded off by migration 103).</li>
+          <li>Set the supporting values as needed (CEO Digest Time, <code>ceo_digest_phone</code>, Sales Nudge Time, LMS Nightly Run Time) and enable the parent <b>LMS Nightly</b> job.</li>
+          <li>Ensure Agent Force + the <code>LMS_ADMIN_*</code> env link are configured, or the AI steps stay inert.</li>
+          <li>Verify fires under <b>Settings → Automation → View run history</b>.</li>
+        </ol>
+        <div class="note"><strong>Nothing messages a customer, the CEO or sales staff until an operator flips the flag AND the WhatsApp templates + Agent Force are ready.</strong> You can always run RFM and Insights on demand from LMS → System &amp; Jobs and LMS → Today without enabling any cron. The regular timed jobs that <em>do</em> appear on Settings → Automation (delivery list, low-balance, driver nudges) are toggled on-screen — the four AI switches are the exception.</div>
+      </article>
+
+      <!-- CONFIRM -->
+      <h2 class="sec" id="confirm">Before you circulate this manual</h2>
+      <p class="sec-intro">The <strong>Accounting</strong> section has been verified screen-by-screen against the live admin code, and the navigation paths for every section were checked against the sidebar. A few operational things below are still worth a human confirm.</p>
+      <div class="note note--warn">
+        <strong>Operator prerequisites — confirm these back-end steps are applied on production before staff rely on the matching screens:</strong>
+        <ul>
+          <li>Purchase-correction (migration 099) — needed before "Correct cost" works on posted bills.</li>
+          <li>Settlement-to-bank reconciliation (migration 082) — needed for Razorpay auto-match on Bank Recon.</li>
+          <li>Business Pulse views (migrations 101/102) and attribution rails (migration 104) — needed before those screens/flows show data.</li>
+          <li>WhatsApp notification channel (migration 105) — needed before WhatsApp broadcasts dispatch.</li>
+        </ul>
+      </div>
+      <div class="note">
+        <strong>Points to confirm with the team:</strong>
+        <ul>
+          <li>The Delivery List <b>passcode format</b> (TODAY / YYYYMMDD, and the longer code to delete today's list) is enforced in code but deliberately not shown on screen — make sure the ops runbook documents it so staff know what to type.</li>
+          <li>The daily B2C consolidation switch and the four nightly-AI flags are database-set (not on the Automation page) — confirm who is authorised to change them.</li>
+          <li><b>Route Auto-Ordering</b> (nearest-neighbour stop sequencing on generation) is a default-off setting — confirm whether it's been turned on in production before treating it as active behaviour.</li>
+          <li>Confirm the exact human-readable labels shown in the <code>/roles</code> permission list, and that <code>business-pulse</code> is selectable there.</li>
+          <li>Confirm the generated GSTR-1/3B/9 JSON is directly portal-uploadable with your CA for the current filing period.</li>
+        </ul>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<button class="backtop" id="backtop" aria-label="Back to top">↑ Top</button>
+
+<script>
+  (function(){
+    var tog=document.querySelector('.tog'),panel=document.getElementById('tocnav');
+    if(tog&&panel){tog.addEventListener('click',function(){
+      var open=panel.classList.toggle('open');
+      tog.setAttribute('aria-expanded',open?'true':'false');
+    });
+    panel.addEventListener('click',function(e){
+      if(e.target.tagName==='A'&&window.matchMedia('(max-width:900px)').matches){
+        panel.classList.remove('open');tog.setAttribute('aria-expanded','false');
+      }
+    });}
+    var bt=document.getElementById('backtop');
+    var onScroll=function(){ (window.scrollY>600)?bt.classList.add('show'):bt.classList.remove('show'); };
+    window.addEventListener('scroll',onScroll,{passive:true});onScroll();
+    bt.addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'});});
+  })();
+</script>
+</body>
+</html>

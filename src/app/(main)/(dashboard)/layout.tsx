@@ -15,6 +15,18 @@ export default function DashboardLayout({
     const router = useRouter();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    // Embed mode — the delivery app's WhatsApp Inbox WebView seeds
+    // localStorage['embed_mode']='wa' alongside the auth token so this layout
+    // renders WITHOUT the admin sidebar/topbar chrome (the WebView must show
+    // ONLY the WhatsApp module, not the whole admin panel).
+    const [embedMode, setEmbedMode] = useState(false);
+    useEffect(() => {
+        try {
+            setEmbedMode(localStorage.getItem('embed_mode') === 'wa');
+        } catch {
+            // Storage unavailable — normal chrome.
+        }
+    }, []);
 
     // Restore collapsed state from localStorage
     useEffect(() => {
@@ -54,6 +66,20 @@ export default function DashboardLayout({
 
     if (!isAuthenticated) {
         return null;
+    }
+
+    if (embedMode) {
+        // Same <main> wrapper as the normal branch (the whatsapp-shell's
+        // negative margins cancel this padding) — just no Sidebar/Topbar.
+        return (
+            <div className="min-h-screen bg-slate-950 flex">
+                <div className="flex-1 flex flex-col min-w-0">
+                    <main className="flex-1 p-4 lg:p-6 overflow-auto">
+                        <div className="animate-fade-in">{children}</div>
+                    </main>
+                </div>
+            </div>
+        );
     }
 
     return (
