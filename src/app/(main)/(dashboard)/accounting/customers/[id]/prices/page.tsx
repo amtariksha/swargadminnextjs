@@ -8,9 +8,11 @@ import { useProducts } from '@/hooks/useData';
 import { useQueryClient } from '@tanstack/react-query';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import ProductPicker from '@/components/ProductPicker';
+import BulkB2bPriceImportModal from '@/components/accounting/BulkB2bPriceImportModal';
 import { formatINR, formatDate } from '@/lib/accounting';
 import { PUT, DELETE } from '@/lib/api';
-import { Plus, Edit, Trash2, ArrowLeft } from 'lucide-react';
+import { Plus, Edit, Trash2, ArrowLeft, FileSpreadsheet } from 'lucide-react';
 import { toast } from 'sonner';
 
 const inputCls =
@@ -28,6 +30,8 @@ export default function CustomerPricesPage() {
     const { data: products = [] } = useProducts();
 
     const [modalOpen, setModalOpen] = useState(false);
+    // The bulk sheet spans every shop and the common tier, not just this customer.
+    const [bulkOpen, setBulkOpen] = useState(false);
     const [form, setForm] = useState(blankForm);
     const [saving, setSaving] = useState(false);
 
@@ -128,10 +132,17 @@ export default function CustomerPricesPage() {
                     <h1 className="text-2xl font-bold text-white">B2B Prices — {customer?.user?.name ?? `#${userId}`}</h1>
                     <p className="text-slate-400">Agreed per-product prices (GST-inclusive). These override the product&apos;s default B2B price on this customer&apos;s bills.</p>
                 </div>
-                <button onClick={openAdd}
-                    className="px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl text-sm font-medium inline-flex items-center gap-1.5">
-                    <Plus className="w-4 h-4" /> Add price
-                </button>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => setBulkOpen(true)}
+                        title="Upload prices for every shop and every product in one sheet"
+                        className="px-4 py-2.5 bg-slate-800/60 text-cyan-300 border border-cyan-500/30 rounded-xl text-sm font-medium inline-flex items-center gap-1.5">
+                        <FileSpreadsheet className="w-4 h-4" /> Bulk prices
+                    </button>
+                    <button onClick={openAdd}
+                        className="px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl text-sm font-medium inline-flex items-center gap-1.5">
+                        <Plus className="w-4 h-4" /> Add price
+                    </button>
+                </div>
             </div>
 
             {!isB2b && customer && (
@@ -143,18 +154,16 @@ export default function CustomerPricesPage() {
             <DataTable data={offers} columns={columns} loading={isLoading} pageSize={50}
                 searchPlaceholder="Filter products..." emptyMessage="No agreed prices yet — add one." />
 
+            <BulkB2bPriceImportModal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} onDone={invalidate} />
+
             <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Agreed B2B price" size="lg">
                 <form onSubmit={submit} className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium text-slate-300 mb-2">Product</label>
-                        <select value={form.product_id} onChange={(e) => setForm({ ...form, product_id: e.target.value })} className={inputCls}>
-                            <option value="">Select a product…</option>
-                            {products.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                    {p.title}{p.b2b_price != null ? ` — B2B ₹${p.b2b_price}` : (p.mrp != null ? ` — MRP ₹${p.mrp}` : '')}
-                                </option>
-                            ))}
-                        </select>
+                        <ProductPicker
+                            value={form.product_id ? Number(form.product_id) : null}
+                            onChange={(p) => setForm({ ...form, product_id: p ? String(p.id) : '' })}
+                        />
                         {selectedProduct && (
                             <p className="text-xs text-slate-500 mt-1">
                                 MRP {selectedProduct.mrp != null ? formatINR(selectedProduct.mrp) : '—'}
