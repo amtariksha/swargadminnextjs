@@ -10,7 +10,7 @@ import BulkPurchaseImportModal from '@/components/accounting/BulkPurchaseImportM
 import LedgerPicker from '@/components/accounting/LedgerPicker';
 import { useVendors, useRawMaterials } from '@/hooks/useInventory';
 import { useTallySettings } from '@/hooks/useAccounting';
-import { CheckCircle2, XCircle, Edit, Image as ImageIcon, Upload, Eye, EyeOff } from 'lucide-react';
+import { CheckCircle2, XCircle, Edit, Image as ImageIcon, Upload, Eye, EyeOff, ScanLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatApiDate } from '@/lib/dateUtils';
 
@@ -84,6 +84,10 @@ interface PurchaseRow {
   status: string;
   source: string;
   ocr_confidence: number | string | null;
+  /** Deferred-OCR state (migration 110). NULL on rows captured before it. */
+  ocr_status?: 'pending' | 'running' | 'done' | 'failed' | 'skipped' | null;
+  ocr_error?: string | null;
+  ocr_run_count?: number | null;
   photos?: string[];
   vendor_id: number;
   raw_material_id: number;
@@ -187,6 +191,39 @@ function QualityCell({ reading }: { reading: QualityValue | undefined }) {
   );
 }
 
+/**
+ * Deferred-OCR state (migration 110). Only the states an operator can act on get
+ * a chip: 'done' is the happy path and says nothing useful next to the readings
+ * it produced, and a NULL status is a bill captured before the feature existed.
+ */
+function OcrStatusChip({ row }: { row: PurchaseRow }) {
+  switch (row.ocr_status) {
+    case 'running':
+      return (
+        <span className="text-xs px-2 py-0.5 rounded-lg bg-blue-500/20 text-blue-400 whitespace-nowrap"
+          title="Reading the photo — this row refreshes when it finishes">
+          reading…
+        </span>
+      );
+    case 'pending':
+      return (
+        <span className="text-xs px-2 py-0.5 rounded-lg bg-slate-700/50 text-slate-400 whitespace-nowrap"
+          title="Queued — the sweep picks this up within a minute or two">
+          queued
+        </span>
+      );
+    case 'failed':
+      return (
+        <span className="text-xs px-2 py-0.5 rounded-lg bg-red-500/20 text-red-400 whitespace-nowrap"
+          title={row.ocr_error || 'OCR failed'}>
+          OCR failed
+        </span>
+      );
+    default:
+      return null;
+  }
+}
+
 // Amber below the auto-post threshold, red below 0.5 — both mean "open the photo
 // and verify the numbers before approving". At/above threshold it's informational.
 function OcrConfidenceBadge({ confidence, threshold }: { confidence: number | string | null | undefined; threshold: number }) {
@@ -242,6 +279,13 @@ export default function AccountingPurchasesPage() {
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['accounting', 'purchases', tab],
     queryFn: async () => (await GET<PurchaseRow[]>('/accounting/purchases', statusParam)).data || [],
+    // OCR runs server-side and takes 30–90s, so the row that says "reading…"
+    // only becomes correct on a refetch. Poll while any is in flight, then stop.
+    refetchInterval: (query) => {
+      const data = query.state.data as PurchaseRow[] | undefined;
+      const busy = (data || []).some((r) => r.ocr_status === 'running' || r.ocr_status === 'pending');
+      return busy ? 10_000 : false;
+    },
   });
 
   const { data: detail } = useQuery({
@@ -283,6 +327,26 @@ export default function AccountingPurchasesPage() {
     queryClient.invalidateQueries({ queryKey: ['accounting', 'purchases'] });
     queryClient.invalidateQueries({ queryKey: ['accounting', 'purchase', selectedId] });
   };
+
+  // Re-read one bill's photo. The API answers 202 the moment it has claimed the
+  // row — the actual Gemini call outlives the HTTP request — so success here
+  // means "started", and the row's ocr_status is what reports the outcome.
+  const reocr = useMutation({
+    mutationFn: async ({ id, force }: { id: number; force?: boolean }) =>
+      POST(`/accounting/purchases/${id}/reocr`, force ? { force: true } : {}),
+    onSuccess: () => { toast.success('Reading the photo — the row updates when it finishes'); invalidate(); },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Could not start OCR'),
+  });
+
+  const bulkReocr = useMutation({
+    mutationFn: async (ids: number[]) => POST('/accounting/purchases/bulk_reocr', { ids }),
+    onSuccess: (res) => {
+      toast.success(res?.message || 'Queued for OCR');
+      setSelected(new Set());
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : 'Bulk OCR failed'),
+  });
 
   const saveMutation = useMutation({
     mutationFn: async () => PUT(`/accounting/purchases/${selectedId}`, {
@@ -415,13 +479,33 @@ export default function AccountingPurchasesPage() {
       render: (r) => <QualityCell reading={(r.quality_readings || []).find((q) => q.name === param)} />,
     })),
     {
-      key: 'source', header: 'Source', width: '170px',
-      render: (r) => (
-        <span className="flex items-center gap-1.5 text-xs text-slate-400">
-          {r.source}
-          <OcrConfidenceBadge confidence={r.ocr_confidence} threshold={autoPostThreshold} />
-        </span>
-      ),
+      key: 'source', header: 'Source', width: '210px',
+      render: (r) => {
+        const busy = r.ocr_status === 'running' || r.ocr_status === 'pending';
+        const hasPhoto = (r.photos || []).length > 0;
+        const editable = r.status === 'draft' || r.status === 'reviewed';
+        // A previously-failed bill needs force — the runner's attempt fuse
+        // deliberately stops the sweep retrying it forever.
+        const force = Number(r.ocr_run_count || 0) >= 3;
+        return (
+          <span className="flex items-center gap-1.5 text-xs text-slate-400">
+            {r.source}
+            <OcrConfidenceBadge confidence={r.ocr_confidence} threshold={autoPostThreshold} />
+            <OcrStatusChip row={r} />
+            {hasPhoto && editable && !busy && (
+              <button type="button"
+                onClick={() => reocr.mutate({ id: r.id, force })}
+                disabled={reocr.isPending}
+                title={force
+                  ? `Failed ${r.ocr_run_count} times — read the photo again anyway`
+                  : 'Read the bill photo again and refill the quality readings'}
+                className="p-1 rounded hover:bg-slate-800/50 disabled:opacity-50">
+                <ScanLine className="w-3.5 h-3.5 text-cyan-400" />
+              </button>
+            )}
+          </span>
+        );
+      },
     },
     // Total sits after Source so it is the last thing before Status, and it drops
     // out entirely when the operator hides it (this page gets screenshotted into
@@ -490,6 +574,12 @@ export default function AccountingPurchasesPage() {
             disabled={bulkApprove.isPending || bulkReject.isPending}
             className="px-4 py-2 bg-gradient-to-r from-rose-500 to-red-500 text-white rounded-xl text-sm font-medium disabled:opacity-50 flex items-center gap-1.5">
             <XCircle className="w-4 h-4" /> Reject selected ({selected.size})
+          </button>
+          <button onClick={() => bulkReocr.mutate([...selected].map(Number))}
+            disabled={bulkReocr.isPending || bulkApprove.isPending || bulkReject.isPending}
+            title="Queue these bills for the OCR sweep — it works through them a couple a minute"
+            className="px-4 py-2 bg-slate-800/60 text-cyan-300 border border-cyan-500/30 rounded-xl text-sm font-medium disabled:opacity-50 flex items-center gap-1.5">
+            <ScanLine className="w-4 h-4" /> Re-read photos ({selected.size})
           </button>
           <button onClick={() => setSelected(new Set())} className="text-sm text-slate-400 hover:text-slate-200">Clear</button>
         </div>
@@ -623,7 +713,21 @@ export default function AccountingPurchasesPage() {
 
             {detail.photos && detail.photos.length > 0 && (
               <div>
-                <p className="text-xs text-slate-400 mb-1 flex items-center gap-1"><ImageIcon className="w-3.5 h-3.5" /> Photos</p>
+                <p className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                  <ImageIcon className="w-3.5 h-3.5" /> Photos
+                  {canEdit && (
+                    <button type="button" onClick={() => reocr.mutate({ id: detail.id, force: true })}
+                      disabled={reocr.isPending || detail.ocr_status === 'running'}
+                      title="Read these photos again and refill the quality readings"
+                      className="ml-2 px-2 py-0.5 rounded-lg bg-slate-800/60 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 disabled:opacity-50">
+                      <ScanLine className="w-3 h-3" />
+                      {detail.ocr_status === 'running' ? 'reading…' : 'Re-read'}
+                    </button>
+                  )}
+                </p>
+                {detail.ocr_status === 'failed' && detail.ocr_error && (
+                  <p className="text-xs text-red-400 mb-1">Last OCR attempt: {detail.ocr_error}</p>
+                )}
                 <div className="flex flex-wrap gap-2">
                   {detail.photos.map((p, i) => (
                     <PodLink key={i} refValue={p}
