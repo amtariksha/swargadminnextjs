@@ -146,6 +146,19 @@ const CRON_JOBS: CronJob[] = [
         timeTitle: 'Driver Nudge Time sync_8',
         description: 'Final, most-urgent complete-deliveries nudge for pending unsynced orders. Shares the Driver Nudge enable flag.',
     },
+    {
+        key: 'purchase-ocr-sweep',
+        name: 'Purchase OCR Sweep',
+        flagTitle: 'Purchase OCR Sweep Enabled',
+        timeTitle: null,
+        everyMinute: true,
+        description:
+            'Re-reads collection bill photos the driver\'s phone never managed to OCR (offline capture, ' +
+            'timeout), filling in fat / SNF / CLR / temperature automatically. Runs every minute, ' +
+            'capped at 2 bills and ~15 seconds per tick so it cannot delay the timed jobs. ' +
+            'Costs a Gemini call per bill — the card shows Enabled by default, but the job itself ' +
+            'stays OFF until this flag is explicitly set to 1.',
+    },
 ];
 
 // Values that mean "off". Everything else (incl. unknown) means "on" —
