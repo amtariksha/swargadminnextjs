@@ -87,6 +87,10 @@ export interface AccountingCustomer {
     pan?: string | null;
     place_of_supply_state_code?: string | null;
     credit_terms_days?: number | null;
+    // Returned by the list endpoint so the edit modal can round-trip them. Without
+    // these the modal opens blank and the next save wipes the stored addresses.
+    billing_address?: string | null;
+    shipping_address?: string | null;
 }
 
 export interface CustomerGstProfile {

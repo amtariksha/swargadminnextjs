@@ -70,7 +70,8 @@ export default function AccountingCustomersPage() {
             gstin: c.gstin || '',
             pan: c.pan || '',
             place_of_supply_state_code: c.place_of_supply_state_code || '',
-            billing_address: '', shipping_address: '',
+            billing_address: c.billing_address || '',
+            shipping_address: c.shipping_address || '',
             credit_terms_days: c.credit_terms_days != null ? String(c.credit_terms_days) : '',
         });
     };
