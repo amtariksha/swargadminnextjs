@@ -10,7 +10,7 @@ import {
 } from '@/lib/accounting';
 import Modal from '@/components/Modal';
 import IssueNotesModal from '@/components/accounting/IssueNotesModal';
-import { ArrowLeft, FileDown, Ban, BookText, Loader2, FileMinus, FilePlus, Pencil } from 'lucide-react';
+import { ArrowLeft, FileDown, Ban, BookText, Loader2, FileMinus, FilePlus, Pencil, Send } from 'lucide-react';
 import { GET, POST } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -21,6 +21,7 @@ export default function InvoiceDetailPage() {
     const { data, isLoading, refetch } = useInvoice(Number.isFinite(id) ? id : null);
 
     const [pdfLoading, setPdfLoading] = useState(false);
+    const [sending, setSending] = useState(false);
     const [showCancel, setShowCancel] = useState(false);
     const [cancelReason, setCancelReason] = useState('');
     const [cancelling, setCancelling] = useState(false);
@@ -58,6 +59,37 @@ export default function InvoiceDetailPage() {
             toast.error(err instanceof Error ? err.message : 'Failed to reprice');
         } finally {
             setReprcSaving(false);
+        }
+    };
+
+    // Deliver the invoice. Auto-send only covers day orders and B2B monthly
+    // consolidated bills, and the other manual path is keyed on a DAY ORDER id —
+    // so a truck-delivery invoice can only be sent from here.
+    const sendInvoice = async () => {
+        setSending(true);
+        try {
+            const res = await POST<{
+                email?: { sent?: boolean; skipped?: string };
+                whatsapp?: { sent?: boolean; skipped?: string };
+            }>(`/accounting/invoices/${id}/send`, {});
+            if (res.data?.email?.sent || res.data?.whatsapp?.sent) {
+                toast.success(res.message || 'Invoice sent');
+                return;
+            }
+            // Both channels can legitimately skip (already sent, no phone, no
+            // template configured) — say which, rather than a bare failure.
+            const alreadySent = res.data?.email?.skipped === 'already_sent'
+                || res.data?.whatsapp?.skipped === 'already_sent';
+            if (alreadySent && confirm('This invoice was already sent. Send it again?')) {
+                const forced = await POST(`/accounting/invoices/${id}/send`, { force: true });
+                toast.success(forced.message || 'Invoice re-sent');
+            } else {
+                toast.warning(res.message || 'Nothing was sent');
+            }
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Could not send the invoice');
+        } finally {
+            setSending(false);
         }
     };
 
@@ -138,6 +170,13 @@ export default function InvoiceDetailPage() {
                         className="flex items-center gap-2 px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl text-sm hover:bg-slate-700/50 disabled:opacity-50">
                         {pdfLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} PDF
                     </button>
+                    {!isCancelled && (
+                        <button onClick={sendInvoice} disabled={sending}
+                            title="Email + WhatsApp the invoice PDF to the customer. Already-sent channels are skipped unless you confirm a re-send."
+                            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 text-emerald-300 rounded-xl text-sm hover:bg-slate-700/50 disabled:opacity-50">
+                            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />} Send
+                        </button>
+                    )}
                     {canIssueNote && (
                         <>
                             <button onClick={() => setNoteType('credit')}
