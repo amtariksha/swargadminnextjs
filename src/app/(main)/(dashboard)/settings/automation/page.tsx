@@ -158,6 +158,17 @@ const CRON_JOBS: CronJob[] = [
             'no activity and a zero balance are skipped. Ships OFF.',
     },
     {
+        key: 'statement-followup',
+        name: 'Statement Payment Follow-up',
+        flagTitle: 'Statement Followup Enabled',
+        timeTitle: 'Statement Followup Run Time',
+        description:
+            'Chases a SENT weekly statement that is still owed and has had no payment against it. ' +
+            'Fires "Statement Followup Days" after sending (default 2 — a Sunday statement is chased ' +
+            'on Tuesday). Needs "Statement Followup Template" set, and skips entirely if it is blank ' +
+            'rather than burning the nudge. Ships OFF.',
+    },
+    {
         key: 'purchase-ocr-sweep',
         name: 'Purchase OCR Sweep',
         flagTitle: 'Purchase OCR Sweep Enabled',
