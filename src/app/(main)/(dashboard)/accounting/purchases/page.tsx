@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { GET, PUT, POST } from '@/lib/api';
 import DataTable, { Column } from '@/components/DataTable';
@@ -10,21 +10,66 @@ import BulkPurchaseImportModal from '@/components/accounting/BulkPurchaseImportM
 import LedgerPicker from '@/components/accounting/LedgerPicker';
 import { useVendors, useRawMaterials } from '@/hooks/useInventory';
 import { useTallySettings } from '@/hooks/useAccounting';
-import { CheckCircle2, XCircle, Edit, Image as ImageIcon, Upload } from 'lucide-react';
+import { CheckCircle2, XCircle, Edit, Image as ImageIcon, Upload, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatApiDate } from '@/lib/dateUtils';
 
 const inputCls =
   'w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50';
+
+const TOTAL_COL_KEY = 'purchases.showTotal';
+/** Local writes don't fire 'storage' (that's cross-tab only) — we dispatch this. */
+const PREF_CHANGED = 'swarg:pref-changed';
+
+/**
+ * A boolean UI preference kept in localStorage.
+ *
+ * useSyncExternalStore rather than useState + useEffect: the server snapshot is
+ * explicit (so there is no hydration mismatch when the stored value differs from
+ * the default) and there is no setState-in-effect render cascade.
+ */
+function usePersistedFlag(key: string, defaultValue: boolean): [boolean, () => void] {
+  const subscribe = useCallback((onChange: () => void) => {
+    window.addEventListener('storage', onChange);
+    window.addEventListener(PREF_CHANGED, onChange);
+    return () => {
+      window.removeEventListener('storage', onChange);
+      window.removeEventListener(PREF_CHANGED, onChange);
+    };
+  }, []);
+  const getSnapshot = useCallback(() => {
+    const raw = localStorage.getItem(key);
+    return raw == null ? defaultValue : raw !== '0';
+  }, [key, defaultValue]);
+  const value = useSyncExternalStore(subscribe, getSnapshot, () => defaultValue);
+  const toggle = useCallback(() => {
+    localStorage.setItem(key, value ? '0' : '1');
+    window.dispatchEvent(new Event(PREF_CHANGED));
+  }, [key, value]);
+  return [value, toggle];
+}
+
+/** green|amber|red|neutral, classified server-side by utils/qualityBand.js. */
+type QualityBand = 'green' | 'amber' | 'red' | 'neutral';
 
 interface QualityValue {
   name: string;
   value: string | null;
   unit: string | null;
+  band?: QualityBand;
+  // Thresholds come along only so the badge tooltip can show the spec the band
+  // was judged against — the classification itself is the backend's job.
+  min_value?: number | string | null;
+  max_value?: number | string | null;
+  warn_min?: number | string | null;
+  warn_max?: number | string | null;
 }
 
 interface PurchaseRow {
   id: number;
   purchase_date: string;
+  /** Capture/upload time (IST). Added to the list SELECT alongside the bands. */
+  created_at?: string | null;
   invoice_no: string | null;
   qty: number | string;
   unit_price: number | string;
@@ -55,8 +100,11 @@ interface QualityReading {
   source: string;
   param_name: string;
   param_unit: string | null;
+  band?: QualityBand;
   min_value?: number | string | null;
   max_value?: number | string | null;
+  warn_min?: number | string | null;
+  warn_max?: number | string | null;
 }
 
 type PurchaseDetail = Omit<PurchaseRow, 'quality_readings'> & {
@@ -97,6 +145,47 @@ const fmtReading = (v: number | string | null | undefined): string => {
   const n = Number(v);
   return Number.isFinite(n) ? String(Math.round(n * 100) / 100) : String(v);
 };
+
+// Quality bands. The backend classifies (utils/qualityBand.js) against the
+// per-parameter thresholds; here we only paint. Neutral renders exactly as the
+// page did before bands existed, so an unconfigured parameter looks untouched.
+const BAND_CLS: Record<QualityBand, string> = {
+  green: 'bg-green-500/20 text-green-400',
+  amber: 'bg-amber-500/20 text-amber-400',
+  red: 'bg-red-500/20 text-red-400',
+  neutral: '',
+};
+
+/** "on target 3.5–6, spec 3–6.5" — what the badge colour was judged against. */
+const bandTooltip = (q: QualityValue): string => {
+  const range = (lo: unknown, hi: unknown) =>
+    lo != null || hi != null ? `${lo ?? '−∞'}–${hi ?? '∞'}` : null;
+  const target = range(q.warn_min, q.warn_max);
+  const spec = range(q.min_value, q.max_value);
+  const parts = [target ? `on target ${target}` : null, spec ? `spec ${spec}` : null].filter(Boolean);
+  if (!parts.length) return `${q.name}: no thresholds configured`;
+  return `${q.name}: ${parts.join(', ')}`;
+};
+
+function QualityCell({ reading }: { reading: QualityValue | undefined }) {
+  if (!reading || reading.value == null) return <span className="text-slate-600">—</span>;
+  const text = (
+    <>
+      {fmtReading(reading.value)}
+      {reading.unit ? <span className="text-slate-500 text-xs"> {reading.unit}</span> : null}
+    </>
+  );
+  const band = reading.band ?? 'neutral';
+  if (band === 'neutral') return <span>{text}</span>;
+  return (
+    <span
+      className={`text-xs px-2 py-1 rounded-lg whitespace-nowrap ${BAND_CLS[band]}`}
+      title={bandTooltip(reading)}
+    >
+      {text}
+    </span>
+  );
+}
 
 // Amber below the auto-post threshold, red below 0.5 — both mean "open the photo
 // and verify the numbers before approving". At/above threshold it's informational.
@@ -139,6 +228,9 @@ export default function AccountingPurchasesPage() {
   // Multi-select for bulk approval (only meaningful on the To-review tab).
   const [selected, setSelected] = useState<Set<number | string>>(new Set());
   const [showImport, setShowImport] = useState(false);
+  // Hide the Total column for screenshots shared into supplier quality groups.
+  // Persisted so the choice survives a reload; the CSV export always includes it.
+  const [showTotal, toggleTotal] = usePersistedFlag(TOTAL_COL_KEY, true);
   // Correcting a POSTED bill (reverse-and-repost). Separate from the draft edit path.
   const [correcting, setCorrecting] = useState(false);
   const [correctReason, setCorrectReason] = useState('');
@@ -297,7 +389,22 @@ export default function AccountingPurchasesPage() {
         </button>
       ),
     },
-    { key: 'purchase_date', header: 'Date', width: '110px' },
+    {
+      key: 'purchase_date', header: 'Date', width: '120px',
+      // Bill date on top, capture/upload time beneath — the reviewer needs both
+      // (a bill dated yesterday uploaded this morning is normal; one uploaded
+      // three days late is not) and a second column would not fit a screenshot.
+      render: (r) => (
+        <span className="block leading-tight">
+          {formatApiDate(r.purchase_date, 'dd-MM-yyyy')}
+          {r.created_at ? (
+            <span className="block text-[11px] text-slate-500" title="Uploaded (IST)">
+              {formatApiDate(r.created_at, 'dd-MM HH:mm')}
+            </span>
+          ) : null}
+        </span>
+      ),
+    },
     { key: 'vendor_name', header: 'Vendor' },
     {
       key: 'raw_material_name', header: 'Material',
@@ -305,17 +412,8 @@ export default function AccountingPurchasesPage() {
     },
     ...qualityParams.map((param): Column<PurchaseRow> => ({
       key: `quality_${param}`, header: param, width: '90px', sortable: false,
-      render: (r) => {
-        const reading = (r.quality_readings || []).find((q) => q.name === param);
-        return reading?.value != null
-          ? <span>{fmtReading(reading.value)}{reading.unit ? <span className="text-slate-500 text-xs"> {reading.unit}</span> : null}</span>
-          : <span className="text-slate-600">—</span>;
-      },
+      render: (r) => <QualityCell reading={(r.quality_readings || []).find((q) => q.name === param)} />,
     })),
-    {
-      key: 'total_amount', header: 'Total', width: '110px',
-      render: (r) => <span className="text-cyan-400">₹{Number(r.total_amount ?? 0).toFixed(2)}</span>,
-    },
     {
       key: 'source', header: 'Source', width: '170px',
       render: (r) => (
@@ -325,6 +423,13 @@ export default function AccountingPurchasesPage() {
         </span>
       ),
     },
+    // Total sits after Source so it is the last thing before Status, and it drops
+    // out entirely when the operator hides it (this page gets screenshotted into
+    // supplier quality groups, where the money column has no business).
+    ...(showTotal ? [{
+      key: 'total_amount', header: 'Total', width: '110px',
+      render: (r: PurchaseRow) => <span className="text-cyan-400">₹{Number(r.total_amount ?? 0).toFixed(2)}</span>,
+    } as Column<PurchaseRow>] : []),
     {
       key: 'status', header: 'Status', width: '100px',
       render: (r) => <span className={`text-xs px-2 py-1 rounded-lg ${statusBadge(r.status)}`}>{r.status}</span>,
@@ -343,10 +448,21 @@ export default function AccountingPurchasesPage() {
           <h1 className="text-2xl font-bold text-white">Purchases / Bills</h1>
           <p className="text-slate-400">Review raw-material purchases, then post them as Tally Purchase vouchers.</p>
         </div>
-        <button onClick={() => setShowImport(true)}
-          className="self-start flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium hover:from-purple-600 hover:to-pink-600">
-          <Upload className="w-5 h-5" /> Import bills
-        </button>
+        <div className="self-start flex items-center gap-2">
+          <button onClick={toggleTotal} type="button"
+            title={showTotal ? 'Hide the Total column — for screenshots shared outside accounts' : 'Show the Total column'}
+            aria-pressed={!showTotal}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border ${showTotal
+              ? 'bg-slate-800/40 text-slate-300 border-slate-700/50 hover:bg-slate-800/70'
+              : 'bg-amber-500/20 text-amber-300 border-amber-500/40'}`}>
+            {showTotal ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+            {showTotal ? 'Total shown' : 'Total hidden'}
+          </button>
+          <button onClick={() => setShowImport(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium hover:from-purple-600 hover:to-pink-600">
+            <Upload className="w-5 h-5" /> Import bills
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-2">
@@ -491,11 +607,16 @@ export default function AccountingPurchasesPage() {
               <div>
                 <p className="text-xs text-slate-400 mb-1">Quality readings</p>
                 <div className="flex flex-wrap gap-2">
-                  {detail.quality_readings.map((q) => (
-                    <span key={q.id} className="text-xs bg-slate-800/40 rounded px-2 py-1 text-slate-300">
-                      {q.param_name}: {q.value_numeric != null ? fmtReading(q.value_numeric) : (q.value_text ?? '—')}{q.param_unit ? ` ${q.param_unit}` : ''}
-                    </span>
-                  ))}
+                  {detail.quality_readings.map((q) => {
+                    const band = q.band ?? 'neutral';
+                    return (
+                      <span key={q.id}
+                        className={`text-xs rounded px-2 py-1 ${band === 'neutral' ? 'bg-slate-800/40 text-slate-300' : BAND_CLS[band]}`}
+                        title={bandTooltip({ name: q.param_name, value: null, unit: q.param_unit, ...q })}>
+                        {q.param_name}: {q.value_numeric != null ? fmtReading(q.value_numeric) : (q.value_text ?? '—')}{q.param_unit ? ` ${q.param_unit}` : ''}
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             )}

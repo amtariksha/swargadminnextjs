@@ -49,8 +49,13 @@ export interface QualityParam {
   name: string;
   unit?: string | null;
   value_type: 'numeric' | 'text';
+  // Hard spec (056). A reading outside this renders red on the purchases list.
   min_value?: number | string | null;
   max_value?: number | string | null;
+  // Inner target band (109). Inside it renders green; between target and hard
+  // spec renders amber. Ladder enforced by the API: min <= warn_min <= warn_max <= max.
+  warn_min?: number | string | null;
+  warn_max?: number | string | null;
   sort_order: number;
   is_active: number;
 }
