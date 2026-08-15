@@ -68,8 +68,12 @@ interface QualityValue {
 interface PurchaseRow {
   id: number;
   purchase_date: string;
-  /** Capture/upload time (IST). Added to the list SELECT alongside the bands. */
+  /** When the row reached the server (IST). For an ONLINE pickup this is the
+   *  moment the driver submitted; for one captured offline it is the sync time —
+   *  the app sends no device-side capture timestamp today. */
   created_at?: string | null;
+  captured_by_user_id?: number | null;
+  captured_by_name?: string | null;
   invoice_no: string | null;
   qty: number | string;
   unit_price: number | string;
@@ -418,10 +422,11 @@ export default function AccountingPurchasesPage() {
 
   // Export the currently filtered/sorted rows as a clean CSV that includes quantity.
   const exportPurchasesCsv = (filtered: PurchaseRow[]) => {
-    const headers = ['Date', 'Vendor', 'Material', 'Qty', 'Unit', 'Unit price', 'Taxable', 'CGST', 'SGST', 'IGST', 'Total', 'Status', 'Invoice no'];
+    const headers = ['Date', 'Captured at', 'Captured by', 'Vendor', 'Material', 'Qty', 'Unit', 'Unit price', 'Taxable', 'CGST', 'SGST', 'IGST', 'Total', 'Status', 'Invoice no'];
     const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const lines = filtered.map((r) => [
-      r.purchase_date, r.vendor_name, r.raw_material_name,
+      r.purchase_date, formatApiDate(r.created_at, 'dd-MM-yyyy HH:mm', ''), r.captured_by_name ?? '',
+      r.vendor_name, r.raw_material_name,
       Number(r.qty ?? 0), r.raw_material_unit, Number(r.unit_price ?? 0),
       Number(r.taxable_amount ?? 0), Number(r.cgst_amount ?? 0), Number(r.sgst_amount ?? 0),
       Number(r.igst_amount ?? 0), Number(r.total_amount ?? 0), r.status, r.invoice_no ?? '',
@@ -454,16 +459,22 @@ export default function AccountingPurchasesPage() {
       ),
     },
     {
-      key: 'purchase_date', header: 'Date', width: '120px',
-      // Bill date on top, capture/upload time beneath — the reviewer needs both
-      // (a bill dated yesterday uploaded this morning is normal; one uploaded
-      // three days late is not) and a second column would not fit a screenshot.
+      key: 'purchase_date', header: 'Date', width: '105px',
+      render: (r) => formatApiDate(r.purchase_date, 'dd-MM-yyyy'),
+    },
+    {
+      key: 'created_at', header: 'Captured', width: '150px',
+      // Its own column rather than a footnote under Date: on the quality
+      // screenshot this is how you tell a pickup logged at the dock from one
+      // that showed up hours later, and who logged it.
       render: (r) => (
         <span className="block leading-tight">
-          {formatApiDate(r.purchase_date, 'dd-MM-yyyy')}
-          {r.created_at ? (
-            <span className="block text-[11px] text-slate-500" title="Uploaded (IST)">
-              {formatApiDate(r.created_at, 'dd-MM HH:mm')}
+          <span title="When the record reached the server (IST)">
+            {formatApiDate(r.created_at, 'dd-MM HH:mm')}
+          </span>
+          {r.captured_by_name ? (
+            <span className="block text-[11px] text-slate-500 truncate" title="Captured by">
+              {r.captured_by_name}
             </span>
           ) : null}
         </span>
