@@ -147,6 +147,17 @@ const CRON_JOBS: CronJob[] = [
         description: 'Final, most-urgent complete-deliveries nudge for pending unsynced orders. Shares the Driver Nudge enable flag.',
     },
     {
+        key: 'weekly-ledger-statements',
+        name: 'Weekly Ledger Statements',
+        flagTitle: 'Weekly Ledger Statement Enabled',
+        timeTitle: 'Weekly Ledger Statement Run Time',
+        description:
+            'Generates each B2B shop\'s weekly ledger statement (default Sunday — set the day in ' +
+            '"Weekly Ledger Statement Day", 0=Sunday) and renders its PDF. It only GENERATES: nothing ' +
+            'is sent until you check the figures and hit Send at Accounting → Statements. Shops with ' +
+            'no activity and a zero balance are skipped. Ships OFF.',
+    },
+    {
         key: 'purchase-ocr-sweep',
         name: 'Purchase OCR Sweep',
         flagTitle: 'Purchase OCR Sweep Enabled',

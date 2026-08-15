@@ -233,6 +233,7 @@ const navItems: NavItem[] = [
                     { name: 'GST Returns', href: '/accounting/gst-returns', icon: <Receipt className="w-4 h-4" /> },
                     { name: 'Stock & Valuation', href: '/accounting/stock', icon: <Tags className="w-4 h-4" /> },
                     { name: 'Ledgers', href: '/accounting/ledgers', icon: <BookText className="w-4 h-4" /> },
+                    { name: 'Statements', href: '/accounting/statements', icon: <BookText className="w-4 h-4" /> },
                 ],
             },
             {
