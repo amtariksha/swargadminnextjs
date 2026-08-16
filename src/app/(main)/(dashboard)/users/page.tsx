@@ -237,6 +237,28 @@ export default function UsersPage() {
             },
         },
         {
+            key: 'last_delivery_date',
+            header: 'Last Delivery',
+            width: '150px',
+            render: (item) => {
+                const d = parseApiDate(item.last_delivery_date);
+                if (!d) return <span className="text-slate-500 text-sm">never</span>;
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const yyyy = d.getFullYear();
+                // This is the real activity signal, so the thresholds are tight:
+                // for a daily subscriber a week's silence already means something.
+                const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+                const tone = days > 30 ? 'text-red-400' : days > 7 ? 'text-amber-400' : 'text-slate-300';
+                return (
+                    <span className={`${tone} text-sm`}
+                        title={days === 0 ? 'Today' : `${days} day${days === 1 ? '' : 's'} ago`}>
+                        {`${dd}-${mm}-${yyyy}`}
+                    </span>
+                );
+            },
+        },
+        {
             key: 'last_driver_id',
             header: 'Driver',
             width: '180px',
