@@ -24,6 +24,9 @@ export interface User {
     // delivery — a daily subscriber orders once and receives for months, so this
     // stays old for a perfectly active customer.
     last_order_date?: string | null;
+    // When the customer was last actually SERVED (morning + day channels).
+    // This is the activity signal — last_order_date goes stale for subscribers.
+    last_delivery_date?: string | null;
     last_driver_id?: number | null;
     // Customer-source badges (rule-based, getAllUsers): the signup channel
     // ('app' | 'day' | 'website') + where the user has actually ordered.
