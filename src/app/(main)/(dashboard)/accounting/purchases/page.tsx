@@ -136,6 +136,14 @@ const STATUS_TABS: { key: string; label: string }[] = [
   { key: 'all', label: 'All' },
 ];
 
+/** Source shown as words an operator uses. 'ocr' is blank on purpose — the
+ *  confidence badge beside it already says OCR. */
+const SOURCE_LABEL: Record<string, string> = {
+  ocr: '',
+  manual: 'Manual',
+  'bulk-import': 'Bulk import',
+};
+
 const statusBadge = (s: string) => {
   switch (s) {
     case 'posted': return 'bg-green-500/20 text-green-400';
@@ -222,6 +230,13 @@ function OcrStatusChip({ row }: { row: PurchaseRow }) {
           title={row.ocr_error || 'OCR failed'}>
           OCR failed
         </span>
+      );
+    case 'done':
+      // A finished read used to render nothing, so a row that had just been
+      // read looked identical to one nothing had ever touched.
+      return (
+        <CheckCircle2 className="w-3.5 h-3.5 text-green-500/80 shrink-0"
+          aria-label="Photo read" />
       );
     default:
       return null;
@@ -500,9 +515,12 @@ export default function AccountingPurchasesPage() {
         const force = Number(r.ocr_run_count || 0) >= 3;
         return (
           <span className="flex items-center gap-1.5 text-xs text-slate-400">
-            {r.source}
-            <OcrConfidenceBadge confidence={r.ocr_confidence} threshold={autoPostThreshold} />
+            {/* The confidence badge already reads "OCR 98%", so printing the raw
+                source beside it gave "ocr OCR 98%". Show a word only when it
+                adds something. */}
+            {SOURCE_LABEL[r.source] ?? r.source}
             <OcrStatusChip row={r} />
+            <OcrConfidenceBadge confidence={r.ocr_confidence} threshold={autoPostThreshold} />
             {hasPhoto && editable && (
               // Shown even while the row says "reading" or "queued". A run that
               // dies mid-flight leaves the row stuck, and hiding the button then
