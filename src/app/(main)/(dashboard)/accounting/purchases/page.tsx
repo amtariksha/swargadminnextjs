@@ -18,6 +18,8 @@ const inputCls =
   'w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50';
 
 const TOTAL_COL_KEY = 'purchases.showTotal';
+/** Quality parameters given their own list column. Beyond this, open the bill. */
+const MAX_QUALITY_COLUMNS = 8;
 /** Local writes don't fire 'storage' (that's cross-tab only) — we dispatch this. */
 const PREF_CHANGED = 'swarg:pref-changed';
 
@@ -461,7 +463,10 @@ export default function AccountingPurchasesPage() {
   const qualityParams = useMemo(() => {
     const names = new Set<string>();
     rows.forEach((r) => (r.quality_readings || []).forEach((q) => q?.name && names.add(q.name)));
-    return [...names].slice(0, 5);
+    // Capped so a mis-configured material cannot push the table off the page,
+    // but with headroom: milk alone runs to five (fat, SNF, CLR, temperature,
+    // added water) and a param beyond the cap vanishes from the list SILENTLY.
+    return [...names].slice(0, MAX_QUALITY_COLUMNS);
   }, [rows]);
 
   const columns: Column<PurchaseRow>[] = [
