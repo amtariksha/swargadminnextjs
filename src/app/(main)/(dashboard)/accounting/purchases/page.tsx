@@ -503,15 +503,22 @@ export default function AccountingPurchasesPage() {
             {r.source}
             <OcrConfidenceBadge confidence={r.ocr_confidence} threshold={autoPostThreshold} />
             <OcrStatusChip row={r} />
-            {hasPhoto && editable && !busy && (
+            {hasPhoto && editable && (
+              // Shown even while the row says "reading" or "queued". A run that
+              // dies mid-flight leaves the row stuck, and hiding the button then
+              // left no way back except the bulk queue — which itself needs the
+              // sweep switched on. The backend is the authority: it 409s a run
+              // that genuinely holds the lease, and that reply is informative.
               <button type="button"
                 onClick={() => reocr.mutate({ id: r.id, force })}
                 disabled={reocr.isPending}
-                title={force
-                  ? `Failed ${r.ocr_run_count} times — read the photo again anyway`
-                  : 'Read the bill photo again and refill the quality readings'}
+                title={busy
+                  ? 'Still reading — click to retry if it has been stuck a while'
+                  : force
+                    ? `Failed ${r.ocr_run_count} times — read the photo again anyway`
+                    : 'Read the bill photo again and refill the quality readings'}
                 className="p-1 rounded hover:bg-slate-800/50 disabled:opacity-50">
-                <ScanLine className="w-3.5 h-3.5 text-cyan-400" />
+                <ScanLine className={`w-3.5 h-3.5 ${busy ? 'text-slate-500' : 'text-cyan-400'}`} />
               </button>
             )}
           </span>
@@ -728,7 +735,7 @@ export default function AccountingPurchasesPage() {
                   <ImageIcon className="w-3.5 h-3.5" /> Photos
                   {canEdit && (
                     <button type="button" onClick={() => reocr.mutate({ id: detail.id, force: true })}
-                      disabled={reocr.isPending || detail.ocr_status === 'running'}
+                      disabled={reocr.isPending}
                       title="Read these photos again and refill the quality readings"
                       className="ml-2 px-2 py-0.5 rounded-lg bg-slate-800/60 text-cyan-300 border border-cyan-500/30 flex items-center gap-1 disabled:opacity-50">
                       <ScanLine className="w-3 h-3" />
