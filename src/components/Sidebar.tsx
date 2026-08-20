@@ -59,6 +59,7 @@ import {
     Calculator,
     IndianRupee,
     Search,
+    Store,
 } from 'lucide-react';
 
 interface NavItem {
@@ -139,6 +140,10 @@ const navItems: NavItem[] = [
         children: [
             { name: 'Orders', href: '/orders', icon: <ShoppingCart className="w-4 h-4" /> },
             { name: 'Day Orders', href: '/day-orders', icon: <Sun className="w-4 h-4" />, permissionKey: 'day-orders' },
+            // Stall POS (migration 113). /stalls is the office-side menu and
+            // price management; the till itself lives outside the dashboard
+            // chrome at /pos and is reached by QR, not from here.
+            { name: 'Stalls & Menus', href: '/stalls', icon: <Store className="w-4 h-4" />, permissionKey: 'stalls' },
             { name: 'Transactions', href: '/transactions', icon: <CreditCard className="w-4 h-4" /> },
             // Feature 07 — returnable packaging returns/refunds desk.
             { name: 'Refunds & Returns', href: '/returns-refunds', icon: <RotateCcw className="w-4 h-4" />, permissionKey: 'packaging' },

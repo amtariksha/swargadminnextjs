@@ -317,9 +317,25 @@ export default function RolesPage() {
                                         </button>
                                     ))}
                                 </div>
-                                <p className="text-xs text-slate-500 mt-2">
-                                    Leave empty for full access. Selected: {formData.permissions.length} pages
-                                </p>
+                                {formData.permissions.length === 0 ? (
+                                    /* "Leave empty for full access" is easy to read as
+                                       "leave empty for no access", and the mistake is
+                                       silent: computePermissions() in lib/auth.tsx grants
+                                       hasFullAccess to any role with an empty array. A role
+                                       meant for a market-stall casual would hand them
+                                       accounting, WhatsApp and the role editor itself. */
+                                    <p className="text-xs text-amber-300 mt-2 flex items-start gap-1.5">
+                                        <span aria-hidden="true">&#9888;</span>
+                                        <span>
+                                            <strong>Nothing selected means FULL ACCESS</strong> to every
+                                            page, not none. Tick the pages this role should reach.
+                                        </span>
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-slate-500 mt-2">
+                                        Selected: {formData.permissions.length} pages
+                                    </p>
+                                )}
                             </div>
                             )}
 
