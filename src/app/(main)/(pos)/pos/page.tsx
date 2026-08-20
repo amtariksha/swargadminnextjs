@@ -38,21 +38,29 @@ export default function PosPage() {
     const [phone, setPhone] = useState('');
     const [busy, setBusy] = useState<null | 'cash' | 'upi' | 'link'>(null);
 
-    /**
-     * Idempotency key for the sale in progress.
-     *
-     * Regenerated only after a sale completes, so a double-tap on Charge — or a
-     * retry after the tablet's signal drops mid-request — reuses the SAME key
-     * and the backend returns the original order instead of ringing up a second
-     * one. This cannot be inferred from the cart contents: two customers buying
-     * the same single scoop a minute apart is the normal case at a stall.
-     */
-    const clientRef = useRef<string>('');
-    const ensureRef = useCallback(() => {
-        if (!clientRef.current) {
-            clientRef.current = (crypto?.randomUUID?.() ?? `ref-${Date.now()}-${Math.random()}`);
+/**
+ * The idempotency key for the sale in progress, tied to the CART CONTENTS.
+ *
+ * Reusing one key across a retry is what makes a double-tap — or a retry after
+ * the signal drops mid-request — return the original order instead of ringing
+ * up a second one. But it must be reused only while the cart is UNCHANGED.
+ * Otherwise: the first request lands server-side, the client never sees the
+ * response, the customer adds one more item and taps again — and the backend
+ * matches the stale key and returns the ORIGINAL, smaller order as `reused`.
+ * The added item is silently never charged and never made.
+ *
+ * Keying on a cart fingerprint gives both properties: identical cart ⇒ same
+ * key ⇒ deduped; changed cart ⇒ new key ⇒ a real second order.
+ */
+    const clientRef = useRef<{ key: string; fingerprint: string }>({ key: '', fingerprint: '' });
+    const ensureRef = useCallback((fingerprint: string) => {
+        if (!clientRef.current.key || clientRef.current.fingerprint !== fingerprint) {
+            clientRef.current = {
+                key: (crypto?.randomUUID?.() ?? `ref-${Date.now()}-${Math.random()}`),
+                fingerprint,
+            };
         }
-        return clientRef.current;
+        return clientRef.current.key;
     }, []);
 
     useEffect(() => {
@@ -124,13 +132,17 @@ export default function PosPage() {
     const clearSale = useCallback(() => {
         setCart([]);
         setPhone('');
-        clientRef.current = '';
+        clientRef.current = { key: '', fingerprint: '' };
     }, []);
 
     const charge = useCallback(async (mode: 'cash' | 'upi' | 'link') => {
         if (!cart.length || busy) return;
         setBusy(mode);
-        const ref = ensureRef();
+        // Sorted so tap ORDER cannot change the fingerprint of the same cart.
+        const fingerprint = JSON.stringify(
+            cart.map((l) => [l.menuItemId, l.qty]).sort((a, b) => a[0] - b[0]),
+        );
+        const ref = ensureRef(fingerprint);
         try {
             const order = await stallPost<StallOrderResult>(`/stall/${code}/orders`, {
                 items: cart.map((l) => ({ stall_menu_item_id: l.menuItemId, qty: l.qty })),

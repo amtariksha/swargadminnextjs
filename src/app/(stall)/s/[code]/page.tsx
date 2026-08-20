@@ -42,9 +42,21 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
     const [placed, setPlaced] = useState<{ token: number | null; total: number } | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    // One key per attempt, kept across retries so a flaky connection cannot
-    // produce two orders for one customer.
-    const clientRef = useRef<string>('');
+/**
+     * The idempotency key for the sale in progress, tied to the CART CONTENTS.
+     *
+     * Reusing one key across a retry is what makes a double-tap — or a retry after
+     * the signal drops mid-request — return the original order instead of ringing
+     * up a second one. But it must be reused only while the cart is UNCHANGED.
+     * Otherwise: the first request lands server-side, the client never sees the
+     * response, the customer adds one more item and taps again — and the backend
+     * matches the stale key and returns the ORIGINAL, smaller order as `reused`.
+     * The added item is silently never charged and never made.
+     *
+     * Keying on a cart fingerprint gives both properties: identical cart ⇒ same
+     * key ⇒ deduped; changed cart ⇒ new key ⇒ a real second order.
+     */
+    const clientRef = useRef<{ key: string; fingerprint: string }>({ key: '', fingerprint: '' });
 
     useEffect(() => {
         fetch(api(`/stall/public/${encodeURIComponent(code)}/menu`))
@@ -87,8 +99,14 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
         if (!lines.length || placing) return;
         setPlacing(true);
         setError(null);
-        if (!clientRef.current) {
-            clientRef.current = (crypto?.randomUUID?.() ?? `pub-${Date.now()}-${Math.random()}`);
+        const fingerprint = JSON.stringify(
+            lines.map((l) => [l.item.id, l.qty]).sort((a, b) => a[0] - b[0]),
+        );
+        if (!clientRef.current.key || clientRef.current.fingerprint !== fingerprint) {
+            clientRef.current = {
+                key: (crypto?.randomUUID?.() ?? `pub-${Date.now()}-${Math.random()}`),
+                fingerprint,
+            };
         }
         try {
             const res = await fetch(api(`/stall/public/${encodeURIComponent(code)}/orders`), {
@@ -97,7 +115,7 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                 body: JSON.stringify({
                     items: lines.map((l) => ({ stall_menu_item_id: l.item.id, qty: l.qty })),
                     customer_phone: phone || undefined,
-                    client_ref: clientRef.current,
+                    client_ref: clientRef.current.key,
                 }),
             });
             const body = await res.json();
@@ -133,7 +151,7 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                 <p className="mt-4 text-sm text-slate-600 max-w-xs">
                     Show this at the counter to pay and collect. We&apos;ll call your number.
                 </p>
-                <button onClick={() => { setPlaced(null); clientRef.current = ''; }}
+                <button onClick={() => { setPlaced(null); clientRef.current = { key: '', fingerprint: '' }; }}
                     className="mt-8 px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-medium">
                     Order something else
                 </button>
