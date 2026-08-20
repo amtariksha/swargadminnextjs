@@ -30,11 +30,18 @@ const Badge = ({ value, map }: { value: string; map: Record<string, string> }) =
     </span>
 );
 
+/** Local calendar date as YYYY-MM-DD (en-CA formats that way natively). */
+const todayLocal = () => new Date().toLocaleDateString('en-CA');
+
 export default function DayOrdersPage() {
     const router = useRouter();
     const queryClient = useQueryClient();
     const [showCatering, setShowCatering] = useState(false);
-    const [date, setDate] = useState('');
+    // Default to TODAY, not "everything". The list endpoint is capped, so an
+    // unfiltered first load was both the slowest query in the module and the one
+    // most likely to come back truncated. Today's orders are what this page is
+    // actually for; clearing the date still works and now says when it truncates.
+    const [date, setDate] = useState(todayLocal);
     const [orderStatus, setOrderStatus] = useState('');
     const [paymentStatus, setPaymentStatus] = useState('');
 
@@ -46,7 +53,9 @@ export default function DayOrdersPage() {
         return f;
     }, [date, orderStatus, paymentStatus]);
 
-    const { data: orders = [], isLoading } = useDaytimeOrders(filters);
+    const { data, isLoading } = useDaytimeOrders(filters);
+    const orders = useMemo(() => data?.orders ?? [], [data]);
+    const listMeta = data?.meta;
 
     // Summary cards — computed from the (filtered) order list, so they track the
     // date / status filters above. Every tile excludes cancelled orders (they
@@ -187,6 +196,16 @@ export default function DayOrdersPage() {
 
     return (
         <div className="space-y-6">
+            {listMeta?.truncated && (
+                <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm">
+                    <span aria-hidden="true">&#9888;</span>
+                    <p>
+                        Showing the first <strong>{listMeta.limit}</strong> orders only — more match your
+                        filters than this view loads. The totals below count only what is shown; pick a
+                        date to see a complete picture.
+                    </p>
+                </div>
+            )}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                     <Sun className="w-7 h-7 text-purple-400" />
