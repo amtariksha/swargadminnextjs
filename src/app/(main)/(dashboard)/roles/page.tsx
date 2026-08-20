@@ -15,6 +15,10 @@ const AVAILABLE_PERMISSIONS = [
     // (revenue, subscriptions, wastage, drivers, vendor pricing). Grant to
     // the CEO role only; full-access roles see it automatically.
     { key: 'business-pulse', label: 'Business Pulse', icon: '📈' },
+    // Stall POS. 'pos' is the till itself — a market-stall operator needs only
+    // this. 'stalls' is menu and price management, which they must not have.
+    { key: 'pos', label: 'Stall Till', icon: '🧾' },
+    { key: 'stalls', label: 'Stalls & Menus', icon: '🏪' },
     { key: 'users', label: 'Users', icon: '👥' },
     { key: 'drivers', label: 'Drivers', icon: '🚚' },
     { key: 'orders', label: 'Orders', icon: '📦' },

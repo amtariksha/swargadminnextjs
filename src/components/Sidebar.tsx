@@ -366,6 +366,11 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'reviews',
     // Business Pulse (Phase 5) — CEO dashboard over the v_pulse_* views.
     'business-pulse',
+    // Stall POS (migration 113). Two keys on purpose: 'pos' is the till a
+    // market-stall operator needs and NOTHING else; 'stalls' is the office-side
+    // menu and price management, which they must not have.
+    'pos',
+    'stalls',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
