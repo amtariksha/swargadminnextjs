@@ -32,7 +32,10 @@ export async function GET(req: NextRequest) {
       .filter((n) => Number.isFinite(n))
 
     const params: unknown[] = []
-    let where = `p.is_active = 1 AND COALESCE(p.web_visible, 1) = 1`
+    // delivery_window 2 = day-only (migration 020) — admin day-orders channel
+    // only, never listed or sold on a customer surface.
+    let where = `p.is_active = 1 AND COALESCE(p.web_visible, 1) = 1
+                 AND COALESCE(p.delivery_window, 1) <> 2`
 
     // Attribute filter — OR within an attribute, AND (INTERSECT) across.
     if (attrValueIds.length > 0) {

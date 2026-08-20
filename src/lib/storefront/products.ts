@@ -119,7 +119,11 @@ export async function resolveProduct(slugOrId: string): Promise<Row | null> {
                 FROM app_db.product p
                 LEFT JOIN app_db.subcategory sc ON sc.id = p.sub_cat_id
                 LEFT JOIN app_db.category c ON c.id = sc.cat_id`
-  const visible = `p.is_active = 1 AND COALESCE(p.web_visible, 1) = 1`
+  // delivery_window 2 = day-only (migration 020): the admin day-orders channel,
+  // including stall menu items priced for a counter. Never a web product.
+  // Mirrors the same exclusion in swargnodejsbackend storefrontController.
+  const visible = `p.is_active = 1 AND COALESCE(p.web_visible, 1) = 1
+                   AND COALESCE(p.delivery_window, 1) <> 2`
   if (/^\d+$/.test(slugOrId)) {
     const rows = await sfQuery(`${base} WHERE p.id = $1 AND ${visible}`, [parseInt(slugOrId, 10)])
     return rows[0] || null
