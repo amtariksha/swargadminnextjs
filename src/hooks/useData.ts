@@ -2405,12 +2405,28 @@ export interface DaytimeSalesReport {
     }[];
 }
 
+/**
+ * Pagination envelope from GET /daytime/orders. The endpoint is capped (500 by
+ * default, 2000 max) because it fans out into three further IN(...) queries per
+ * row. `truncated` is the honest signal that the caller is looking at a partial
+ * list — surface it, never swallow it: a silently short list reads exactly like
+ * a complete one, and the bulk-reminder button on the payments page acts on
+ * whatever it was given.
+ */
+export interface DaytimeListMeta {
+    limit: number;
+    returned: number;
+    truncated: boolean;
+}
+
 export function useDaytimeOrders(filters: Record<string, string> = {}) {
     return useQuery({
         queryKey: ['daytime-orders', filters],
         queryFn: async () => {
-            const response = await GET<DaytimeOrder[]>('/daytime/orders', filters);
-            return response.data || [];
+            const response = await GET<DaytimeOrder[]>('/daytime/orders', filters) as {
+                data: DaytimeOrder[]; meta?: DaytimeListMeta;
+            };
+            return { orders: response.data || [], meta: response.meta };
         },
     });
 }

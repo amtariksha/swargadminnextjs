@@ -41,7 +41,13 @@ export default function DayOrderPaymentsPage() {
     const [statusFilter, setStatusFilter] = useState('');
     const [reminding, setReminding] = useState(false);
 
-    const { data: orders = [], isLoading, refetch } = useDaytimeOrders({});
+    // Ask for the endpoint's maximum: this page derives the BULK reminder targets
+    // from the whole list, so a short read would silently skip customers. When
+    // even 2000 isn't enough, `truncated` says so and the reminder is blocked
+    // rather than sent to an arbitrary subset.
+    const { data, isLoading, refetch } = useDaytimeOrders({ limit: '2000' });
+    const orders = useMemo(() => data?.orders ?? [], [data]);
+    const truncated = data?.meta?.truncated ?? false;
 
     // Every unpaid (unpaid|link_sent), non-cancelled day order — the bulk reminder
     // targets. Morning-recovery orders are excluded: they're auto-billed by the
@@ -56,6 +62,10 @@ export default function DayOrderPaymentsPage() {
     );
 
     const remindUnpaid = async () => {
+        if (truncated) {
+            toast.error('This list is partial — reminders would miss some customers. Narrow the view first.');
+            return;
+        }
         if (!unpaidIds.length) { toast.info('No unpaid orders to remind'); return; }
         setReminding(true);
         try {
@@ -155,6 +165,16 @@ export default function DayOrderPaymentsPage() {
 
     return (
         <div className="space-y-6">
+            {truncated && (
+                <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm">
+                    <span aria-hidden="true">&#9888;</span>
+                    <p>
+                        More day orders exist than this page can load, so the list below is partial and
+                        <strong> bulk reminders are disabled</strong> — sending them now would miss
+                        customers. Remind individually, or clear the backlog first.
+                    </p>
+                </div>
+            )}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                     <Link2 className="w-7 h-7 text-purple-400" />
@@ -164,7 +184,7 @@ export default function DayOrderPaymentsPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={remindUnpaid} disabled={reminding || !unpaidIds.length}
+                    <button onClick={remindUnpaid} disabled={reminding || !unpaidIds.length || truncated}
                         className="flex items-center gap-2 px-4 py-2 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl font-medium hover:bg-amber-500/30 disabled:opacity-50"
                         title="Send the payment-reminder WhatsApp to every unpaid day order">
                         <MessageCircle className="w-5 h-5" />
