@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# This project installs with pnpm, and Vercel builds with --frozen-lockfile.
+# An npm-generated package-lock.json here is not just noise: it desynchronises
+# from pnpm-lock.yaml the moment a dependency is added, and can steer the
+# build's package-manager detection. Keep pnpm-lock.yaml as the only lockfile.
+package-lock.json
+yarn.lock
