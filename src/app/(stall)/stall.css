@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+/*
+ * Public stall pages. Light and high-contrast on purpose: this is read on a
+ * phone held in direct sunlight at a market, which is the opposite of the
+ * conditions the dark admin panel is designed for.
+ */
+:root {
+    color-scheme: light;
+}
+
+.spinner {
+    border: 2px solid rgb(203 213 225);
+    border-top-color: rgb(16 185 129);
+    border-radius: 9999px;
+    animation: stall-spin 0.7s linear infinite;
+}
+
+@keyframes stall-spin {
+    to { transform: rotate(360deg); }
+}

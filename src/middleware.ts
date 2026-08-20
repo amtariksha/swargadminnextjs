@@ -51,8 +51,22 @@ async function verifyAdminToken(
         if (!header || !body || !sig) return null;
         const expected = await hmacSign(`${header}.${body}`, secret);
         if (sig !== expected) return null;
-        const payload = JSON.parse(base64urlDecode(body)) as AdminJwtPayload;
+        const payload = JSON.parse(base64urlDecode(body)) as AdminJwtPayload
+            & { sid?: number; stall?: boolean };
         if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+
+        // Reject a stall POS till session.
+        //
+        // This function checks a signature and an expiry and nothing else, then
+        // the caller maps the result to role 'super_admin' (see below). That is
+        // survivable while every token minted with JWT_SECRET comes from a real
+        // login — but the stall till mints long-lived tokens behind a SHARED
+        // passcode that is meant to be written on a note at a public market
+        // stall. Without this, that passcode would be a path into WhatsApp
+        // contacts, broadcasts, templates and the LMS. The backend applies the
+        // identical gate in src/middleware/auth.js (isStallSessionToken).
+        if (payload.sid || payload.stall === true) return null;
+
         return payload;
     } catch {
         return null;
