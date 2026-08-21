@@ -2321,6 +2321,14 @@ export interface DaytimeOrder {
     // screenshot (R2 key/URL) — editable after the fact via /payment_note.
     payment_note?: string | null;
     payment_proof_url?: string | null;
+    // Stall counter sales. A stall order is booked against the "Stall Walk-in"
+    // house customer (a QR self-order must never attach to a real users row), so
+    // customer_name is always "Stall Walk-in" and customer_phone is always null.
+    // The number the customer actually gave is stall_contact_phone.
+    stall_id?: number | null;
+    stall_token?: number | null;
+    stall_contact_phone?: string | null;
+    stall_state?: string | null;
     // Phase 5 — fulfilment pool. 'last_mile' / pool_locked=1 once the order has
     // been transferred onto the last-mile delivery list (one-way).
     pool?: 'day_pool' | 'last_mile';

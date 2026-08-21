@@ -275,9 +275,22 @@ export default function DaytimeOrderDetailPage() {
                 <div className="flex items-center gap-3">
                     <Sun className="w-7 h-7 text-purple-400" />
                     <div>
-                        <h1 className="text-2xl font-bold text-white">Order #{order.order_no}</h1>
+                        <h1 className="text-2xl font-bold text-white">
+                            Order #{order.order_no}
+                            {order.stall_token != null && (
+                                <span className="ml-2 align-middle text-sm font-semibold px-2 py-0.5 rounded bg-sky-500/15 text-sky-300">
+                                    Token {order.stall_token}
+                                </span>
+                            )}
+                        </h1>
                         <p className="text-slate-400">
-                            {order.customer_name} · {order.customer_phone} · {order.order_status} / {order.payment_status.replace(/_/g, ' ')}
+                            {/* A counter sale is booked against the "Stall Walk-in"
+                                house customer, whose users row has no phone. The
+                                number the customer gave is on the order. */}
+                            {order.stall_contact_phone
+                                ? `Counter customer · ${order.stall_contact_phone}`
+                                : `${order.customer_name} · ${order.customer_phone}`}
+                            {' · '}{order.order_status} / {order.payment_status.replace(/_/g, ' ')}
                         </p>
                     </div>
                 </div>

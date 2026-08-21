@@ -17,10 +17,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { ArrowLeft, Check, Bell, X, Loader2 } from 'lucide-react';
+import { ArrowLeft, Check, Bell, X, Loader2, Printer } from 'lucide-react';
 import { stallGet, stallPost, StallApiError } from '@/lib/stall/api';
 import { readTillSession } from '@/lib/stall/session';
 import { type StallQueue, type QueueTicket, isSettled } from '@/lib/stall/types';
+import { getPrinterConfig, printTokenTicket } from '@/lib/stall/printer';
+import PrinterSheet from '@/components/stall/PrinterSheet';
 
 const POLL_MS = 8000;
 const money = (n: number) => `₹${n.toFixed(n % 1 === 0 ? 0 : 2)}`;
@@ -48,6 +50,7 @@ export default function QueuePage() {
     const [queue, setQueue] = useState<StallQueue | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [acting, setActing] = useState<number | null>(null);
+    const [printerOpen, setPrinterOpen] = useState(false);
     const inFlight = useRef(false);
 
     useEffect(() => {
@@ -112,6 +115,42 @@ export default function QueuePage() {
         }
     }, [code, load]);
 
+    /**
+     * Reprint one ticket's slip.
+     *
+     * `force` bypasses the auto-print switch: this is an explicit tap, so it
+     * prints even for a stall that has auto-print off and only wants a slip
+     * occasionally. The board carries no unit prices, so the lines print without
+     * per-line amounts — the total is what the customer needs to see.
+     */
+    const reprint = useCallback(async (ticket: QueueTicket) => {
+        const config = getPrinterConfig();
+        if (config.mode === 'off') {
+            toast.error('No printer set up on this device', {
+                description: 'Tap the printer icon above to choose one.',
+            });
+            return;
+        }
+        try {
+            await printTokenTicket({
+                stallTitle: queue?.stall.title || '',
+                stallLocation: null,
+                token: ticket.token,
+                orderNo: null,
+                placedAt: ticket.created_at || new Date().toLocaleString('en-IN'),
+                lines: ticket.items.map((i) => ({ label: i.label, qty: i.qty, lineTotal: null })),
+                total: ticket.total_amount,
+                paymentLabel: isSettled(ticket.payment_status)
+                    ? (ticket.payment_mode === 'upi' ? 'UPI' : 'CASH')
+                    : 'AWAITING PAYMENT',
+                phone: ticket.contact_phone,
+                note: ticket.note,
+            }, { force: true, config });
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'That slip did not print.');
+        }
+    }, [queue?.stall.title]);
+
     // Mirrors the till: reached without a code (an admin from the sidebar), send
     // them to the till, which knows how to ask which stall.
     if (!code) {
@@ -128,9 +167,16 @@ export default function QueuePage() {
     return (
         <div className="flex-1 min-h-0 flex flex-col">
             <div className="flex items-center justify-between gap-3 px-3 py-2 flex-shrink-0">
-                <Link href="/pos" className="flex items-center gap-1.5 text-sm text-slate-300 px-3 py-2 rounded-lg border border-slate-800">
-                    <ArrowLeft className="w-4 h-4" /> Till
-                </Link>
+                <div className="flex items-center gap-2">
+                    <Link href="/pos" className="flex items-center gap-1.5 text-sm text-slate-300 px-3 py-2 rounded-lg border border-slate-800">
+                        <ArrowLeft className="w-4 h-4" /> Till
+                    </Link>
+                    <button onClick={() => setPrinterOpen(true)} title="Printer setup"
+                        aria-label="Printer setup"
+                        className="text-slate-300 px-3 py-2 rounded-lg border border-slate-800">
+                        <Printer className="w-4 h-4" />
+                    </button>
+                </div>
                 <div className="text-right">
                     <div className="text-lg font-bold">{money(queue.totals.paid_total)} taken</div>
                     <div className="text-xs text-slate-400">
@@ -165,7 +211,7 @@ export default function QueuePage() {
                                     {tickets.map((t) => (
                                         <TicketCard
                                             key={t.id} ticket={t} lane={lane.key}
-                                            busy={acting === t.id} onAct={act}
+                                            busy={acting === t.id} onAct={act} onPrint={reprint}
                                         />
                                     ))}
                                     {!tickets.length && (
@@ -177,15 +223,22 @@ export default function QueuePage() {
                     })}
                 </div>
             </div>
+
+            <PrinterSheet
+                open={printerOpen}
+                onClose={() => setPrinterOpen(false)}
+                stallTitle={queue.stall.title}
+            />
         </div>
     );
 }
 
-function TicketCard({ ticket, lane, busy, onAct }: {
+function TicketCard({ ticket, lane, busy, onAct, onPrint }: {
     ticket: QueueTicket;
     lane: QueueTicket['state'];
     busy: boolean;
     onAct: (t: QueueTicket, a: 'ready' | 'handover' | 'reject') => void;
+    onPrint: (t: QueueTicket) => void;
 }) {
     const paid = isSettled(ticket.payment_status);
     return (
@@ -209,6 +262,12 @@ function TicketCard({ ticket, lane, busy, onAct }: {
                     </li>
                 ))}
             </ul>
+            {/* How you find the customer when a slip is lost or a token is not
+                answered. A QR self-order always has one — payment is mandatory,
+                so the number is required to send the receipt. */}
+            {ticket.contact_phone && (
+                <p className="mt-1.5 text-xs text-slate-400 tabular-nums">{ticket.contact_phone}</p>
+            )}
             {ticket.note && <p className="mt-1.5 text-xs text-amber-300">{ticket.note}</p>}
 
             <div className="mt-3 flex gap-2">
@@ -226,6 +285,14 @@ function TicketCard({ ticket, lane, busy, onAct }: {
                     disabled={!paid}
                     icon={<Check className="w-4 h-4" />} label="Handed over"
                     className="bg-slate-700 active:bg-slate-600" />
+                <button
+                    onClick={() => onPrint(ticket)}
+                    className="px-4 py-4 rounded-xl bg-slate-800 text-slate-400 active:bg-slate-700"
+                    aria-label={`Print the slip for token ${ticket.token ?? ''}`}
+                    title="Print this token slip"
+                >
+                    <Printer className="w-4 h-4" />
+                </button>
                 {!paid && (
                     <button
                         onClick={() => onAct(ticket, 'reject')}

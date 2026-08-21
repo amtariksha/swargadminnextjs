@@ -15,6 +15,7 @@
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { Plus, Minus, ShoppingBag, Check, Loader2, Clock } from 'lucide-react';
+import { stallImageUrl, stallInitials } from '@/lib/stall/image';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://node.desicowmilk.com').replace(/\/$/, '');
 const TENANT = process.env.NEXT_PUBLIC_TENANT_CODE || 'swarg';
@@ -263,6 +264,7 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
             <div className="px-5 space-y-2">
                 {menu.items.filter((i) => (i.tab || 'Menu') === (tab || 'Menu')).map((item) => (
                     <div key={item.id} className="flex items-center gap-3 p-4 rounded-2xl bg-white border border-slate-200">
+                        <MenuThumb src={item.image_url} label={item.label} />
                         <div className="min-w-0 flex-1">
                             <div className="font-medium">{item.label}</div>
                             {item.size_text && <div className="text-sm text-slate-500">{item.size_text}</div>}
@@ -328,3 +330,34 @@ const Screen = ({ title, body }: { title: string; body: string }) => (
         <p className="mt-2 text-sm text-slate-600 max-w-xs">{body}</p>
     </div>
 );
+
+/**
+ * The product photo on a customer's own phone.
+ *
+ * Small and square, beside the row rather than above it: this is a list to
+ * scroll and tap, not a grid to recognise at speed, and a full-width photo per
+ * item would turn a 19-item menu into a very long page on a 5-inch screen.
+ * Items with no photo get tinted initials so the rows still line up.
+ */
+function MenuThumb({ src, label }: { src: string | null; label: string }) {
+    const url = stallImageUrl(src);
+    const [broken, setBroken] = useState(false);
+    if (!url || broken) {
+        return (
+            <div className="w-14 h-14 flex-shrink-0 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center text-sm font-semibold">
+                {stallInitials(label)}
+            </div>
+        );
+    }
+    return (
+        <Image
+            src={url}
+            alt=""
+            width={56}
+            height={56}
+            unoptimized
+            onError={() => setBroken(true)}
+            className="w-14 h-14 flex-shrink-0 rounded-xl object-cover bg-slate-100"
+        />
+    );
+}

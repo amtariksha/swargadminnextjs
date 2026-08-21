@@ -50,13 +50,16 @@ export default function DayOrdersPage() {
     const queryClient = useQueryClient();
     const [showCatering, setShowCatering] = useState(false);
     /**
-     * Stall counter sales are hidden by DEFAULT.
+     * Stall counter sales are hidden by DEFAULT, and the toggle SWAPS the list
+     * rather than adding to it.
      *
-     * There are hundreds of them on a market day against ~30 real hyperlocal
-     * day orders, and this screen is what customer care works to chase
-     * deliveries and payments — burying that under a till roll makes the page
-     * useless. But hidden with no way to show them made the sales invisible in
-     * the admin entirely, which is worse. Hence the toggle.
+     * There are hundreds of them on a market day against ~30 real hyperlocal day
+     * orders. Mixing the two buries the deliveries customer care works this
+     * screen to chase — but so does appending a till roll to them, which is what
+     * the first version did. You are ever only doing one of two jobs here:
+     * reconciling a counter, or chasing deliveries. So: off → day orders only,
+     * on → stall sales only. The summary cards then describe whichever set is
+     * actually on screen.
      */
     const [showStall, setShowStall] = useState(false);
     // Default to TODAY, not "everything". The list endpoint is capped, so an
@@ -72,7 +75,7 @@ export default function DayOrdersPage() {
         if (date) f.date = date;
         if (orderStatus) f.order_status = orderStatus;
         if (paymentStatus) f.payment_status = paymentStatus;
-        if (showStall) f.include_stall = '1';
+        if (showStall) f.stall_only = '1';
         return f;
     }, [date, orderStatus, paymentStatus, showStall]);
 
@@ -103,18 +106,38 @@ export default function DayOrdersPage() {
             key: 'customer_name',
             header: 'Customer',
             width: '170px',
-            render: (o) => (
-                <div>
-                    <div className="text-white">{o.customer_name}</div>
-                    <div className="text-xs text-slate-500">{o.customer_phone}</div>
-                    {o.entry_type === 'morning_backup' && (
-                        <span className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[10px] font-medium"
-                            title="Recovered from an undelivered morning order — already paid, not a sales-exec order">
-                            Morning recovery
-                        </span>
-                    )}
-                </div>
-            ),
+            render: (o) => {
+                // A stall sale is booked against the "Stall Walk-in" house
+                // customer on purpose — a QR self-order must never attach itself
+                // to a real users row. That row has no phone, so showing
+                // customer_phone here rendered every counter sale as an
+                // anonymous "Stall Walk-in" and made the QR look like it was
+                // not collecting numbers at all. The number the customer typed
+                // is on the order itself.
+                const stallPhone = o.stall_contact_phone;
+                return (
+                    <div>
+                        <div className="text-white">
+                            {stallPhone ? 'Counter customer' : o.customer_name}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                            {stallPhone || o.customer_phone || (o.stall_id ? 'No phone given' : '')}
+                        </div>
+                        {o.stall_token != null && (
+                            <span className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 text-[10px] font-medium"
+                                title="The queue token called out at the counter">
+                                Token {o.stall_token}
+                            </span>
+                        )}
+                        {o.entry_type === 'morning_backup' && (
+                            <span className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[10px] font-medium"
+                                title="Recovered from an undelivered morning order — already paid, not a sales-exec order">
+                                Morning recovery
+                            </span>
+                        )}
+                    </div>
+                );
+            },
         },
         {
             key: 'items',
@@ -216,9 +239,10 @@ export default function DayOrdersPage() {
         },
     ];
 
-    // How the money came in. Only meaningful once stall sales are in view — a
-    // normal day order is a delivery, and its payment mode is a detail. At a
-    // counter it is the number you reconcile the cash box against.
+    // How the money came in. Only rendered with the stall filter on — a normal
+    // day order is a delivery and its payment mode is a detail, whereas at a
+    // counter it is the number you reconcile the cash box against. Since that
+    // filter now excludes everything else, these totals are the stall's alone.
     const paymentSplit = useMemo(() => {
         const live = orders.filter((o) => o.order_status !== 'cancelled');
         const by = (...modes: string[]) => live
@@ -316,14 +340,14 @@ export default function DayOrdersPage() {
                 </select>
                 <button
                     onClick={() => setShowStall((v) => !v)}
-                    title="Counter sales rung up at a market stall. Hidden by default because there can be hundreds a day."
+                    title="Show ONLY counter sales rung up at a market stall, instead of the hyperlocal day orders. There can be hundreds a day, so the two lists are never mixed."
                     className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
                         showStall
                             ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
                             : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
                     }`}
                 >
-                    {showStall ? '✓ ' : ''}Stall sales
+                    {showStall ? '✓ ' : ''}Stall sales only
                 </button>
                 {(date || orderStatus || paymentStatus || showStall) && (
                     <button onClick={() => { setDate(''); setOrderStatus(''); setPaymentStatus(''); setShowStall(false); }}
@@ -339,7 +363,7 @@ export default function DayOrdersPage() {
                     <div className="glass rounded-2xl p-4">
                         <p className="text-xs text-slate-400">Stall sales</p>
                         <p className="text-2xl font-bold mt-1">{paymentSplit.stallOrders}</p>
-                        <p className="text-[11px] text-slate-500 mt-0.5">counter orders in view</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">counter sales in view</p>
                     </div>
                 </div>
             )}

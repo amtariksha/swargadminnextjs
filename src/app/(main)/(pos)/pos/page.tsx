@@ -17,13 +17,16 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { useSearchParams } from 'next/navigation';
 import {
-    Plus, Minus, Trash2, IndianRupee, Smartphone, Link2, ListOrdered, Loader2,
+    Plus, Minus, Trash2, IndianRupee, Smartphone, Link2, ListOrdered, Loader2, Printer,
 } from 'lucide-react';
 import { stallGet, stallPost, StallApiError } from '@/lib/stall/api';
 import { readTillSession } from '@/lib/stall/session';
 import {
     type StallMenuItem, type CartLine, type StallOrderResult, type StallSummary, cartSubtotal,
 } from '@/lib/stall/types';
+import { stallImageUrl, stallInitials, stallTileTint } from '@/lib/stall/image';
+import { getPrinterConfig, printTokenTicket, type TokenTicket } from '@/lib/stall/printer';
+import PrinterSheet from '@/components/stall/PrinterSheet';
 
 type StallOption = Pick<StallSummary, 'id' | 'code' | 'title' | 'is_active'>;
 
@@ -45,6 +48,8 @@ export default function PosPage() {
     // Which stall the operator is ringing up for. The code alone
     // ('artofliving-perma…') is not what anyone calls the stall.
     const [stallTitle, setStallTitle] = useState<string>('');
+    const [stallLocation, setStallLocation] = useState<string | null>(null);
+    const [printerOpen, setPrinterOpen] = useState(false);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [tab, setTab] = useState<string>('');
@@ -122,10 +127,11 @@ export default function PosPage() {
         if (!code) return;
         let cancelled = false;
         setLoading(true);
-        stallGet<{ items: StallMenuItem[]; stall?: { title?: string } }>(`/stall/${code}/menu`)
+        stallGet<{ items: StallMenuItem[]; stall?: { title?: string; location_text?: string | null } }>(`/stall/${code}/menu`)
             .then((d) => {
                 if (cancelled) return;
                 setStallTitle(d.stall?.title || '');
+                setStallLocation(d.stall?.location_text || null);
                 setItems(d.items || []);
                 setTab((d.items?.[0]?.tab) || '');
                 setLoadError(null);
@@ -183,6 +189,46 @@ export default function PosPage() {
         clientRef.current = { key: '', fingerprint: '' };
     }, []);
 
+    /**
+     * Hand the settled sale to the printer.
+     *
+     * Never rethrows. The money is already taken and the order already on the
+     * board by the time this runs — turning "out of paper" into a failed sale
+     * would be strictly worse than a slip nobody gets, and the operator can
+     * reprint from the queue once they have reloaded the roll.
+     */
+    const printToken = useCallback(async (
+        order: StallOrderResult, lines: CartLine[], paymentLabel: string,
+    ) => {
+        const config = getPrinterConfig();
+        if (config.mode === 'off' || !config.auto) return;
+        const ticket: TokenTicket = {
+            stallTitle,
+            stallLocation,
+            token: order.token,
+            orderNo: order.order_no,
+            placedAt: new Date().toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }),
+            lines: lines.map((l) => ({
+                label: l.label,
+                sizeText: l.sizeText,
+                qty: l.qty,
+                lineTotal: l.unitPrice * l.qty,
+            })),
+            total: order.total,
+            paymentLabel,
+            phone: phone || null,
+            note: null,
+        };
+        try {
+            await printTokenTicket(ticket, { config });
+        } catch (err) {
+            toast.error(
+                `Token ${order.token} did not print — reprint it from the queue.`,
+                { description: err instanceof Error ? err.message : undefined },
+            );
+        }
+    }, [stallTitle, stallLocation, phone]);
+
     const charge = useCallback(async (mode: 'cash' | 'upi' | 'link') => {
         if (!cart.length || busy) return;
         setBusy(mode);
@@ -205,11 +251,17 @@ export default function PosPage() {
                 }
                 await stallPost(`/stall/${code}/orders/${order.id}/payment_link`);
                 toast.success(`Token ${order.token} · payment link sent`);
+                // Deliberately NOT printed. The order is not paid yet, so it is
+                // not on the board and nothing is being made for it — a slip
+                // saying TOKEN 12 would be handed over for food that has not
+                // been ordered as far as the counter is concerned. It prints
+                // from the queue once the payment lands.
             } else {
                 await stallPost(`/stall/${code}/orders/${order.id}/settle`, { payment_mode: mode });
                 toast.success(
                     `Token ${order.token} · ${money(order.total)} ${mode === 'cash' ? 'cash' : 'by UPI'}`,
                 );
+                await printToken(order, cart, mode === 'cash' ? 'CASH' : 'UPI');
             }
             clearSale();
         } catch (err) {
@@ -221,7 +273,7 @@ export default function PosPage() {
         } finally {
             setBusy(null);
         }
-    }, [cart, busy, ensureRef, code, phone, clearSale]);
+    }, [cart, busy, ensureRef, code, phone, clearSale, printToken]);
 
     if (!code) {
         if (stallOptions === null) return <Centered><span className="w-8 h-8 spinner" /></Centered>;
@@ -280,19 +332,7 @@ export default function PosPage() {
                 <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3">
                     <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
                         {visible.map((item) => (
-                            <button
-                                key={item.id}
-                                onClick={() => addItem(item)}
-                                // Big touch target: this is tapped hundreds of
-                                // times a day, often with one hand.
-                                className="min-h-[104px] p-4 rounded-2xl bg-slate-900 border border-slate-800 text-left active:bg-slate-800 active:scale-[0.98] transition-transform"
-                            >
-                                <div className="font-semibold text-base leading-snug">{item.label}</div>
-                                {item.size_text && (
-                                    <div className="text-xs text-slate-400 mt-0.5">{item.size_text}</div>
-                                )}
-                                <div className="mt-2 text-emerald-400 font-bold text-lg">{money(item.price)}</div>
-                            </button>
+                            <MenuTile key={item.id} item={item} onTap={addItem} />
                         ))}
                         {!visible.length && (
                             <p className="col-span-full text-sm text-slate-500 py-8 text-center">
@@ -313,6 +353,11 @@ export default function PosPage() {
                         <Link href="/pos/queue" className="flex items-center gap-1.5 text-xs text-slate-400 px-2 py-1.5 rounded-lg border border-slate-800">
                             <ListOrdered className="w-3.5 h-3.5" /> Queue
                         </Link>
+                        <button onClick={() => setPrinterOpen(true)} title="Printer setup"
+                            aria-label="Printer setup"
+                            className="text-slate-400 px-2 py-1.5 rounded-lg border border-slate-800">
+                            <Printer className="w-3.5 h-3.5" />
+                        </button>
                         {!readTillSession() && (
                             // Only offered on the admin path: a passcode till is
                             // pinned to its own stall server-side anyway.
@@ -392,7 +437,67 @@ export default function PosPage() {
                     )}
                 </div>
             </aside>
+
+            <PrinterSheet
+                open={printerOpen}
+                onClose={() => setPrinterOpen(false)}
+                stallTitle={stallTitle || code}
+            />
         </div>
+    );
+}
+
+/**
+ * One product tile.
+ *
+ * The photo is the point: an operator picks a picture out of a grid far faster
+ * than they read one of thirteen gelato flavours. Products without one fall back
+ * to tinted initials rather than an empty frame — half a stall menu is chaat,
+ * which nobody photographs, and a grid of blank grey boxes reads as broken.
+ *
+ * 3:2 rather than a square, and the price sits ON the image: a tile that grows
+ * by a whole text row costs a row of the grid, and the reason this screen does
+ * not paginate is that a stall's ~19 items fit without scrolling.
+ */
+function MenuTile({ item, onTap }: { item: StallMenuItem; onTap: (i: StallMenuItem) => void }) {
+    const src = stallImageUrl(item.image_url);
+    // A dead image link would otherwise leave a broken-image glyph on the till.
+    const [broken, setBroken] = useState(false);
+    return (
+        <button
+            onClick={() => onTap(item)}
+            // Big touch target: this is tapped hundreds of times a day, often
+            // with one hand.
+            className="rounded-2xl bg-slate-900 border border-slate-800 text-left overflow-hidden active:bg-slate-800 active:scale-[0.98] transition-transform"
+        >
+            <div className="aspect-[3/2] w-full bg-slate-950/60 relative">
+                {src && !broken ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- catalogue
+                    // photos come from an env-configured host, which next/image is not
+                    // set up to optimise, and these are already thumbnail-sized.
+                    <img
+                        src={src}
+                        alt=""
+                        loading="lazy"
+                        onError={() => setBroken(true)}
+                        className="absolute inset-0 w-full h-full object-cover"
+                    />
+                ) : (
+                    <div className={`absolute inset-0 flex items-center justify-center text-3xl font-bold ${stallTileTint(item.label)}`}>
+                        {stallInitials(item.label)}
+                    </div>
+                )}
+                <span className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-lg bg-slate-950/85 text-emerald-300 font-bold text-base tabular-nums">
+                    {money(item.price)}
+                </span>
+            </div>
+            <div className="px-3 py-2">
+                <div className="font-semibold text-sm leading-snug line-clamp-2">{item.label}</div>
+                {item.size_text && (
+                    <div className="text-xs text-slate-400 mt-0.5 truncate">{item.size_text}</div>
+                )}
+            </div>
+        </button>
     );
 }
 
