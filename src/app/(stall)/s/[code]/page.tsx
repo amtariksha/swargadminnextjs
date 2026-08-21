@@ -62,7 +62,8 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
     const [cart, setCart] = useState<Record<number, number>>({});
     const [phone, setPhone] = useState('');
     const [placing, setPlacing] = useState(false);
-    const [placed, setPlaced] = useState<{ token: number | null; total: number } | null>(null);
+    const [placed, setPlaced] = useState<{ id: number; token: number | null; total: number } | null>(null);
+    const [paid, setPaid] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
 /**
@@ -91,6 +92,28 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
             })
             .catch(() => setFailed(true));
     }, [code]);
+
+    /**
+     * Poll the receipt until payment clears.
+     *
+     * The customer comes back from Razorpay to this screen, and the webhook that
+     * marks the order paid lands server-side a moment later — so the page cannot
+     * know from the redirect alone. Polling stops as soon as it is paid.
+     */
+    useEffect(() => {
+        if (!placed?.id || paid) return;
+        let stop = false;
+        const tick = async () => {
+            try {
+                const r = await fetch(api(`/stall/public/${encodeURIComponent(code)}/orders/${placed.id}`));
+                const b = await r.json();
+                if (!stop && b?.data?.paid) setPaid(true);
+            } catch { /* a failed poll is not worth showing anyone */ }
+        };
+        void tick();
+        const id = setInterval(tick, 4000);
+        return () => { stop = true; clearInterval(id); };
+    }, [placed?.id, paid, code]);
 
     const tabs = useMemo(() => {
         const seen: string[] = [];
@@ -145,8 +168,15 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
             if (body?.status === false || (body?.response && body.response !== 200)) {
                 throw new Error(body?.message || 'Could not place the order');
             }
-            setPlaced({ token: body?.data?.token ?? null, total: body?.data?.total ?? total });
+            const d = body?.data ?? {};
+            setPlaced({ id: d.id, token: d.token ?? null, total: d.total ?? total });
+            setPaid(false);
             setCart({});
+            // Payment is mandatory: nothing is made until it clears. Send the
+            // customer straight to Razorpay rather than making them find a
+            // button — they came here to buy, and the counter only sees the
+            // ticket once the webhook marks it paid.
+            if (d.payment_short_url) window.location.href = d.payment_short_url;
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Could not place the order');
         } finally {
@@ -166,16 +196,28 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
         return (
             <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
                 <SwargMark className="mb-8" />
-                <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-5">
-                    <Check className="w-8 h-8 text-emerald-600" />
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-5 ${
+                    paid ? 'bg-emerald-100' : 'bg-amber-100'
+                }`}>
+                    {paid
+                        ? <Check className="w-8 h-8 text-emerald-600" />
+                        : <Loader2 className="w-8 h-8 text-amber-600 animate-spin" />}
                 </div>
                 <p className="text-slate-600">Your token</p>
                 <div className="text-7xl font-bold tabular-nums my-2">{placed.token ?? '—'}</div>
                 <p className="text-lg font-semibold">{money(placed.total)}</p>
                 <p className="mt-4 text-sm text-slate-600 max-w-xs">
-                    Show this at the counter to pay and collect. We&apos;ll call your number.
+                    {paid
+                        ? 'Paid. We\u2019re making it now — we\u2019ll call your number.'
+                        : 'Waiting for your payment to confirm. This page updates on its own.'}
                 </p>
-                <button onClick={() => { setPlaced(null); clientRef.current = { key: '', fingerprint: '' }; }}
+                {!paid && (
+                    <p className="mt-2 text-xs text-amber-700 max-w-xs">
+                        Nothing is made until payment clears. If you closed the payment page,
+                        show this token at the counter.
+                    </p>
+                )}
+                <button onClick={() => { setPlaced(null); setPaid(false); clientRef.current = { key: '', fingerprint: '' }; }}
                     className="mt-8 px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-medium">
                     Order something else
                 </button>
@@ -256,20 +298,22 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                         value={phone}
                         onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                         inputMode="numeric"
-                        placeholder="Phone number (optional)"
+                        placeholder="Phone number"
                         className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-base focus:outline-none focus:border-slate-900"
                     />
                     {error && <p className="text-sm text-red-600">{error}</p>}
                     <button
                         onClick={place}
-                        disabled={placing}
+                        disabled={placing || phone.length !== 10}
                         className="w-full py-4 rounded-2xl bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2 active:bg-emerald-700 disabled:bg-slate-300"
                     >
                         {placing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShoppingBag className="w-5 h-5" />}
-                        Place order · {money(total)}
+                        Pay {money(total)}
                     </button>
                     <p className="text-[11px] text-slate-500 text-center">
-                        Pay at the counter when you collect.
+                        {phone.length === 10
+                            ? 'You\u2019ll pay on the next screen, then collect at the counter.'
+                            : 'Enter your number \u2014 your receipt goes there.'}
                     </p>
                 </div>
             )}

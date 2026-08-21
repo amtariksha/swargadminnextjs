@@ -121,11 +121,18 @@ export default function QueuePage() {
                     <ArrowLeft className="w-4 h-4" /> Till
                 </Link>
                 <div className="text-right">
-                    <div className="text-sm font-semibold">{money(queue.totals.paid_total)} taken</div>
-                    <div className="text-[11px] text-slate-500">
-                        {queue.totals.orders_count} orders
-                        {queue.totals.unpaid_total > 0 && ` · ${money(queue.totals.unpaid_total)} unpaid`}
+                    <div className="text-lg font-bold">{money(queue.totals.paid_total)} taken</div>
+                    <div className="text-xs text-slate-400">
+                        {money(queue.totals.cash_total)} cash · {money(queue.totals.upi_total)} UPI
+                        {queue.totals.link_total > 0 && ` · ${money(queue.totals.link_total)} link`}
                     </div>
+                    {queue.totals.awaiting_payment > 0 && (
+                        // These orders exist but are NOT on the board — payment
+                        // gates it, so nothing is made for them.
+                        <div className="text-xs text-amber-400">
+                            {queue.totals.awaiting_payment} awaiting payment
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -140,7 +147,7 @@ export default function QueuePage() {
                             || (lane.key === 'new' && !LANE_KEYS.includes(o.state)));
                         return (
                             <section key={lane.key} className="flex flex-col min-h-0">
-                                <h2 className={`flex-shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold mb-2 ${lane.tone}`}>
+                                <h2 className={`flex-shrink-0 px-3 py-2 rounded-lg border text-sm font-bold mb-2 ${lane.tone}`}>
                                     {lane.title} · {tickets.length}
                                 </h2>
                                 <div className="space-y-2 lg:overflow-y-auto lg:flex-1 lg:min-h-0">
@@ -173,11 +180,11 @@ function TicketCard({ ticket, lane, busy, onAct }: {
     return (
         <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
             <div className="flex items-start justify-between gap-2">
-                <div className="text-2xl font-bold leading-none tabular-nums">
+                <div className="text-4xl font-bold leading-none tabular-nums">
                     {ticket.token ?? '—'}
                 </div>
                 <div className="text-right">
-                    <div className="text-sm font-semibold">{money(ticket.total_amount)}</div>
+                    <div className="text-lg font-semibold">{money(ticket.total_amount)}</div>
                     <div className={`text-[11px] ${paid ? 'text-emerald-400' : 'text-red-300'}`}>
                         {paid ? (ticket.payment_mode === 'upi' ? 'UPI' : 'Paid') : 'UNPAID'}
                     </div>
@@ -186,7 +193,7 @@ function TicketCard({ ticket, lane, busy, onAct }: {
 
             <ul className="mt-2 space-y-0.5">
                 {ticket.items.map((it, i) => (
-                    <li key={i} className="text-sm text-slate-300">
+                    <li key={i} className="text-base text-slate-200">
                         <span className="text-slate-500">{it.qty}×</span> {it.label}
                     </li>
                 ))}
@@ -212,7 +219,7 @@ function TicketCard({ ticket, lane, busy, onAct }: {
                     <button
                         onClick={() => onAct(ticket, 'reject')}
                         disabled={busy}
-                        className="px-3 py-2.5 rounded-lg bg-slate-800 text-slate-400 active:bg-slate-700"
+                        className="px-4 py-4 rounded-xl bg-slate-800 text-slate-400 active:bg-slate-700"
                         aria-label="Remove ticket"
                     >
                         <X className="w-4 h-4" />
@@ -231,7 +238,7 @@ function LaneButton({ onClick, busy, disabled, icon, label, className }: {
         <button
             onClick={onClick}
             disabled={busy || disabled}
-            className={`flex-1 py-2.5 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5 disabled:bg-slate-800 disabled:text-slate-600 ${className}`}
+            className={`flex-1 py-4 rounded-xl text-base font-semibold flex items-center justify-center gap-2 disabled:bg-slate-800 disabled:text-slate-600 ${className}`}
         >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : icon}
             {label}

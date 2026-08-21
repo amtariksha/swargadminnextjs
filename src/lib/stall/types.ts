@@ -68,7 +68,16 @@ export interface StallQueue {
     stall: { id: number; code: string; title: string };
     date: string;
     orders: QueueTicket[];
-    totals: { orders_count: number; paid_total: number; unpaid_total: number };
+    totals: {
+        orders_count: number;
+        paid_total: number;
+        unpaid_total: number;
+        cash_total: number;
+        upi_total: number;
+        link_total: number;
+        /** Orders that exist but have not settled — deliberately NOT on the board. */
+        awaiting_payment: number;
+    };
 }
 
 export interface StallOrderResult {
