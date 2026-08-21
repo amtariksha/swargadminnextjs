@@ -140,10 +140,15 @@ const navItems: NavItem[] = [
         children: [
             { name: 'Orders', href: '/orders', icon: <ShoppingCart className="w-4 h-4" /> },
             { name: 'Day Orders', href: '/day-orders', icon: <Sun className="w-4 h-4" />, permissionKey: 'day-orders' },
-            // Stall POS (migration 113). /stalls is the office-side menu and
-            // price management; the till itself lives outside the dashboard
-            // chrome at /pos and is reached by QR, not from here.
+            // Stall POS (migration 113). Two entries, two permissions:
+            // /stalls is the office-side menu and price management, while /pos
+            // is the till itself. The till is normally reached by scanning the
+            // stall's QR and unlocked with the shared passcode — but an admin
+            // raising a bill from the office has no QR to scan, and without a
+            // link here the page is unreachable from the panel. It opens
+            // chrome-less (its own route group), same as Production Delivery.
             { name: 'Stalls & Menus', href: '/stalls', icon: <Store className="w-4 h-4" />, permissionKey: 'stalls' },
+            { name: 'Stall Till', href: '/pos', icon: <Calculator className="w-4 h-4" />, permissionKey: 'pos' },
             { name: 'Transactions', href: '/transactions', icon: <CreditCard className="w-4 h-4" /> },
             // Feature 07 — returnable packaging returns/refunds desk.
             { name: 'Refunds & Returns', href: '/returns-refunds', icon: <RotateCcw className="w-4 h-4" />, permissionKey: 'packaging' },
