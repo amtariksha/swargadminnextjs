@@ -20,4 +20,16 @@ export const DELIVERY_PERMISSIONS: { key: string; label: string; icon: string }[
     { key: 'collection-approval', label: 'Collection Approval', icon: '✅' },
     { key: 'dairy-receipt', label: 'Dairy Receipt (Milk Received)', icon: '🐄' },
     { key: 'whatsapp-inbox', label: 'WhatsApp Inbox (Customer Care)', icon: '💬' },
+    // Stall POS. TWO keys, and the difference is money:
+    //   stall-till   ring up sales, take cash/UPI, send payment links, and see
+    //                the day's takings.
+    //   stall-queue  the counter board only — see tickets, mark ready, hand
+    //                over. Cannot create an order, cannot settle one, and the
+    //                backend withholds the day's totals from it entirely.
+    // Holding stall-till implies stall-queue; whoever handles the cash box also
+    // works the board. Enforced server-side by requireStallRight
+    // (swargnodejsbackend/src/middleware/stallAuth.js) — these keys are the
+    // grant, not the security boundary.
+    { key: 'stall-till', label: 'Stall Till (takes money)', icon: '🧾' },
+    { key: 'stall-queue', label: 'Stall Counter (no money)', icon: '🔔' },
 ];
