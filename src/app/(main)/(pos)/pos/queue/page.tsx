@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { ArrowLeft, Check, ChefHat, Bell, X, Loader2 } from 'lucide-react';
+import { ArrowLeft, Check, Bell, X, Loader2 } from 'lucide-react';
 import { stallGet, stallPost, StallApiError } from '@/lib/stall/api';
 import { readTillSession } from '@/lib/stall/session';
 import { type StallQueue, type QueueTicket, isSettled } from '@/lib/stall/types';
@@ -25,11 +25,23 @@ import { type StallQueue, type QueueTicket, isSettled } from '@/lib/stall/types'
 const POLL_MS = 8000;
 const money = (n: number) => `₹${n.toFixed(n % 1 === 0 ? 0 : 2)}`;
 
+/**
+ * Two lanes, deliberately.
+ *
+ * A three-stage board (new -> preparing -> ready) is one tap too many for a
+ * gelato scoop, and the middle lane made tickets look like they had vanished:
+ * press Start and the card leaves New for a column that is below the fold on a
+ * phone. The backend still ACCEPTS 'preparing', so a slower kitchen can have
+ * the lane back by adding one entry here — no deploy of the API needed.
+ */
 const LANES: { key: QueueTicket['state']; title: string; tone: string }[] = [
     { key: 'new', title: 'New', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
-    { key: 'preparing', title: 'Preparing', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
     { key: 'ready', title: 'Ready', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
 ];
+
+/** Lanes the board renders. A ticket in any other state still needs somewhere
+ *  to appear, or it silently disappears from the counter. */
+const LANE_KEYS = LANES.map((l) => l.key);
 
 export default function QueuePage() {
     const [code, setCode] = useState('');
@@ -68,7 +80,7 @@ export default function QueuePage() {
         return () => clearInterval(id);
     }, [code, load]);
 
-    const act = useCallback(async (ticket: QueueTicket, action: 'preparing' | 'ready' | 'handover' | 'reject') => {
+    const act = useCallback(async (ticket: QueueTicket, action: 'ready' | 'handover' | 'reject') => {
         setActing(ticket.id);
         try {
             if (action === 'handover') {
@@ -118,9 +130,14 @@ export default function QueuePage() {
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden px-3 pb-3">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:h-full">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:h-full">
                     {LANES.map((lane) => {
-                        const tickets = queue.orders.filter((o) => o.state === lane.key);
+                        // Anything in a state this board no longer renders (a
+                        // 'preparing' ticket from before the lane was removed)
+                        // falls into New rather than vanishing off the counter.
+                        const tickets = queue.orders.filter((o) =>
+                            o.state === lane.key
+                            || (lane.key === 'new' && !LANE_KEYS.includes(o.state)));
                         return (
                             <section key={lane.key} className="flex flex-col min-h-0">
                                 <h2 className={`flex-shrink-0 px-3 py-1.5 rounded-lg border text-xs font-semibold mb-2 ${lane.tone}`}>
@@ -150,7 +167,7 @@ function TicketCard({ ticket, lane, busy, onAct }: {
     ticket: QueueTicket;
     lane: QueueTicket['state'];
     busy: boolean;
-    onAct: (t: QueueTicket, a: 'preparing' | 'ready' | 'handover' | 'reject') => void;
+    onAct: (t: QueueTicket, a: 'ready' | 'handover' | 'reject') => void;
 }) {
     const paid = isSettled(ticket.payment_status);
     return (
@@ -178,24 +195,19 @@ function TicketCard({ ticket, lane, busy, onAct }: {
 
             <div className="mt-3 flex gap-2">
                 {lane === 'new' && (
-                    <LaneButton onClick={() => onAct(ticket, 'preparing')} busy={busy}
-                        icon={<ChefHat className="w-4 h-4" />} label="Start" className="bg-amber-600 active:bg-amber-700" />
-                )}
-                {lane === 'preparing' && (
                     <LaneButton onClick={() => onAct(ticket, 'ready')} busy={busy}
-                        icon={<Bell className="w-4 h-4" />} label="Ready" className="bg-emerald-600 active:bg-emerald-700" />
+                        icon={<Bell className="w-4 h-4" />} label="Ready"
+                        className="bg-emerald-600 active:bg-emerald-700" />
                 )}
-                {(lane === 'ready' || lane === 'new') && (
-                    <LaneButton
-                        onClick={() => onAct(ticket, 'handover')}
-                        busy={busy}
-                        // The server refuses an unpaid handover anyway; disabling
-                        // it here just avoids an error the operator can't act on
-                        // while a customer is standing there.
-                        disabled={!paid}
-                        icon={<Check className="w-4 h-4" />} label="Handed over"
-                        className="bg-slate-700 active:bg-slate-600" />
-                )}
+                <LaneButton
+                    onClick={() => onAct(ticket, 'handover')}
+                    busy={busy}
+                    // The server refuses an unpaid handover anyway; disabling it
+                    // here just avoids an error the operator cannot act on while
+                    // a customer is standing there.
+                    disabled={!paid}
+                    icon={<Check className="w-4 h-4" />} label="Handed over"
+                    className="bg-slate-700 active:bg-slate-600" />
                 {!paid && (
                     <button
                         onClick={() => onAct(ticket, 'reject')}

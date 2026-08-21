@@ -249,9 +249,9 @@ export default function PosPage() {
     if (loadError) return <Centered>{loadError}</Centered>;
 
     return (
-        <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
+        <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-x-hidden">
             {/* ── Grid ─────────────────────────────────────────────────── */}
-            <section className="flex-1 min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800/60">
+            <section className="flex-1 min-w-0 min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800/60">
                 {tabs.length > 1 && (
                     <div className="flex gap-2 px-3 py-2 overflow-x-auto flex-shrink-0">
                         {tabs.map((t) => (
@@ -309,7 +309,8 @@ export default function PosPage() {
                             // Only offered on the admin path: a passcode till is
                             // pinned to its own stall server-side anyway.
                             <button onClick={() => { setCode(''); setNeedsPick(true); }}
-                                className="text-xs text-slate-400 px-2 py-1.5 rounded-lg border border-slate-800">
+                                title={`Stall: ${code} — tap to switch`}
+                                className="text-xs text-slate-400 px-2 py-1.5 rounded-lg border border-slate-800 max-w-[7rem] truncate">
                                 {code}
                             </button>
                         )}
