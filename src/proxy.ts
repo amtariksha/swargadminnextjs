@@ -104,7 +104,7 @@ function isPublicApiPath(pathname: string): boolean {
 
 // ─── Middleware ────────────────────────────────────────────────────────────
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
     // Branch A: Agent Force tool surface — gated by a SHARED SERVICE TOKEN

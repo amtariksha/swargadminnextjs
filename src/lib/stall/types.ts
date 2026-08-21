@@ -53,6 +53,7 @@ export type StallState = 'new' | 'preparing' | 'ready' | 'handed_over';
 
 export interface QueueTicket {
     id: number;
+    order_no: number | null;
     token: number | null;
     state: StallState;
     payment_status: string;
@@ -94,3 +95,35 @@ export const isSettled = (s: string | null | undefined) => PAID_STATES.includes(
 
 export const cartSubtotal = (lines: CartLine[]) =>
     Math.round(lines.reduce((sum, l) => sum + l.unitPrice * l.qty, 0) * 100) / 100;
+
+/**
+ * One row of the day's till roll.
+ *
+ * A superset of QueueTicket: the board hides handed-over, unpaid and swept
+ * orders on purpose, and this is the screen that has to show all three.
+ */
+export interface StallSale {
+    id: number;
+    order_no: number | null;
+    token: number | null;
+    state: StallState;
+    order_status: string;
+    cancelled: boolean;
+    cancellation_reason: string | null;
+    payment_status: string;
+    payment_mode: string | null;
+    payment_short_url: string | null;
+    total_amount: number;
+    contact_phone: string | null;
+    note: string | null;
+    created_at: string | null;
+    paid_at: string | null;
+    items: { label: string; qty: number; line_total: number | null }[];
+}
+
+export interface StallSalesDay {
+    stall: { id: number; code: string; title: string };
+    date: string;
+    orders: StallSale[];
+    totals: StallQueue['totals'];
+}

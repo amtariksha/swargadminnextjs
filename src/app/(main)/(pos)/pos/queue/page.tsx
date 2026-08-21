@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { ArrowLeft, Check, Bell, X, Loader2, Printer } from 'lucide-react';
+import { ArrowLeft, Check, Bell, X, Loader2, Printer, Receipt } from 'lucide-react';
 import { stallGet, stallPost, StallApiError } from '@/lib/stall/api';
 import { readTillSession } from '@/lib/stall/session';
 import { type StallQueue, type QueueTicket, isSettled } from '@/lib/stall/types';
@@ -170,6 +170,10 @@ export default function QueuePage() {
                 <div className="flex items-center gap-2">
                     <Link href="/pos" className="flex items-center gap-1.5 text-sm text-slate-300 px-3 py-2 rounded-lg border border-slate-800">
                         <ArrowLeft className="w-4 h-4" /> Till
+                    </Link>
+                    <Link href="/pos/sales" title="Everything sold today"
+                        className="flex items-center gap-1.5 text-sm text-slate-300 px-3 py-2 rounded-lg border border-slate-800">
+                        <Receipt className="w-4 h-4" /> Sales
                     </Link>
                     <button onClick={() => setPrinterOpen(true)} title="Printer setup"
                         aria-label="Printer setup"

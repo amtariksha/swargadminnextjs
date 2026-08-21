@@ -4,7 +4,7 @@ import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 // ─── GET /api/whatsapp/users — read-only list of WACRM agents ─────────────
 //
 // Authentication is handled by the admin panel's login flow (this route is
-// gated by middleware.ts). User CRUD has been removed in favour of the
+// gated by proxy.ts). User CRUD has been removed in favour of the
 // admin panel's roles + admin_users management — this endpoint remains as
 // a read-only lookup so the Inbox conversation-assignee dropdown
 // (chat-window.tsx) keeps working against legacy assignments.

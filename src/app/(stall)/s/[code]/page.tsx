@@ -21,6 +21,8 @@ const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://node.desicowm
 const TENANT = process.env.NEXT_PUBLIC_TENANT_CODE || 'swarg';
 const api = (path: string) => `${API_BASE}/api/${TENANT}${path}`;
 const money = (n: number) => `₹${n.toFixed(n % 1 === 0 ? 0 : 2)}`;
+/** Per-stall, so scanning a second stall's QR does not show the first one's receipt. */
+const RECEIPT_KEY = (code: string) => `stall_receipt_${code}`;
 
 interface PublicItem {
     id: number; label: string; size_text: string | null; price: number;
@@ -63,7 +65,9 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
     const [cart, setCart] = useState<Record<number, number>>({});
     const [phone, setPhone] = useState('');
     const [placing, setPlacing] = useState(false);
-    const [placed, setPlaced] = useState<{ id: number; token: number | null; total: number } | null>(null);
+    const [placed, setPlaced] = useState<
+        { id: number; orderNo: number | null; token: number | null; total: number } | null
+    >(null);
     const [paid, setPaid] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -95,6 +99,43 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
     }, [code]);
 
     /**
+     * Bring the receipt back after the trip to Razorpay.
+     *
+     * Paying navigates the tab away to the hosted payment page, and the link is
+     * created with no callback_url — so Razorpay shows its own success screen
+     * and the customer presses Back. That is a FULL page load: React state is
+     * gone, and without this they would land on the menu again with no token, no
+     * order number and no way to tell whether they had just paid.
+     *
+     * Only the id really matters — the poll below re-reads everything from the
+     * server a moment later — but keeping the token and total makes the screen
+     * correct on the first paint instead of flashing placeholders.
+     *
+     * Four hours, so a stall packing up at 6pm does not resurrect a lunchtime
+     * receipt for whoever scans the QR next on a shared phone.
+     */
+    useEffect(() => {
+        if (!code || placed) return;
+        try {
+            const raw = window.localStorage.getItem(RECEIPT_KEY(code));
+            if (!raw) return;
+            const saved = JSON.parse(raw) as {
+                id: number; orderNo: number | null; token: number | null; total: number; at: number;
+            };
+            if (!saved?.id || Date.now() - (saved.at || 0) > 4 * 60 * 60 * 1000) {
+                window.localStorage.removeItem(RECEIPT_KEY(code));
+                return;
+            }
+            setPlaced({ id: saved.id, orderNo: saved.orderNo, token: saved.token, total: saved.total });
+        } catch {
+            /* unparseable or storage blocked — the customer just sees the menu */
+        }
+        // Deliberately mount-only: re-running when `placed` changes would restore
+        // the receipt the moment "Order something else" cleared it.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [code]);
+
+    /**
      * Poll the receipt until payment clears.
      *
      * The customer comes back from Razorpay to this screen, and the webhook that
@@ -108,7 +149,19 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
             try {
                 const r = await fetch(api(`/stall/public/${encodeURIComponent(code)}/orders/${placed.id}`));
                 const b = await r.json();
-                if (!stop && b?.data?.paid) setPaid(true);
+                if (stop) return;
+                const d = b?.data;
+                if (!d) return;
+                // The server is authoritative — a rehydrated receipt may predate
+                // the token allocation, and this is also where a restored screen
+                // fills in anything localStorage did not carry.
+                setPlaced((prev) => (prev && prev.id === d.id ? {
+                    ...prev,
+                    orderNo: d.order_no ?? prev.orderNo,
+                    token: d.token ?? prev.token,
+                    total: d.total_amount ?? prev.total,
+                } : prev));
+                if (d.paid) setPaid(true);
             } catch { /* a failed poll is not worth showing anyone */ }
         };
         void tick();
@@ -170,7 +223,14 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                 throw new Error(body?.message || 'Could not place the order');
             }
             const d = body?.data ?? {};
-            setPlaced({ id: d.id, token: d.token ?? null, total: d.total ?? total });
+            const receipt = {
+                id: d.id, orderNo: d.order_no ?? null, token: d.token ?? null, total: d.total ?? total,
+            };
+            setPlaced(receipt);
+            // Written BEFORE the redirect below, or the trip to Razorpay loses it.
+            try {
+                window.localStorage.setItem(RECEIPT_KEY(code), JSON.stringify({ ...receipt, at: Date.now() }));
+            } catch { /* storage blocked — the receipt just will not survive a reload */ }
             setPaid(false);
             setCart({});
             // Payment is mandatory: nothing is made until it clears. Send the
@@ -207,6 +267,12 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                 <p className="text-slate-600">Your token</p>
                 <div className="text-7xl font-bold tabular-nums my-2">{placed.token ?? '—'}</div>
                 <p className="text-lg font-semibold">{money(placed.total)}</p>
+                {/* The token is the number shouted across the counter and resets
+                    to 1 every morning; the order number is the one that means
+                    anything on the phone if something needs sorting out later. */}
+                {placed.orderNo != null && (
+                    <p className="mt-1 text-sm text-slate-500 tabular-nums">Order #{placed.orderNo}</p>
+                )}
                 <p className="mt-4 text-sm text-slate-600 max-w-xs">
                     {paid
                         ? 'Paid. We\u2019re making it now — we\u2019ll call your number.'
@@ -218,7 +284,12 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                         show this token at the counter.
                     </p>
                 )}
-                <button onClick={() => { setPlaced(null); setPaid(false); clientRef.current = { key: '', fingerprint: '' }; }}
+                <button onClick={() => {
+                    setPlaced(null);
+                    setPaid(false);
+                    clientRef.current = { key: '', fingerprint: '' };
+                    try { window.localStorage.removeItem(RECEIPT_KEY(code)); } catch { /* nothing to clear */ }
+                }}
                     className="mt-8 px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-medium">
                     Order something else
                 </button>

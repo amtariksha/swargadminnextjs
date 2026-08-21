@@ -3,7 +3,7 @@
  *
  * Reads the admin JWT from localStorage['admin'] (matches the shape used by
  * src/lib/api.ts in the admin panel) and forwards it as a Bearer token. The
- * middleware at src/middleware.ts verifies it against JWT_SECRET and injects
+ * proxy at src/proxy.ts verifies it against JWT_SECRET and injects
  * x-user-* headers, so the original WACRM route handlers (which call
  * getRequestContext from @/lib/whatsapp/request) work unchanged.
  *

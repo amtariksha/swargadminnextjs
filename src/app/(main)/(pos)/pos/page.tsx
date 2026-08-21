@@ -17,7 +17,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { useSearchParams } from 'next/navigation';
 import {
-    Plus, Minus, Trash2, IndianRupee, Smartphone, Link2, ListOrdered, Loader2, Printer,
+    Plus, Minus, Trash2, IndianRupee, Smartphone, Link2, ListOrdered, Loader2, Printer, Receipt,
 } from 'lucide-react';
 import { stallGet, stallPost, StallApiError } from '@/lib/stall/api';
 import { readTillSession } from '@/lib/stall/session';
@@ -352,6 +352,12 @@ export default function PosPage() {
                     <div className="flex items-center gap-2">
                         <Link href="/pos/queue" className="flex items-center gap-1.5 text-xs text-slate-400 px-2 py-1.5 rounded-lg border border-slate-800">
                             <ListOrdered className="w-3.5 h-3.5" /> Queue
+                        </Link>
+                        {/* The board only shows what is still to be MADE. This is
+                            everything sold today, paid or not — the close-of-day
+                            question the counter screen cannot answer. */}
+                        <Link href="/pos/sales" className="flex items-center gap-1.5 text-xs text-slate-400 px-2 py-1.5 rounded-lg border border-slate-800">
+                            <Receipt className="w-3.5 h-3.5" /> Sales
                         </Link>
                         <button onClick={() => setPrinterOpen(true)} title="Printer setup"
                             aria-label="Printer setup"
