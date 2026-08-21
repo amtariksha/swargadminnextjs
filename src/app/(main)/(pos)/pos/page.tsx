@@ -22,14 +22,25 @@ import {
 import { stallGet, stallPost, StallApiError } from '@/lib/stall/api';
 import { readTillSession } from '@/lib/stall/session';
 import {
-    type StallMenuItem, type CartLine, type StallOrderResult, cartSubtotal,
+    type StallMenuItem, type CartLine, type StallOrderResult, type StallSummary, cartSubtotal,
 } from '@/lib/stall/types';
+
+type StallOption = Pick<StallSummary, 'id' | 'code' | 'title' | 'is_active'>;
 
 const money = (n: number) => `₹${n.toFixed(n % 1 === 0 ? 0 : 2)}`;
 
 export default function PosPage() {
     const params = useSearchParams();
+    // Remembering the pick means an office user only chooses once per device.
+    const pickStall = useCallback((next: string) => {
+        window.localStorage.setItem('stall_last_code', next);
+        setCode(next);
+        setNeedsPick(false);
+        setStallOptions(null);
+    }, []);
     const [code, setCode] = useState<string>('');
+    const [needsPick, setNeedsPick] = useState(false);
+    const [stallOptions, setStallOptions] = useState<StallOption[] | null>(null);
     const [items, setItems] = useState<StallMenuItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -63,13 +74,46 @@ export default function PosPage() {
         return clientRef.current.key;
     }, []);
 
+    /**
+     * Where the stall code comes from, in priority order:
+     *   1. the till session — a tablet unlocked with the stall's passcode;
+     *   2. ?stall= — what the QR encodes;
+     *   3. the last code used on this device.
+     *
+     * An ADMIN arriving from the sidebar has none of those: no QR to scan and
+     * no passcode session. That used to dead-end on "No stall selected", which
+     * made the sidebar link useless. Now it falls through to a picker (and
+     * auto-selects when there is only one stall, which is the normal case).
+     */
     useEffect(() => {
         const till = readTillSession();
         const fromUrl = params.get('stall');
         const remembered = typeof window !== 'undefined'
             ? window.localStorage.getItem('stall_last_code') : null;
-        setCode((till?.stall.code || fromUrl || remembered || '').toLowerCase());
+        const resolved = (till?.stall.code || fromUrl || remembered || '').toLowerCase();
+        if (resolved) { setCode(resolved); return; }
+        setNeedsPick(true);
     }, [params]);
+
+    // Only runs on the admin path — a till session always has its own code.
+    useEffect(() => {
+        if (!needsPick) return;
+        let cancelled = false;
+        stallGet<StallOption[]>('/stall/admin/stalls')
+            .then((rows) => {
+                if (cancelled) return;
+                const active = (rows || []).filter((r) => r.is_active);
+                if (active.length === 1) {
+                    // One stall is the common case; making someone pick from a
+                    // list of one is just a click between them and a customer.
+                    pickStall(active[0].code);
+                } else {
+                    setStallOptions(active);
+                }
+            })
+            .catch(() => { if (!cancelled) setStallOptions([]); });
+        return () => { cancelled = true; };
+    }, [needsPick, pickStall]);
 
     useEffect(() => {
         if (!code) return;
@@ -176,7 +220,30 @@ export default function PosPage() {
     }, [cart, busy, ensureRef, code, phone, clearSale]);
 
     if (!code) {
-        return <Centered>No stall selected. Scan the stall&apos;s QR code to begin.</Centered>;
+        if (stallOptions === null) return <Centered><span className="w-8 h-8 spinner" /></Centered>;
+        if (!stallOptions.length) {
+            return (
+                <Centered>
+                    No active stalls yet. Create one in <strong className="text-slate-200">Orders &rarr; Stalls &amp; Menus</strong>,
+                    add its items, then come back.
+                </Centered>
+            );
+        }
+        return (
+            <div className="flex-1 flex flex-col items-center justify-center p-6">
+                <h2 className="text-lg font-semibold mb-1">Which stall?</h2>
+                <p className="text-sm text-slate-400 mb-5">You can change this any time.</p>
+                <div className="w-full max-w-sm space-y-2">
+                    {stallOptions.map((s) => (
+                        <button key={s.id} onClick={() => pickStall(s.code)}
+                            className="w-full p-4 rounded-2xl bg-slate-900 border border-slate-800 text-left active:bg-slate-800">
+                            <div className="font-medium">{s.title}</div>
+                            <div className="text-xs text-slate-500 font-mono">/{s.code}</div>
+                        </button>
+                    ))}
+                </div>
+            </div>
+        );
     }
     if (loading) return <Centered><span className="w-8 h-8 spinner" /></Centered>;
     if (loadError) return <Centered>{loadError}</Centered>;
@@ -238,6 +305,14 @@ export default function PosPage() {
                         <Link href="/pos/queue" className="flex items-center gap-1.5 text-xs text-slate-400 px-2 py-1.5 rounded-lg border border-slate-800">
                             <ListOrdered className="w-3.5 h-3.5" /> Queue
                         </Link>
+                        {!readTillSession() && (
+                            // Only offered on the admin path: a passcode till is
+                            // pinned to its own stall server-side anyway.
+                            <button onClick={() => { setCode(''); setNeedsPick(true); }}
+                                className="text-xs text-slate-400 px-2 py-1.5 rounded-lg border border-slate-800">
+                                {code}
+                            </button>
+                        )}
                         {cart.length > 0 && (
                             <button onClick={clearSale} className="text-xs text-slate-400 px-2 py-1.5 rounded-lg border border-slate-800">
                                 Clear

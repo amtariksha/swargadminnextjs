@@ -37,6 +37,16 @@ export default function DayOrdersPage() {
     const router = useRouter();
     const queryClient = useQueryClient();
     const [showCatering, setShowCatering] = useState(false);
+    /**
+     * Stall counter sales are hidden by DEFAULT.
+     *
+     * There are hundreds of them on a market day against ~30 real hyperlocal
+     * day orders, and this screen is what customer care works to chase
+     * deliveries and payments — burying that under a till roll makes the page
+     * useless. But hidden with no way to show them made the sales invisible in
+     * the admin entirely, which is worse. Hence the toggle.
+     */
+    const [showStall, setShowStall] = useState(false);
     // Default to TODAY, not "everything". The list endpoint is capped, so an
     // unfiltered first load was both the slowest query in the module and the one
     // most likely to come back truncated. Today's orders are what this page is
@@ -50,8 +60,9 @@ export default function DayOrdersPage() {
         if (date) f.date = date;
         if (orderStatus) f.order_status = orderStatus;
         if (paymentStatus) f.payment_status = paymentStatus;
+        if (showStall) f.include_stall = '1';
         return f;
-    }, [date, orderStatus, paymentStatus]);
+    }, [date, orderStatus, paymentStatus, showStall]);
 
     const { data, isLoading } = useDaytimeOrders(filters);
     const orders = useMemo(() => data?.orders ?? [], [data]);
@@ -276,8 +287,19 @@ export default function DayOrdersPage() {
                     <option value="cash">Cash</option>
                     <option value="wallet_deducted">Wallet</option>
                 </select>
-                {(date || orderStatus || paymentStatus) && (
-                    <button onClick={() => { setDate(''); setOrderStatus(''); setPaymentStatus(''); }}
+                <button
+                    onClick={() => setShowStall((v) => !v)}
+                    title="Counter sales rung up at a market stall. Hidden by default because there can be hundreds a day."
+                    className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
+                        showStall
+                            ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                    }`}
+                >
+                    {showStall ? '✓ ' : ''}Stall sales
+                </button>
+                {(date || orderStatus || paymentStatus || showStall) && (
+                    <button onClick={() => { setDate(''); setOrderStatus(''); setPaymentStatus(''); setShowStall(false); }}
                         className="px-3 py-2 text-sm text-slate-400 hover:text-white">Clear</button>
                 )}
             </div>

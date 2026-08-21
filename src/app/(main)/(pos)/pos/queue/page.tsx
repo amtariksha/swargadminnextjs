@@ -89,7 +89,16 @@ export default function QueuePage() {
         }
     }, [code, load]);
 
-    if (!code) return <Centered>No stall selected.</Centered>;
+    // Mirrors the till: reached without a code (an admin from the sidebar), send
+    // them to the till, which knows how to ask which stall.
+    if (!code) {
+        return (
+            <Centered>
+                No stall selected.{' '}
+                <Link href="/pos" className="text-emerald-400 underline">Pick one on the till</Link>.
+            </Centered>
+        );
+    }
     if (!queue && error) return <Centered>{error}</Centered>;
     if (!queue) return <Centered><span className="w-8 h-8 spinner" /></Centered>;
 
