@@ -13,6 +13,7 @@
  */
 
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import { Plus, Minus, ShoppingBag, Check, Loader2, Clock } from 'lucide-react';
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || 'https://node.desicowmilk.com').replace(/\/$/, '');
@@ -30,6 +31,28 @@ interface PublicMenu {
     reason: string | null;
     items: PublicItem[];
 }
+
+/**
+ * The Swarg mark.
+ *
+ * Worth having on both public screens: this page is opened by scanning a code
+ * on a stall banner, so the first thing it must do is confirm the customer is
+ * where they think they are. The token screen carries it too — that is the
+ * screen they hold up at the counter, and it doubles as the receipt.
+ *
+ * Intrinsic size passed exactly (193x79) so Next reserves the box and the
+ * layout does not jump as it loads.
+ */
+const SwargMark = ({ className = '' }: { className?: string }) => (
+    <Image
+        src="/swarg-logo.png"
+        alt="Swarg"
+        width={193}
+        height={79}
+        priority
+        className={`h-11 w-auto ${className}`}
+    />
+);
 
 export default function PublicStallPage({ params }: { params: Promise<{ code: string }> }) {
     const { code } = use(params);
@@ -142,6 +165,7 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
     if (placed) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
+                <SwargMark className="mb-8" />
                 <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mb-5">
                     <Check className="w-8 h-8 text-emerald-600" />
                 </div>
@@ -162,6 +186,7 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
     return (
         <div className="min-h-screen flex flex-col pb-40">
             <header className="px-5 pt-6 pb-3">
+                <SwargMark className="mb-4" />
                 <h1 className="text-2xl font-bold">{menu.stall.title}</h1>
                 {menu.stall.location_text && (
                     <p className="text-sm text-slate-600">{menu.stall.location_text}</p>
@@ -254,6 +279,7 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
 
 const Screen = ({ title, body }: { title: string; body: string }) => (
     <div className="min-h-screen flex flex-col items-center justify-center px-8 text-center">
+        <SwargMark className="mb-6" />
         <h1 className="text-xl font-semibold">{title}</h1>
         <p className="mt-2 text-sm text-slate-600 max-w-xs">{body}</p>
     </div>
