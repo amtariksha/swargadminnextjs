@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -477,17 +478,54 @@ const Field = ({ label, hint, children }: { label: string; hint?: string; childr
     </div>
 );
 
+/**
+ * A modal, rendered through a PORTAL to document.body.
+ *
+ * The portal is load-bearing, not tidiness. `.glass` sets
+ * `backdrop-filter: blur(12px)` and this overlay adds `backdrop-blur-sm` — and
+ * a backdrop-filter makes an element a CONTAINING BLOCK for any
+ * `position: fixed` descendant. So a modal opened from inside another modal
+ * (Add item / QR poster, both children of the stall detail) resolved its
+ * `fixed inset-0` against the stall panel rather than the viewport, and was
+ * then clipped by that panel's `max-h-[90vh] overflow-y-auto` — the form
+ * appeared as a cropped strip with its top and bottom cut off.
+ *
+ * Portalling to document.body puts every modal outside any blurred ancestor, so
+ * nesting works and each one fills the viewport.
+ *
+ * `mounted` guards SSR: document does not exist during the server render, and
+ * rendering null on the first client pass keeps hydration consistent.
+ */
 function Modal({ title, onClose, children, wide }: {
     title: string; onClose: () => void; children: React.ReactNode; wide?: boolean;
 }) {
-    return (
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
+
+    // Escape closes the topmost modal — expected of a dialog, and the only way
+    // out on a keyboard once two are stacked.
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    if (!mounted) return null;
+
+    return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
             onClick={onClose}>
-            <div className={`w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto glass rounded-2xl p-5`}
-                onClick={(e) => e.stopPropagation()}>
+            <div
+                className={`w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto glass rounded-2xl p-5`}
+                onClick={(e) => e.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-label={title}
+            >
                 <h3 className="text-lg font-semibold mb-4">{title}</h3>
                 {children}
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }

@@ -393,3 +393,37 @@ html.dark .whatsapp-shell .text-emerald-700 {
 html.dark .whatsapp-shell .border-emerald-200 {
     border-color: rgba(168, 85, 247, 0.4) !important;
 }
+
+/*
+ * Stall QR poster — print only the poster, not the admin panel around it.
+ *
+ * The QR modal's Print button calls window.print(), which would otherwise emit
+ * the whole dark dashboard: sidebar, overlay and all, with the QR somewhere in
+ * the middle on a black background that eats toner and scans badly.
+ *
+ * visibility (rather than display:none) keeps the poster's layout intact while
+ * hiding everything else; the poster is then pulled to the top-left of the
+ * sheet since its modal ancestors no longer position it usefully.
+ */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+
+    #stall-qr-print,
+    #stall-qr-print * {
+        visibility: visible;
+    }
+
+    #stall-qr-print {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        /* Force light-on-white: the panel is a dark theme and a QR must be
+           high-contrast to scan reliably off paper. */
+        background: #fff !important;
+        color: #0f172a !important;
+        box-shadow: none !important;
+    }
+}
