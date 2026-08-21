@@ -61,7 +61,10 @@ export default function PosLayout({ children }: { children: React.ReactNode }) {
         return <StallUnlock onUnlocked={onUnlocked} />;
     }
 
-    const label = till ? till.stall.title : (admin?.email ?? 'Admin');
+    // A till shows the stall it is bound to. An admin sees the screen's name —
+    // which stall they are ringing up for is shown by the page itself, and can
+    // be switched there, so putting their email here was just noise.
+    const label = till ? till.stall.title : 'Stall Till';
 
     return (
         <div className="min-h-screen bg-slate-950 text-white flex flex-col">
@@ -72,11 +75,9 @@ export default function PosLayout({ children }: { children: React.ReactNode }) {
                         <Store className="w-5 h-5 text-emerald-400 flex-shrink-0" />
                         <div className="min-w-0">
                             <h1 className="font-semibold text-sm truncate">{label}</h1>
-                            {till && (
-                                <p className="text-[11px] text-slate-400 truncate">
-                                    Till · {till.stall.code}
-                                </p>
-                            )}
+                            <p className="text-[11px] text-slate-400 truncate">
+                                {till ? `Till · ${till.stall.code}` : (admin?.email ?? '')}
+                            </p>
                         </div>
                     </div>
                     {till && (

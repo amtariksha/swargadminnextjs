@@ -42,6 +42,9 @@ export default function PosPage() {
     const [needsPick, setNeedsPick] = useState(false);
     const [stallOptions, setStallOptions] = useState<StallOption[] | null>(null);
     const [items, setItems] = useState<StallMenuItem[]>([]);
+    // Which stall the operator is ringing up for. The code alone
+    // ('artofliving-perma…') is not what anyone calls the stall.
+    const [stallTitle, setStallTitle] = useState<string>('');
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [tab, setTab] = useState<string>('');
@@ -119,9 +122,10 @@ export default function PosPage() {
         if (!code) return;
         let cancelled = false;
         setLoading(true);
-        stallGet<{ items: StallMenuItem[] }>(`/stall/${code}/menu`)
+        stallGet<{ items: StallMenuItem[]; stall?: { title?: string } }>(`/stall/${code}/menu`)
             .then((d) => {
                 if (cancelled) return;
+                setStallTitle(d.stall?.title || '');
                 setItems(d.items || []);
                 setTab((d.items?.[0]?.tab) || '');
                 setLoadError(null);
@@ -309,9 +313,9 @@ export default function PosPage() {
                             // Only offered on the admin path: a passcode till is
                             // pinned to its own stall server-side anyway.
                             <button onClick={() => { setCode(''); setNeedsPick(true); }}
-                                title={`Stall: ${code} — tap to switch`}
-                                className="text-xs text-slate-400 px-2 py-1.5 rounded-lg border border-slate-800 max-w-[7rem] truncate">
-                                {code}
+                                title={`${stallTitle || code} — tap to switch stall`}
+                                className="text-xs text-slate-300 px-2 py-1.5 rounded-lg border border-slate-800 max-w-[10rem] truncate">
+                                {stallTitle || code}
                             </button>
                         )}
                         {cart.length > 0 && (
