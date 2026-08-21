@@ -256,13 +256,17 @@ export default function PosPage() {
         <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-x-hidden">
             {/* ── Grid ─────────────────────────────────────────────────── */}
             <section className="flex-1 min-w-0 min-h-0 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800/60">
-                {tabs.length > 1 && (
+                {/* Shown even for ONE category: the chip tells the operator what
+                    they are looking at, and a stall that starts with only gelato
+                    gains chaats mid-season without the row appearing from
+                    nowhere. Hiding it was why there was no filter at all. */}
+                {tabs.length > 0 && (
                     <div className="flex gap-2 px-3 py-2 overflow-x-auto flex-shrink-0">
                         {tabs.map((t) => (
                             <button
                                 key={t}
                                 onClick={() => setTab(t)}
-                                className={`px-4 py-2 rounded-full text-sm whitespace-nowrap border ${
+                                className={`px-5 py-2.5 rounded-full text-base font-medium whitespace-nowrap border ${
                                     (tab || 'Other') === t
                                         ? 'bg-emerald-600 border-emerald-500 text-white'
                                         : 'bg-slate-900 border-slate-800 text-slate-300'
@@ -281,13 +285,13 @@ export default function PosPage() {
                                 onClick={() => addItem(item)}
                                 // Big touch target: this is tapped hundreds of
                                 // times a day, often with one hand.
-                                className="min-h-[92px] p-3 rounded-2xl bg-slate-900 border border-slate-800 text-left active:bg-slate-800 active:scale-[0.98] transition-transform"
+                                className="min-h-[104px] p-4 rounded-2xl bg-slate-900 border border-slate-800 text-left active:bg-slate-800 active:scale-[0.98] transition-transform"
                             >
-                                <div className="font-medium text-sm leading-snug">{item.label}</div>
+                                <div className="font-semibold text-base leading-snug">{item.label}</div>
                                 {item.size_text && (
                                     <div className="text-xs text-slate-400 mt-0.5">{item.size_text}</div>
                                 )}
-                                <div className="mt-2 text-emerald-400 font-semibold">{money(item.price)}</div>
+                                <div className="mt-2 text-emerald-400 font-bold text-lg">{money(item.price)}</div>
                             </button>
                         ))}
                         {!visible.length && (

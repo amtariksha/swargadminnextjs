@@ -60,6 +60,7 @@ import {
     IndianRupee,
     Search,
     Store,
+    ListOrdered,
 } from 'lucide-react';
 
 interface NavItem {
@@ -149,6 +150,10 @@ const navItems: NavItem[] = [
             // chrome-less (its own route group), same as Production Delivery.
             { name: 'Stalls & Menus', href: '/stalls', icon: <Store className="w-4 h-4" />, permissionKey: 'stalls' },
             { name: 'Stall Till', href: '/pos', icon: <Calculator className="w-4 h-4" />, permissionKey: 'pos' },
+            // The kitchen board, reachable on its own: the people preparing food
+            // never touch the till, and leaving it behind /pos meant opening the
+            // sales screen just to see what to make.
+            { name: 'Stall Queue', href: '/pos/queue', icon: <ListOrdered className="w-4 h-4" />, permissionKey: 'pos' },
             { name: 'Transactions', href: '/transactions', icon: <CreditCard className="w-4 h-4" /> },
             // Feature 07 — returnable packaging returns/refunds desk.
             { name: 'Refunds & Returns', href: '/returns-refunds', icon: <RotateCcw className="w-4 h-4" />, permissionKey: 'packaging' },

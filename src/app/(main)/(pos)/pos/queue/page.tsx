@@ -85,11 +85,22 @@ export default function QueuePage() {
         try {
             if (action === 'handover') {
                 await stallPost(`/stall/${code}/orders/${ticket.id}/handover`);
+                // Drop the card NOW rather than waiting for the refetch. The
+                // poll is on an interval and the board is read across a counter:
+                // a ticket that lingers after "Handed over" gets handed over
+                // twice. The refetch below reconciles either way.
+                setQueue((q) => (q ? { ...q, orders: q.orders.filter((o) => o.id !== ticket.id) } : q));
                 toast.success(`Token ${ticket.token} handed over`);
             } else if (action === 'reject') {
                 await stallPost(`/stall/${code}/orders/${ticket.id}/reject`, { reason: 'Rejected at the counter' });
+                setQueue((q) => (q ? { ...q, orders: q.orders.filter((o) => o.id !== ticket.id) } : q));
                 toast.success(`Token ${ticket.token} removed`);
             } else {
+                // Same for a lane move — reflect it before the next poll.
+                setQueue((q) => (q ? {
+                    ...q,
+                    orders: q.orders.map((o) => (o.id === ticket.id ? { ...o, state: action } : o)),
+                } : q));
                 await stallPost(`/stall/${code}/orders/${ticket.id}/state`, { state: action });
             }
             await load();

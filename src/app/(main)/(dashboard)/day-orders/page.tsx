@@ -30,6 +30,18 @@ const Badge = ({ value, map }: { value: string; map: Record<string, string> }) =
     </span>
 );
 
+/** Settled states, mirroring PAID_STATES in the backend. UPI settles as 'paid'
+ *  with payment_mode='upi', so there is no 'upi' status to match on. */
+const PAID = ['paid', 'cash', 'wallet_deducted'];
+
+const SplitCard = ({ label, value, tone }: { label: string; value: number; tone: string }) => (
+    <div className="glass rounded-2xl p-4">
+        <p className="text-xs text-slate-400">{label}</p>
+        <p className={`text-2xl font-bold mt-1 ${tone}`}>₹{value.toFixed(0)}</p>
+        <p className="text-[11px] text-slate-500 mt-0.5">collected</p>
+    </div>
+);
+
 /** Local calendar date as YYYY-MM-DD (en-CA formats that way natively). */
 const todayLocal = () => new Date().toLocaleDateString('en-CA');
 
@@ -73,7 +85,6 @@ export default function DayOrdersPage() {
     // aren't revenue, aren't pending delivery, and don't count toward the order
     // tally).
     const stats = useMemo(() => {
-        const PAID = ['paid', 'cash', 'wallet_deducted'];
         const live = orders.filter((o) => o.order_status !== 'cancelled');
         const sum = (list: DaytimeOrder[]) => list.reduce((s, o) => s + Number(o.total_amount || 0), 0);
         const isPaid = (o: DaytimeOrder) => PAID.includes(o.payment_status);
@@ -205,6 +216,22 @@ export default function DayOrdersPage() {
         },
     ];
 
+    // How the money came in. Only meaningful once stall sales are in view — a
+    // normal day order is a delivery, and its payment mode is a detail. At a
+    // counter it is the number you reconcile the cash box against.
+    const paymentSplit = useMemo(() => {
+        const live = orders.filter((o) => o.order_status !== 'cancelled');
+        const by = (...modes: string[]) => live
+            .filter((o) => PAID.includes(o.payment_status) && modes.includes(o.payment_mode || ''))
+            .reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+        return {
+            cash: by('cash'),
+            upi: by('upi'),
+            link: by('link', 'razorpay'),
+            stallOrders: live.filter((o) => o.entry_type === 'stall').length,
+        };
+    }, [orders]);
+
     return (
         <div className="space-y-6">
             {listMeta?.truncated && (
@@ -303,6 +330,19 @@ export default function DayOrdersPage() {
                         className="px-3 py-2 text-sm text-slate-400 hover:text-white">Clear</button>
                 )}
             </div>
+
+            {showStall && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <SplitCard label="Cash" value={paymentSplit.cash} tone="text-emerald-300" />
+                    <SplitCard label="UPI" value={paymentSplit.upi} tone="text-sky-300" />
+                    <SplitCard label="Payment link" value={paymentSplit.link} tone="text-violet-300" />
+                    <div className="glass rounded-2xl p-4">
+                        <p className="text-xs text-slate-400">Stall sales</p>
+                        <p className="text-2xl font-bold mt-1">{paymentSplit.stallOrders}</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">counter orders in view</p>
+                    </div>
+                </div>
+            )}
 
             <DataTable
                 data={orders}
