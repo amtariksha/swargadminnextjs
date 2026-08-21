@@ -344,7 +344,12 @@ async function writeBluetooth(payload: Uint8Array): Promise<void> {
 
 /**
  * RawBT takes plain text (or ESC/POS) on a `rawbt:` URL. Navigating to it fires
- * an Android intent; the page itself does not change.
+ * an Android intent and the page itself stays put — PROVIDED RawBT is installed.
+ * If it is not, Chrome shows ERR_UNKNOWN_URL_SCHEME and the operator has to come
+ * back, landing on an empty till. The sale is already recorded by then (this only
+ * ever runs after settlement), so nothing is lost but a few seconds — and the
+ * setup sheet says to install the app first. Not worth an iframe shim, which
+ * modern Chrome blocks for external schemes anyway.
  */
 function printViaRawBt(lines: string[]): void {
     const body = `${lines.join('\n')}\n\n\n`;
