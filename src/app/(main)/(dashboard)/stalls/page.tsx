@@ -14,9 +14,10 @@ import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
 import {
     Store, Plus, KeyRound, QrCode, Pencil, Trash2, Printer, Copy, Loader2, TriangleAlert,
+    ClipboardList,
 } from 'lucide-react';
 import { GET, POST, PUT, DELETE, ApiError } from '@/lib/api';
-import { useProducts } from '@/hooks/useData';
+import ProductPicker from '@/components/ProductPicker';
 import type { StallSummary, StallMenuItem } from '@/lib/stall/types';
 
 const money = (n: number) => `₹${n.toFixed(n % 1 === 0 ? 0 : 2)}`;
@@ -50,10 +51,11 @@ export default function StallsPage() {
 
     const create = useCallback(async (body: Record<string, unknown>) => {
         try {
-            const res = await POST<{ id: number; code: string; passcode: string }>(
+            const res = await POST<{ id: number; code: string; passcode: string; menu_copied: number }>(
                 '/stall/admin/stalls', body);
-            const d = (res as { data?: { code: string; passcode: string } }).data;
+            const d = (res as { data?: { code: string; passcode: string; menu_copied?: number } }).data;
             if (d) setIssued({ code: d.code, passcode: d.passcode });
+            if (d?.menu_copied) toast.success(`${d.menu_copied} items copied from the existing menu`);
             setCreating(false);
             await load();
         } catch (err) {
@@ -158,6 +160,12 @@ function NewStallModal({ onClose, onCreate }: {
     const [title, setTitle] = useState('');
     const [code, setCode] = useState('');
     const [selfOrder, setSelfOrder] = useState(false);
+    // Default ON: a second stall is nearly always the same food at the same
+    // counter prices, and retyping thirteen gelato flavours is the kind of chore
+    // that gets done badly. Visible and skippable rather than silent, because
+    // silently inheriting a price list would be a surprise on a genuinely
+    // different stall.
+    const [copyMenu, setCopyMenu] = useState(true);
     const [busy, setBusy] = useState(false);
 
     // Suggest a code from the name, but keep it editable — it goes in a URL and
@@ -186,13 +194,24 @@ function NewStallModal({ onClose, onCreate }: {
                     </span>
                 </span>
             </label>
+            <label className="flex items-start gap-3 py-2 cursor-pointer">
+                <input type="checkbox" checked={copyMenu} onChange={(e) => setCopyMenu(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 accent-emerald-500" />
+                <span className="text-sm">
+                    Start from the existing stall menu
+                    <span className="block text-xs text-slate-500">
+                        Copies every item already priced at another stall, keeping the most recent
+                        price. Edit or remove them afterwards.
+                    </span>
+                </span>
+            </label>
             <div className="flex gap-2 pt-2">
                 <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-slate-800 text-sm">Cancel</button>
                 <button
                     disabled={busy || !title.trim() || code.length < 2}
                     onClick={async () => {
                         setBusy(true);
-                        await onCreate({ title, code, self_order_enabled: selfOrder });
+                        await onCreate({ title, code, self_order_enabled: selfOrder, copy_menu: copyMenu });
                         setBusy(false);
                     }}
                     className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-sm font-medium disabled:bg-slate-800 disabled:text-slate-600"
@@ -274,6 +293,20 @@ function StallDetail({ stall, onClose, onPasscode }: {
         }
     }, [stall.id, onPasscode]);
 
+    /** Pull in anything priced at another stall that this one is missing. */
+    const copyMenu = useCallback(async () => {
+        try {
+            const res = await POST<{ copied: number }>(`/stall/admin/stalls/${stall.id}/menu/copy`, { from: 'all' });
+            const copied = (res as { data?: { copied?: number } })?.data?.copied ?? 0;
+            toast.success(copied
+                ? `${copied} item${copied === 1 ? '' : 's'} added from other stalls`
+                : 'Nothing to add — this menu already has everything priced elsewhere');
+            await load();
+        } catch (err) {
+            toast.error(err instanceof ApiError ? err.userMessage : 'Could not copy the items');
+        }
+    }, [stall.id, load]);
+
     const remove = useCallback(async (item: StallMenuItem) => {
         try {
             const res = await DELETE<{ delisted: boolean }>(`/stall/admin/stalls/${stall.id}/menu/${item.id}`);
@@ -306,6 +339,9 @@ function StallDetail({ stall, onClose, onPasscode }: {
                 </button>
                 <button onClick={() => setShowQr(true)} className="px-3 py-2 rounded-lg bg-slate-800 text-sm flex items-center gap-1.5">
                     <QrCode className="w-4 h-4" /> QR poster
+                </button>
+                <button onClick={copyMenu} className="px-3 py-2 rounded-lg bg-slate-800 text-sm flex items-center gap-1.5">
+                    <ClipboardList className="w-4 h-4" /> Copy items
                 </button>
                 <button onClick={rotate} className="px-3 py-2 rounded-lg bg-slate-800 text-sm flex items-center gap-1.5">
                     <KeyRound className="w-4 h-4" /> New passcode
@@ -375,7 +411,6 @@ function StallDetail({ stall, onClose, onPasscode }: {
 function MenuItemModal({ stallId, item, onClose, onSaved }: {
     stallId: number; item: StallMenuItem | null; onClose: () => void; onSaved: () => Promise<void>;
 }) {
-    const { data: products = [] } = useProducts();
     const [productId, setProductId] = useState<number | ''>(item?.product_id ?? '');
     const [label, setLabel] = useState(item?.label ?? '');
     const [sizeText, setSizeText] = useState(item?.size_text ?? '');
@@ -405,12 +440,21 @@ function MenuItemModal({ stallId, item, onClose, onSaved }: {
     return (
         <Modal title={item ? 'Edit item' : 'Add item'} onClose={onClose}>
             <Field label="Product" hint="The catalogue product this tile sells — for stock and GST">
-                <select value={productId} onChange={(e) => setProductId(Number(e.target.value) || '')} className={inputCls}>
-                    <option value="">Select a product…</option>
-                    {products.map((p) => (
-                        <option key={p.id} value={p.id}>{p.title}</option>
-                    ))}
-                </select>
+                {/* The catalogue runs to hundreds of SKUs, so a native <select>
+                    meant scrolling to find one. ProductPicker already solves
+                    this for the B2B price sheet and the day-order form. */}
+                <ProductPicker
+                    value={typeof productId === 'number' ? productId : null}
+                    onChange={(p) => {
+                        setProductId(p ? Number(p.id) : '');
+                        // Seed the tile label from the product the first time —
+                        // it is right often enough to save the typing, and it
+                        // stays editable because a stall tile is usually a
+                        // shorter, spoken name ("Alphonso Mango", not the SKU).
+                        if (p && !label.trim()) setLabel(p.title);
+                    }}
+                    placeholder="Search products…"
+                />
             </Field>
             <Field label="Tile label" hint="What the operator taps, e.g. Alphonso Mango">
                 <input value={label} onChange={(e) => setLabel(e.target.value)} className={inputCls} />
