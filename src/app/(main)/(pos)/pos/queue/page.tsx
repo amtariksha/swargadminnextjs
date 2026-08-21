@@ -168,33 +168,44 @@ export default function QueuePage() {
         <div className="flex-1 min-h-0 flex flex-col">
             <div className="flex items-center justify-between gap-3 px-3 py-2 flex-shrink-0">
                 <div className="flex items-center gap-2">
-                    <Link href="/pos" className="flex items-center gap-1.5 text-sm text-slate-300 px-3 py-2 rounded-lg border border-slate-800">
-                        <ArrowLeft className="w-4 h-4" /> Till
-                    </Link>
-                    <Link href="/pos/sales" title="Everything sold today"
-                        className="flex items-center gap-1.5 text-sm text-slate-300 px-3 py-2 rounded-lg border border-slate-800">
-                        <Receipt className="w-4 h-4" /> Sales
-                    </Link>
+                    {/* Both are till-gated server-side; a queue-only operator
+                        would just get a 403, so they are not offered. */}
+                    {queue.totals && (
+                        <Link href="/pos" className="flex items-center gap-1.5 text-sm text-slate-300 px-3 py-2 rounded-lg border border-slate-800">
+                            <ArrowLeft className="w-4 h-4" /> Till
+                        </Link>
+                    )}
+                    {queue.totals && (
+                        <Link href="/pos/sales" title="Everything sold today"
+                            className="flex items-center gap-1.5 text-sm text-slate-300 px-3 py-2 rounded-lg border border-slate-800">
+                            <Receipt className="w-4 h-4" /> Sales
+                        </Link>
+                    )}
                     <button onClick={() => setPrinterOpen(true)} title="Printer setup"
                         aria-label="Printer setup"
                         className="text-slate-300 px-3 py-2 rounded-lg border border-slate-800">
                         <Printer className="w-4 h-4" />
                     </button>
                 </div>
-                <div className="text-right">
-                    <div className="text-lg font-bold">{money(queue.totals.paid_total)} taken</div>
-                    <div className="text-xs text-slate-400">
-                        {money(queue.totals.cash_total)} cash · {money(queue.totals.upi_total)} UPI
-                        {queue.totals.link_total > 0 && ` · ${money(queue.totals.link_total)} link`}
-                    </div>
-                    {queue.totals.awaiting_payment > 0 && (
-                        // These orders exist but are NOT on the board — payment
-                        // gates it, so nothing is made for them.
-                        <div className="text-xs text-amber-400">
-                            {queue.totals.awaiting_payment} awaiting payment
+                {/* Absent for a stall-queue caller — the day's takings are not a
+                    stall server's business, so the API withholds them and this
+                    header simply does not render. */}
+                {queue.totals && (
+                    <div className="text-right">
+                        <div className="text-lg font-bold">{money(queue.totals.paid_total)} taken</div>
+                        <div className="text-xs text-slate-400">
+                            {money(queue.totals.cash_total)} cash · {money(queue.totals.upi_total)} UPI
+                            {queue.totals.link_total > 0 && ` · ${money(queue.totals.link_total)} link`}
                         </div>
-                    )}
-                </div>
+                        {queue.totals.awaiting_payment > 0 && (
+                            // These orders exist but are NOT on the board — payment
+                            // gates it, so nothing is made for them.
+                            <div className="text-xs text-amber-400">
+                                {queue.totals.awaiting_payment} awaiting payment
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden px-3 pb-3">

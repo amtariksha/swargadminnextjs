@@ -69,7 +69,10 @@ export interface StallQueue {
     stall: { id: number; code: string; title: string };
     date: string;
     orders: QueueTicket[];
-    totals: {
+    /** True when this caller may see the day's takings — false for stall-queue. */
+    can_see_totals?: boolean;
+    /** NULL for a queue-only caller: the takings are not their business. */
+    totals: null | {
         orders_count: number;
         paid_total: number;
         unpaid_total: number;
@@ -125,5 +128,5 @@ export interface StallSalesDay {
     stall: { id: number; code: string; title: string };
     date: string;
     orders: StallSale[];
-    totals: StallQueue['totals'];
+    totals: NonNullable<StallQueue['totals']>;
 }

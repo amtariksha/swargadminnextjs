@@ -73,6 +73,9 @@ interface NavItem {
      *  entry below points at `/admin` (Payload's mount) but is gated by
      *  the explicit `cms` permission. */
     permissionKey?: string;
+    /** Visible if the user holds ANY of these. Mirrors a backend rule where one
+     *  right implies another — e.g. the stall till implies the counter board. */
+    anyPermissionKeys?: string[];
     /** Open in a new tab (plain <a target="_blank">). Used by CMS — Payload
      *  is a separate app shell; navigating in-tab would drop the operator
      *  out of the admin panel. */
@@ -153,7 +156,10 @@ const navItems: NavItem[] = [
             // The kitchen board, reachable on its own: the people preparing food
             // never touch the till, and leaving it behind /pos meant opening the
             // sales screen just to see what to make.
-            { name: 'Stall Queue', href: '/pos/queue', icon: <ListOrdered className="w-4 h-4" />, permissionKey: 'pos' },
+            // Either right reaches the board: 'pos' takes money and implies it,
+            // 'pos-queue' is the board alone. requireStallRight enforces the
+            // same implication server-side.
+            { name: 'Stall Queue', href: '/pos/queue', icon: <ListOrdered className="w-4 h-4" />, anyPermissionKeys: ['pos', 'pos-queue'] },
             { name: 'Transactions', href: '/transactions', icon: <CreditCard className="w-4 h-4" /> },
             // Feature 07 — returnable packaging returns/refunds desk.
             { name: 'Refunds & Returns', href: '/returns-refunds', icon: <RotateCcw className="w-4 h-4" />, permissionKey: 'packaging' },
@@ -381,10 +387,18 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'reviews',
     // Business Pulse (Phase 5) — CEO dashboard over the v_pulse_* views.
     'business-pulse',
-    // Stall POS (migration 113). Two keys on purpose: 'pos' is the till a
-    // market-stall operator needs and NOTHING else; 'stalls' is the office-side
-    // menu and price management, which they must not have.
+    // Stall POS (migration 113). Three keys on purpose:
+    //   'pos'       the till — takes money. Everything a stall operator needs
+    //               and nothing else.
+    //   'pos-queue' the counter board ONLY: see tickets, mark ready, hand over.
+    //               No order creation, no settlement, no sight of the day's
+    //               takings. For staff who make the food but do not handle cash.
+    //   'stalls'    office-side menu and price management, which neither of the
+    //               above should have.
+    // Enforced server-side by requireStallRight (backend middleware/stallAuth.js)
+    // — these keys drive the sidebar, they are not the security boundary.
     'pos',
+    'pos-queue',
     'stalls',
 ]);
 
@@ -410,6 +424,10 @@ const filterNav = (
             const filteredChildren = filterNav(item.children, hasPermission);
             if (filteredChildren.length === 0) continue;
             result.push({ ...item, children: filteredChildren });
+            continue;
+        }
+        if (item.anyPermissionKeys?.length) {
+            if (item.anyPermissionKeys.some(hasPermission)) result.push(item);
             continue;
         }
         const key = navItemPermission(item);
