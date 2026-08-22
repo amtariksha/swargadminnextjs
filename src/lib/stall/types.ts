@@ -59,6 +59,8 @@ export interface QueueTicket {
     payment_status: string;
     payment_mode: string | null;
     total_amount: number;
+    /** > 0 only on a topped-up order — paid, but owing for what was added after. */
+    balance_due?: number;
     contact_phone: string | null;
     note: string | null;
     created_at: string | null;

@@ -98,8 +98,12 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
     >(null);
     /** Set while the customer is adding to an order that already exists. */
     const [amending, setAmending] = useState(false);
+    /** What had already landed on that order — the top-up is priced against it. */
+    const [paidBeforeAmend, setPaidBeforeAmend] = useState(0);
     const [resuming, setResuming] = useState(false);
     const [paid, setPaid] = useState(false);
+    /** > 0 when the customer topped up a paid order and owes the difference. */
+    const [balanceDue, setBalanceDue] = useState(0);
     const [error, setError] = useState<string | null>(null);
 
 /**
@@ -167,7 +171,10 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
      * know from the redirect alone. Polling stops as soon as it is paid.
      */
     useEffect(() => {
-        if (!placed?.id || paid) return;
+        // Keeps polling while a BALANCE is outstanding, not just while unpaid:
+        // a topped-up order is already `paid` and still waiting on the
+        // difference, and stopping here would freeze the screen mid-top-up.
+        if (!placed?.id || (paid && balanceDue <= 0)) return;
         let stop = false;
         const tick = async () => {
             try {
@@ -188,13 +195,14 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                     // server's copy is the only one safe to send anyone to.
                     payUrl: d.payment_short_url ?? prev.payUrl,
                 } : prev));
+                setBalanceDue(Number(d.balance_due) || 0);
                 if (d.paid) setPaid(true);
             } catch { /* a failed poll is not worth showing anyone */ }
         };
         void tick();
         const id = setInterval(tick, 4000);
         return () => { stop = true; clearInterval(id); };
-    }, [placed?.id, paid, code]);
+    }, [placed?.id, paid, balanceDue, code]);
 
     const tabs = useMemo(() => {
         const seen: string[] = [];
@@ -245,6 +253,7 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                 }
             }
             setCart(restored);
+            setPaidBeforeAmend(Number(d?.amount_paid) || 0);
             setAmending(true);
             setPlaced(null);   // back to the menu; the order itself is untouched
         } catch {
@@ -295,6 +304,8 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                 ref: existing ? existing.ref : clientRef.current.key,
             };
             setAmending(false);
+            setPaidBeforeAmend(0);
+            setBalanceDue(Number(d.balance_due) || 0);
             setPlaced(receipt);
             // Written BEFORE the redirect below, or the trip to Razorpay loses it.
             try {
@@ -352,6 +363,44 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                         Nothing is made until payment clears.
                     </p>
                 )}
+                {paid && balanceDue > 0 && (
+                    <p className="mt-2 text-sm text-amber-800 font-medium max-w-xs">
+                        {money(balanceDue)} still to pay for the items you added.
+                        Collect once it&apos;s done.
+                    </p>
+                )}
+
+                {/* PAID and settled — they can still add to the SAME token and pay
+                    only the difference. The order is theirs until it is handed
+                    over, so "Order something else" was making people queue twice
+                    for one collection. */}
+                {paid && balanceDue <= 0 && (
+                    <div className="mt-7 w-full max-w-xs space-y-2">
+                        <button onClick={addMoreItems} disabled={resuming}
+                            className="w-full py-4 rounded-2xl bg-white border-2 border-slate-900 text-slate-900 font-semibold active:bg-slate-100 disabled:opacity-60 flex items-center justify-center gap-2">
+                            {resuming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                            Add more items
+                        </button>
+                        <p className="text-[11px] text-slate-500">
+                            Same token — you&apos;ll only pay for what you add.
+                        </p>
+                    </div>
+                )}
+
+                {/* PART-PAID after a top-up: the difference is still owed. */}
+                {paid && balanceDue > 0 && placed.payUrl && (
+                    <div className="mt-7 w-full max-w-xs space-y-2">
+                        <a href={placed.payUrl}
+                            className="block w-full py-4 rounded-2xl bg-emerald-600 text-white font-semibold active:bg-emerald-700">
+                            Pay {money(balanceDue)}
+                        </a>
+                        <button onClick={addMoreItems} disabled={resuming}
+                            className="w-full py-4 rounded-2xl bg-white border-2 border-slate-900 text-slate-900 font-semibold active:bg-slate-100 disabled:opacity-60 flex items-center justify-center gap-2">
+                            {resuming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                            Add more items
+                        </button>
+                    </div>
+                )}
 
                 {/* UNPAID — the two things a customer actually wants here.
                     This screen used to offer only "Order something else", which
@@ -390,14 +439,14 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                     setPlaced(null);
                     setPaid(false);
                     setAmending(false);
+                    setBalanceDue(0);
+                    setPaidBeforeAmend(0);
                     setCart({});
                     clientRef.current = { key: '', fingerprint: '' };
                     try { window.localStorage.removeItem(RECEIPT_KEY(code)); } catch { /* nothing to clear */ }
                 }}
-                    className={paid
-                        ? 'mt-8 px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-medium'
-                        : 'mt-5 px-5 py-2 text-sm text-slate-500 underline'}>
-                    {paid ? 'Order something else' : 'Start a different order'}
+                    className="mt-5 px-5 py-2 text-sm text-slate-500 underline">
+                    Start a different order
                 </button>
             </div>
         );
@@ -431,12 +480,15 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                     <div className="text-sm">
                         <div className="font-semibold">Adding to your order</div>
                         <div className="text-xs text-slate-300">
-                            Same token — you pay once, for everything.
+                            {paidBeforeAmend > 0
+                                ? `Same token — you'll only pay for what you add.`
+                                : 'Same token — you pay once, for everything.'}
                         </div>
                     </div>
                     <button
                         onClick={() => {
                             setAmending(false);
+                            setPaidBeforeAmend(0);
                             setCart({});
                             const saved = readReceipt(code);
                             if (saved) {
@@ -534,7 +586,13 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                         className="w-full py-4 rounded-2xl bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2 active:bg-emerald-700 disabled:bg-slate-300"
                     >
                         {placing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShoppingBag className="w-5 h-5" />}
-                        {amending ? `Update & pay ${money(total)}` : `Pay ${money(total)}`}
+                        {amending
+                            ? (paidBeforeAmend > 0
+                                // The difference, not the new total — someone who
+                                // has paid 200 and adds a 130 chaat pays 130.
+                                ? `Add & pay ${money(Math.max(0, total - paidBeforeAmend))}`
+                                : `Update & pay ${money(total)}`)
+                            : `Pay ${money(total)}`}
                     </button>
                     <p className={`text-[11px] text-center ${phone.length === 10 ? 'text-slate-500' : 'text-red-600 font-medium'}`}>
                         {phone.length === 10

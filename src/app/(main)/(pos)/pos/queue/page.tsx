@@ -17,12 +17,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { ArrowLeft, Check, Bell, X, Loader2, Printer, Receipt } from 'lucide-react';
+import { ArrowLeft, Check, Bell, X, Loader2, Printer, Receipt, Volume2, VolumeX } from 'lucide-react';
 import { stallGet, stallPost, StallApiError } from '@/lib/stall/api';
 import { readTillSession } from '@/lib/stall/session';
 import { type StallQueue, type QueueTicket, isSettled } from '@/lib/stall/types';
 import { getPrinterConfig, printTokenTicket } from '@/lib/stall/printer';
 import PrinterSheet from '@/components/stall/PrinterSheet';
+import {
+    announceEnabled, setAnnounceEnabled, speechSupported,
+    diffForAnnouncements, snapshot, phraseFor, speak,
+} from '@/lib/stall/announce';
 
 const POLL_MS = 8000;
 const money = (n: number) => `₹${n.toFixed(n % 1 === 0 ? 0 : 2)}`;
@@ -51,7 +55,18 @@ export default function QueuePage() {
     const [error, setError] = useState<string | null>(null);
     const [acting, setActing] = useState<number | null>(null);
     const [printerOpen, setPrinterOpen] = useState(false);
+    const [announcing, setAnnouncing] = useState(false);
     const inFlight = useRef(false);
+    /**
+     * The board as of the previous poll. null until the FIRST poll lands, which
+     * is what keeps opening the board silent — otherwise every ticket already
+     * waiting would be read out at once.
+     */
+    const lastBoard = useRef<Map<number, { state: string; balanceDue: number }> | null>(null);
+
+    // Read once on mount: localStorage is not available during SSR, so this
+    // cannot be the useState initialiser without a hydration mismatch.
+    useEffect(() => { setAnnouncing(announceEnabled()); }, []);
 
     useEffect(() => {
         const till = readTillSession();
@@ -64,7 +79,19 @@ export default function QueuePage() {
         if (!code || inFlight.current) return;
         inFlight.current = true;
         try {
-            setQueue(await stallGet<StallQueue>(`/stall/${code}/queue`));
+            const fresh = await stallGet<StallQueue>(`/stall/${code}/queue`);
+            // Diff BEFORE storing the new snapshot, and do it even when muted so
+            // the baseline stays current — otherwise unmuting mid-shift would
+            // announce every change since the board opened.
+            const events = diffForAnnouncements(lastBoard.current, fresh.orders);
+            lastBoard.current = snapshot(fresh.orders);
+            if (announceEnabled()) {
+                for (const e of events) {
+                    const phrase = phraseFor(e);
+                    if (phrase) speak(phrase);
+                }
+            }
+            setQueue(fresh);
             setError(null);
         } catch (err) {
             // A failed poll must not blank a board the operator is reading from;
@@ -186,6 +213,31 @@ export default function QueuePage() {
                         className="text-slate-300 px-3 py-2 rounded-lg border border-slate-800">
                         <Printer className="w-4 h-4" />
                     </button>
+                    {/* Off until switched on, per device: two tablets at one
+                        counter would talk over each other, and an admin checking
+                        the board from the office does not want their laptop
+                        calling tokens. The first tap is also the user gesture
+                        browsers require before they will allow speech at all. */}
+                    {speechSupported() && (
+                        <button
+                            onClick={() => {
+                                const next = !announcing;
+                                setAnnouncing(next);
+                                setAnnounceEnabled(next);
+                                if (next) speak('Announcements on');
+                            }}
+                            aria-pressed={announcing}
+                            title={announcing ? 'Calling tokens aloud' : 'Silent'}
+                            aria-label={announcing ? 'Turn off spoken announcements' : 'Call tokens aloud'}
+                            className={`px-3 py-2 rounded-lg border ${
+                                announcing
+                                    ? 'bg-emerald-600/20 border-emerald-500/40 text-emerald-300'
+                                    : 'border-slate-800 text-slate-500'
+                            }`}
+                        >
+                            {announcing ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+                        </button>
+                    )}
                 </div>
                 {/* Absent for a stall-queue caller — the day's takings are not a
                     stall server's business, so the API withholds them and this
@@ -256,6 +308,9 @@ function TicketCard({ ticket, lane, busy, onAct, onPrint }: {
     onPrint: (t: QueueTicket) => void;
 }) {
     const paid = isSettled(ticket.payment_status);
+    // A topped-up order: paid, on the board, and still owing for what was added
+    // after that payment. Must not leave the counter until it clears.
+    const due = Number(ticket.balance_due) || 0;
     return (
         <div className="p-3 rounded-xl bg-slate-900 border border-slate-800">
             <div className="flex items-start justify-between gap-2">
@@ -267,6 +322,11 @@ function TicketCard({ ticket, lane, busy, onAct, onPrint }: {
                     <div className={`text-[11px] ${paid ? 'text-emerald-400' : 'text-red-300'}`}>
                         {paid ? (ticket.payment_mode === 'upi' ? 'UPI' : 'Paid') : 'UNPAID'}
                     </div>
+                    {due > 0 && (
+                        <div className="mt-0.5 text-[11px] font-bold text-amber-300">
+                            {money(due)} DUE
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -296,8 +356,10 @@ function TicketCard({ ticket, lane, busy, onAct, onPrint }: {
                     busy={busy}
                     // The server refuses an unpaid handover anyway; disabling it
                     // here just avoids an error the operator cannot act on while
-                    // a customer is standing there.
-                    disabled={!paid}
+                    // a customer is standing there. Same for a top-up balance:
+                    // the ticket is 'paid' and rightly on the board, but the
+                    // items added after that payment are not covered yet.
+                    disabled={!paid || due > 0}
                     icon={<Check className="w-4 h-4" />} label="Handed over"
                     className="bg-slate-700 active:bg-slate-600" />
                 <button
