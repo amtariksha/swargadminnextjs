@@ -332,7 +332,13 @@ export default function PosPage() {
                 <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3">
                     <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
                         {visible.map((item) => (
-                            <MenuTile key={item.id} item={item} onTap={addItem} />
+                            <MenuTile
+                                key={item.id}
+                                item={item}
+                                qty={cart.find((l) => l.menuItemId === item.id)?.qty ?? 0}
+                                onTap={addItem}
+                                onBump={bump}
+                            />
                         ))}
                         {!visible.length && (
                             <p className="col-span-full text-sm text-slate-500 py-8 text-center">
@@ -465,16 +471,22 @@ export default function PosPage() {
  * by a whole text row costs a row of the grid, and the reason this screen does
  * not paginate is that a stall's ~19 items fit without scrolling.
  */
-function MenuTile({ item, onTap }: { item: StallMenuItem; onTap: (i: StallMenuItem) => void }) {
+function MenuTile({ item, qty, onTap, onBump }: {
+    item: StallMenuItem;
+    qty: number;
+    onTap: (i: StallMenuItem) => void;
+    onBump: (menuItemId: number, by: number) => void;
+}) {
     const src = stallImageUrl(item.image_url);
     // A dead image link would otherwise leave a broken-image glyph on the till.
     const [broken, setBroken] = useState(false);
     return (
+        <div className="relative rounded-2xl bg-slate-900 border border-slate-800 overflow-hidden">
         <button
             onClick={() => onTap(item)}
             // Big touch target: this is tapped hundreds of times a day, often
             // with one hand.
-            className="rounded-2xl bg-slate-900 border border-slate-800 text-left overflow-hidden active:bg-slate-800 active:scale-[0.98] transition-transform"
+            className="w-full text-left active:bg-slate-800 active:scale-[0.98] transition-transform"
         >
             <div className="aspect-[3/2] w-full bg-slate-950/60 relative">
                 {src && !broken ? (
@@ -497,13 +509,49 @@ function MenuTile({ item, onTap }: { item: StallMenuItem; onTap: (i: StallMenuIt
                     {money(item.price)}
                 </span>
             </div>
-            <div className="px-3 py-2">
+            <div className="px-3 pt-2 pb-1">
                 <div className="font-semibold text-sm leading-snug line-clamp-2">{item.label}</div>
                 {item.size_text && (
                     <div className="text-xs text-slate-400 mt-0.5 truncate">{item.size_text}</div>
                 )}
             </div>
         </button>
+
+        {/* Quantity on the tile itself, left and right, so a correction does not
+            mean crossing to the cart and back. Tapping the tile still adds one —
+            that is the fast path and it is unchanged; these are for fixing a
+            miscount without breaking rhythm.
+
+            Outside the <button> above, not inside it: a button inside a button
+            is invalid HTML and React will not render the inner one reliably. */}
+        <div className="flex items-stretch border-t border-slate-800">
+            <button
+                onClick={() => onBump(item.id, -1)}
+                disabled={qty === 0}
+                aria-label={`One less ${item.label}`}
+                className="flex-1 py-2.5 flex items-center justify-center active:bg-slate-800 disabled:opacity-25"
+            >
+                <Minus className="w-5 h-5" />
+            </button>
+            {/* Reads 0 rather than blank when none are in the cart: a blank space
+                between two buttons looks like a rendering fault. */}
+            <span className={`w-12 flex items-center justify-center text-base font-bold tabular-nums ${
+                qty > 0 ? 'text-emerald-400' : 'text-slate-600'
+            }`}>
+                {qty}
+            </span>
+            {/* onTap, NOT onBump(+1): bump only walks lines already in the cart,
+                so on a tile at zero it would match nothing and the button would
+                do nothing at all. addItem handles both cases. */}
+            <button
+                onClick={() => onTap(item)}
+                aria-label={`One more ${item.label}`}
+                className="flex-1 py-2.5 flex items-center justify-center active:bg-slate-800"
+            >
+                <Plus className="w-5 h-5" />
+            </button>
+        </div>
+        </div>
     );
 }
 

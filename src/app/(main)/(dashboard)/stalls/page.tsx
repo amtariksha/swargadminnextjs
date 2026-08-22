@@ -8,14 +8,14 @@
  * at /pos and is reached by scanning that QR.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
 import { ALL_TABS, UNTABBED, initialTabValue, tabLabel } from '@/lib/stall/menuTabs';
 import {
     Store, Plus, KeyRound, QrCode, Pencil, Trash2, Printer, Copy, Loader2, TriangleAlert,
-    ClipboardList,
+    ClipboardList, ChevronUp, ChevronDown,
 } from 'lucide-react';
 import { GET, POST, PUT, DELETE, ApiError } from '@/lib/api';
 import ProductPicker from '@/components/ProductPicker';
@@ -327,6 +327,40 @@ function StallDetail({ stall, onClose, onPasscode }: {
         }
     }, [stall.id, load]);
 
+    /**
+     * Move one tile up or down within what is currently on screen.
+     *
+     * Arrows rather than drag-and-drop: this is used on a laptop and a tablet,
+     * drag needs a library and a touch fallback, and moving a bestseller three
+     * places up is three taps either way.
+     *
+     * Optimistic — the list reorders on tap and the PUT follows. A failed write
+     * reloads from the server, so the screen can never keep an order the
+     * database does not have.
+     */
+    const move = useCallback(async (item: StallMenuItem, by: -1 | 1) => {
+        const scope = visibleRef.current;
+        const at = scope.findIndex((i) => i.id === item.id);
+        const to = at + by;
+        if (at < 0 || to < 0 || to >= scope.length) return;
+
+        const reordered = [...scope];
+        [reordered[at], reordered[to]] = [reordered[to], reordered[at]];
+        // Splice the new sequence back over the full list in place, so the other
+        // categories keep their own order untouched.
+        const positions = scope.map((i) => items.indexOf(i));
+        const next = [...items];
+        positions.forEach((pos, idx) => { next[pos] = reordered[idx]; });
+        setItems(next);
+
+        try {
+            await PUT(`/stall/admin/stalls/${stall.id}/menu/order`, { ids: next.map((i) => i.id) });
+        } catch (err) {
+            toast.error(err instanceof ApiError ? err.userMessage : 'Could not save the new order');
+            await load();
+        }
+    }, [items, stall.id, load]);
+
     const remove = useCallback(async (item: StallMenuItem) => {
         try {
             const res = await DELETE<{ delisted: boolean }>(`/stall/admin/stalls/${stall.id}/menu/${item.id}`);
@@ -378,12 +412,14 @@ function StallDetail({ stall, onClose, onPasscode }: {
         if (activeTab !== ALL_TABS && !tabNames.includes(activeTab)) setActiveTab(ALL_TABS);
     }, [tabNames, activeTab]);
 
+    const visibleRef = useRef<StallMenuItem[]>([]);
     const visible = useMemo(
         () => (activeTab === ALL_TABS
             ? items
             : items.filter((i) => tabLabel(i.tab) === activeTab)),
         [items, activeTab],
     );
+    visibleRef.current = visible;
 
     return (
         <Modal title={stall.title} onClose={onClose} size="xl">
@@ -430,7 +466,7 @@ function StallDetail({ stall, onClose, onPasscode }: {
                         13-flavour category fits without scrolling, which is what
                         makes it checkable at a glance rather than row by row. */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-                        {visible.map((item) => (
+                        {visible.map((item, idx) => (
                             <div key={item.id}
                                 className={`flex items-center gap-3 p-3 rounded-xl bg-slate-900/60 border ${
                                     item.is_active ? 'border-slate-800' : 'border-slate-800/50 opacity-50'
@@ -457,6 +493,22 @@ function StallDetail({ stall, onClose, onPasscode }: {
                                     )}
                                 </div>
                                 <div className="font-semibold whitespace-nowrap">{money(item.price)}</div>
+                                {/* Order drives the till grid AND the customer's QR
+                                    menu, so this is where the bestseller gets put
+                                    first. Disabled at the ends rather than hidden,
+                                    so the row does not reflow as you move things. */}
+                                <div className="flex flex-col">
+                                    <button onClick={() => move(item, -1)} disabled={idx === 0}
+                                        aria-label={`Move ${item.label} up`} title="Move up"
+                                        className="px-1.5 rounded-t-lg bg-slate-800 disabled:opacity-30">
+                                        <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                                    </button>
+                                    <button onClick={() => move(item, 1)} disabled={idx === visible.length - 1}
+                                        aria-label={`Move ${item.label} down`} title="Move down"
+                                        className="px-1.5 rounded-b-lg bg-slate-800 border-t border-slate-900 disabled:opacity-30">
+                                        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                                    </button>
+                                </div>
                                 <button onClick={() => setEditing(item)} aria-label={`Edit ${item.label}`}
                                     className="p-2 rounded-lg bg-slate-800">
                                     <Pencil className="w-3.5 h-3.5 text-slate-400" />
