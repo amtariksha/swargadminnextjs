@@ -245,7 +245,9 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
         setError(null);
         try {
             const r = await fetch(api(`/stall/public/${encodeURIComponent(code)}/orders/${placed.id}`));
+            if (!r.ok) throw new Error('read failed');
             const d = (await r.json())?.data;
+            if (!d) throw new Error('empty');
             const restored: Record<number, number> = {};
             for (const it of (d?.items ?? [])) {
                 if (it?.stall_menu_item_id) {
@@ -293,9 +295,25 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                     client_ref: existing ? existing.ref : clientRef.current.key,
                 }),
             });
-            const body = await res.json();
+            const body = await res.json().catch(() => null);
+            // HTTP status FIRST. The envelope check below only recognises the
+            // API's own error shape ({status:false} / {response:4xx}); an
+            // unhandled 500 returns {statusCode, error, message} with neither
+            // field, sailed straight through, and left `data` undefined — so the
+            // customer got a token screen with no token and "online payment is
+            // unavailable" instead of an error. That is exactly how a real
+            // outage presented, and it cost an hour to find.
+            if (!res.ok) {
+                throw new Error(res.status >= 500
+                    ? 'Something went wrong at our end — please try again in a moment.'
+                    : (body?.message || 'Could not place the order'));
+            }
             if (body?.status === false || (body?.response && body.response !== 200)) {
                 throw new Error(body?.message || 'Could not place the order');
+            }
+            if (!body?.data?.id) {
+                // Belt and braces: never render a receipt we did not actually get.
+                throw new Error('Could not place the order — please try again.');
             }
             const d = body?.data ?? {};
             const receipt = {
