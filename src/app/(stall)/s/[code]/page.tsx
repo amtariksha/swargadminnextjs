@@ -100,6 +100,16 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
     const [amending, setAmending] = useState(false);
     /** What had already landed on that order — the top-up is priced against it. */
     const [paidBeforeAmend, setPaidBeforeAmend] = useState(0);
+    /**
+     * Razorpay said "paid" on the way back, but the server has not confirmed yet.
+     *
+     * DISPLAY ONLY, and never a substitute for `paid`. The redirect params are
+     * attacker-controllable — anyone can open the page with
+     * ?razorpay_payment_link_status=paid — so this only softens the waiting
+     * message from "waiting for your payment" to "confirming". The order is
+     * marked paid by the webhook and read back from the server, full stop.
+     */
+    const [returningFromPayment, setReturningFromPayment] = useState(false);
     const [resuming, setResuming] = useState(false);
     const [paid, setPaid] = useState(false);
     /** > 0 when the customer topped up a paid order and owes the difference. */
@@ -151,6 +161,20 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
      */
     useEffect(() => {
         if (!code || placed) return;
+        // Razorpay now returns the payer here (callback_url) instead of leaving
+        // them on its own success page pressing Back twice.
+        try {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('razorpay_payment_link_status') === 'paid') {
+                setReturningFromPayment(true);
+            }
+            if (params.has('razorpay_payment_link_status') || params.has('razorpay_payment_id')) {
+                // Strip them: a refresh would otherwise re-show the optimistic
+                // state, and the payment ids do not belong in a shared URL.
+                window.history.replaceState({}, '', window.location.pathname);
+            }
+        } catch { /* nothing to read */ }
+
         const saved = readReceipt(code);
         if (saved) {
             setPlaced({
@@ -196,7 +220,7 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                     payUrl: d.payment_short_url ?? prev.payUrl,
                 } : prev));
                 setBalanceDue(Number(d.balance_due) || 0);
-                if (d.paid) setPaid(true);
+                if (d.paid) { setPaid(true); setReturningFromPayment(false); }
             } catch { /* a failed poll is not worth showing anyone */ }
         };
         void tick();
@@ -374,9 +398,11 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                 <p className="mt-4 text-sm text-slate-600 max-w-xs">
                     {paid
                         ? 'Paid. We\u2019re making it now — we\u2019ll call your number.'
-                        : 'Waiting for your payment to confirm. This page updates on its own.'}
+                        : returningFromPayment
+                            ? 'Confirming your payment\u2026 this only takes a moment.'
+                            : 'Waiting for your payment to confirm. This page updates on its own.'}
                 </p>
-                {!paid && (
+                {!paid && !returningFromPayment && (
                     <p className="mt-2 text-xs text-amber-700 max-w-xs">
                         Nothing is made until payment clears.
                     </p>
