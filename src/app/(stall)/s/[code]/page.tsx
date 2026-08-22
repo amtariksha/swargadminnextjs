@@ -24,6 +24,29 @@ const money = (n: number) => `₹${n.toFixed(n % 1 === 0 ? 0 : 2)}`;
 /** Per-stall, so scanning a second stall's QR does not show the first one's receipt. */
 const RECEIPT_KEY = (code: string) => `stall_receipt_${code}`;
 
+interface StoredReceipt {
+    id: number; orderNo: number | null; token: number | null; total: number;
+    payUrl?: string | null; ref?: string; at: number;
+}
+
+/** The receipt this browser last placed at this stall, or null if it has aged out. */
+function readReceipt(code: string): (StoredReceipt & { ref: string }) | null {
+    try {
+        const raw = window.localStorage.getItem(RECEIPT_KEY(code));
+        if (!raw) return null;
+        const saved = JSON.parse(raw) as StoredReceipt;
+        // Four hours: a stall packing up at 6pm must not resurrect a lunchtime
+        // receipt for whoever scans the QR next on a shared phone.
+        if (!saved?.id || Date.now() - (saved.at || 0) > 4 * 60 * 60 * 1000) {
+            window.localStorage.removeItem(RECEIPT_KEY(code));
+            return null;
+        }
+        return { ...saved, ref: saved.ref ?? '' };
+    } catch {
+        return null;
+    }
+}
+
 interface PublicItem {
     id: number; label: string; size_text: string | null; price: number;
     tab: string | null; image_url: string | null;
@@ -66,8 +89,16 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
     const [phone, setPhone] = useState('');
     const [placing, setPlacing] = useState(false);
     const [placed, setPlaced] = useState<
-        { id: number; orderNo: number | null; token: number | null; total: number } | null
+        {
+            id: number; orderNo: number | null; token: number | null; total: number;
+            payUrl: string | null;
+            /** The UUID that authorises amending THIS order. See amendPublicStallOrder. */
+            ref: string;
+        } | null
     >(null);
+    /** Set while the customer is adding to an order that already exists. */
+    const [amending, setAmending] = useState(false);
+    const [resuming, setResuming] = useState(false);
     const [paid, setPaid] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -116,19 +147,12 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
      */
     useEffect(() => {
         if (!code || placed) return;
-        try {
-            const raw = window.localStorage.getItem(RECEIPT_KEY(code));
-            if (!raw) return;
-            const saved = JSON.parse(raw) as {
-                id: number; orderNo: number | null; token: number | null; total: number; at: number;
-            };
-            if (!saved?.id || Date.now() - (saved.at || 0) > 4 * 60 * 60 * 1000) {
-                window.localStorage.removeItem(RECEIPT_KEY(code));
-                return;
-            }
-            setPlaced({ id: saved.id, orderNo: saved.orderNo, token: saved.token, total: saved.total });
-        } catch {
-            /* unparseable or storage blocked — the customer just sees the menu */
+        const saved = readReceipt(code);
+        if (saved) {
+            setPlaced({
+                id: saved.id, orderNo: saved.orderNo, token: saved.token,
+                total: saved.total, payUrl: saved.payUrl ?? null, ref: saved.ref,
+            });
         }
         // Deliberately mount-only: re-running when `placed` changes would restore
         // the receipt the moment "Order something else" cleared it.
@@ -160,6 +184,9 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                     orderNo: d.order_no ?? prev.orderNo,
                     token: d.token ?? prev.token,
                     total: d.total_amount ?? prev.total,
+                    // Amending mints a NEW link; the old one is cancelled, so the
+                    // server's copy is the only one safe to send anyone to.
+                    payUrl: d.payment_short_url ?? prev.payUrl,
                 } : prev));
                 if (d.paid) setPaid(true);
             } catch { /* a failed poll is not worth showing anyone */ }
@@ -195,6 +222,38 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
         });
     }, []);
 
+    /**
+     * Pull the customer's existing basket back onto the menu so they can add to
+     * it — the "I also want a chaat" path, taken after they backed out of the
+     * payment page.
+     *
+     * Rebuilt from the ORDER, not from whatever this browser still remembers:
+     * they may have come back on a reload, and the server is the only thing that
+     * knows what is actually on the order.
+     */
+    const addMoreItems = useCallback(async () => {
+        if (!placed || resuming) return;
+        setResuming(true);
+        setError(null);
+        try {
+            const r = await fetch(api(`/stall/public/${encodeURIComponent(code)}/orders/${placed.id}`));
+            const d = (await r.json())?.data;
+            const restored: Record<number, number> = {};
+            for (const it of (d?.items ?? [])) {
+                if (it?.stall_menu_item_id) {
+                    restored[it.stall_menu_item_id] = (restored[it.stall_menu_item_id] || 0) + Number(it.qty || 0);
+                }
+            }
+            setCart(restored);
+            setAmending(true);
+            setPlaced(null);   // back to the menu; the order itself is untouched
+        } catch {
+            setError('Could not load your order — please try again.');
+        } finally {
+            setResuming(false);
+        }
+    }, [placed, resuming, code]);
+
     const place = useCallback(async () => {
         if (!lines.length || placing) return;
         setPlacing(true);
@@ -208,14 +267,21 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                 fingerprint,
             };
         }
+        // Amending keeps the SAME order — same token, same order number, one
+        // payment — so it must reuse the ref that authorises it, not the
+        // cart-fingerprint ref a fresh order would mint.
+        const existing = amending ? readReceipt(code) : null;
+        const url = existing
+            ? api(`/stall/public/${encodeURIComponent(code)}/orders/${existing.id}/amend`)
+            : api(`/stall/public/${encodeURIComponent(code)}/orders`);
         try {
-            const res = await fetch(api(`/stall/public/${encodeURIComponent(code)}/orders`), {
+            const res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     items: lines.map((l) => ({ stall_menu_item_id: l.item.id, qty: l.qty })),
                     customer_phone: phone || undefined,
-                    client_ref: clientRef.current.key,
+                    client_ref: existing ? existing.ref : clientRef.current.key,
                 }),
             });
             const body = await res.json();
@@ -225,7 +291,10 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
             const d = body?.data ?? {};
             const receipt = {
                 id: d.id, orderNo: d.order_no ?? null, token: d.token ?? null, total: d.total ?? total,
+                payUrl: d.payment_short_url ?? null,
+                ref: existing ? existing.ref : clientRef.current.key,
             };
+            setAmending(false);
             setPlaced(receipt);
             // Written BEFORE the redirect below, or the trip to Razorpay loses it.
             try {
@@ -280,18 +349,55 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                 </p>
                 {!paid && (
                     <p className="mt-2 text-xs text-amber-700 max-w-xs">
-                        Nothing is made until payment clears. If you closed the payment page,
-                        show this token at the counter.
+                        Nothing is made until payment clears.
                     </p>
                 )}
+
+                {/* UNPAID — the two things a customer actually wants here.
+                    This screen used to offer only "Order something else", which
+                    starts a SECOND order: a second token, a second payment, and
+                    a counter handing two tickets to one person. Someone who
+                    backed out of the payment page wants to finish paying, or to
+                    add the chaat they came back for. */}
+                {!paid && (
+                    <div className="mt-7 w-full max-w-xs space-y-2">
+                        {placed.payUrl ? (
+                            <a href={placed.payUrl}
+                                className="block w-full py-4 rounded-2xl bg-emerald-600 text-white font-semibold active:bg-emerald-700">
+                                Pay {money(placed.total)}
+                            </a>
+                        ) : (
+                            // attachPaymentLink never throws — a stall with Razorpay
+                            // down still gets its order and token, just no link. Say
+                            // so, rather than showing a screen with no way forward.
+                            <p className="px-3 py-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+                                Online payment is unavailable right now — show this token
+                                at the counter and pay there.
+                            </p>
+                        )}
+                        <button onClick={addMoreItems} disabled={resuming}
+                            className="w-full py-4 rounded-2xl bg-white border-2 border-slate-900 text-slate-900 font-semibold active:bg-slate-100 disabled:opacity-60 flex items-center justify-center gap-2">
+                            {resuming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                            Add more items
+                        </button>
+                        <p className="text-[11px] text-slate-500">
+                            Adding keeps this same token — you pay once, for everything.
+                        </p>
+                    </div>
+                )}
+
                 <button onClick={() => {
                     setPlaced(null);
                     setPaid(false);
+                    setAmending(false);
+                    setCart({});
                     clientRef.current = { key: '', fingerprint: '' };
                     try { window.localStorage.removeItem(RECEIPT_KEY(code)); } catch { /* nothing to clear */ }
                 }}
-                    className="mt-8 px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-medium">
-                    Order something else
+                    className={paid
+                        ? 'mt-8 px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-medium'
+                        : 'mt-5 px-5 py-2 text-sm text-slate-500 underline'}>
+                    {paid ? 'Order something else' : 'Start a different order'}
                 </button>
             </div>
         );
@@ -316,6 +422,36 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                     </div>
                 )}
             </header>
+
+            {/* Without this the menu looks like a fresh order with a mysteriously
+                pre-filled basket. Says which token is being added to, and gives
+                a way out that is not "empty the cart and wonder". */}
+            {amending && (
+                <div className="mx-5 mb-3 flex items-start justify-between gap-3 px-4 py-3 rounded-2xl bg-slate-900 text-white">
+                    <div className="text-sm">
+                        <div className="font-semibold">Adding to your order</div>
+                        <div className="text-xs text-slate-300">
+                            Same token — you pay once, for everything.
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => {
+                            setAmending(false);
+                            setCart({});
+                            const saved = readReceipt(code);
+                            if (saved) {
+                                setPlaced({
+                                    id: saved.id, orderNo: saved.orderNo, token: saved.token,
+                                    total: saved.total, payUrl: saved.payUrl ?? null, ref: saved.ref,
+                                });
+                            }
+                        }}
+                        className="text-xs underline text-slate-200 flex-shrink-0 pt-0.5"
+                    >
+                        Cancel
+                    </button>
+                </div>
+            )}
 
             {tabs.length > 1 && (
                 <div className="flex gap-2 px-5 pb-3 overflow-x-auto">
@@ -367,13 +503,30 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
 
             {menu.accepting && lines.length > 0 && (
                 <div className="fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 p-4 space-y-3">
-                    <input
-                        value={phone}
-                        onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                        inputMode="numeric"
-                        placeholder="Phone number"
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-base focus:outline-none focus:border-slate-900"
-                    />
+                    {/* Red until it holds ten digits. This is the one field the
+                        customer MUST fill — it is where the token goes — and as a
+                        grey box among grey boxes it read as optional, so people
+                        tapped Pay and wondered why nothing happened. */}
+                    <div>
+                        <input
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                            inputMode="numeric"
+                            aria-label="Your phone number"
+                            aria-invalid={phone.length !== 10}
+                            placeholder="Phone number"
+                            className={`w-full px-4 py-3 rounded-xl text-base border-2 focus:outline-none transition-colors ${
+                                phone.length === 10
+                                    ? 'bg-white border-emerald-500 focus:border-emerald-600'
+                                    : 'bg-red-50 border-red-400 placeholder:text-red-400 focus:border-red-500'
+                            }`}
+                        />
+                        {phone.length > 0 && phone.length < 10 && (
+                            <p className="mt-1 text-xs text-red-600">
+                                {10 - phone.length} more {10 - phone.length === 1 ? 'digit' : 'digits'}
+                            </p>
+                        )}
+                    </div>
                     {error && <p className="text-sm text-red-600">{error}</p>}
                     <button
                         onClick={place}
@@ -381,12 +534,12 @@ export default function PublicStallPage({ params }: { params: Promise<{ code: st
                         className="w-full py-4 rounded-2xl bg-emerald-600 text-white font-semibold flex items-center justify-center gap-2 active:bg-emerald-700 disabled:bg-slate-300"
                     >
                         {placing ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShoppingBag className="w-5 h-5" />}
-                        Pay {money(total)}
+                        {amending ? `Update & pay ${money(total)}` : `Pay ${money(total)}`}
                     </button>
-                    <p className="text-[11px] text-slate-500 text-center">
+                    <p className={`text-[11px] text-center ${phone.length === 10 ? 'text-slate-500' : 'text-red-600 font-medium'}`}>
                         {phone.length === 10
                             ? 'You\u2019ll pay on the next screen, then collect at the counter.'
-                            : 'Enter your number \u2014 your receipt goes there.'}
+                            : 'Enter your number \u2014 your token is sent there.'}
                     </p>
                 </div>
             )}
