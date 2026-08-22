@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
+import { ALL_TABS, UNTABBED, initialTabValue, tabLabel } from '@/lib/stall/menuTabs';
 import {
     Store, Plus, KeyRound, QrCode, Pencil, Trash2, Printer, Copy, Loader2, TriangleAlert,
     ClipboardList,
@@ -258,6 +259,25 @@ function PasscodeModal({ code, passcode, onClose }: { code: string; passcode: st
     );
 }
 
+function TabChip({ label, count, active, onClick }: {
+    label: string; count: number; active: boolean; onClick: () => void;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            aria-pressed={active}
+            className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                active
+                    ? 'bg-emerald-600 border-emerald-500 text-white'
+                    : 'bg-slate-900 border-slate-800 text-slate-300 hover:text-white'
+            }`}
+        >
+            {label}
+            <span className={active ? 'ml-1.5 text-emerald-100' : 'ml-1.5 text-slate-500'}>{count}</span>
+        </button>
+    );
+}
+
 function StallDetail({ stall, onClose, onPasscode }: {
     stall: StallSummary; onClose: () => void; onPasscode: (p: string) => void;
 }) {
@@ -322,17 +342,51 @@ function StallDetail({ stall, onClose, onPasscode }: {
         }
     }, [stall.id, load]);
 
-    const byTab = useMemo(() => {
-        const map = new Map<string, StallMenuItem[]>();
+    /**
+     * Tabs in MENU order, not alphabetical — the same order the till renders
+     * them, so what the admin verifies here reads like what the operator sees.
+     */
+    const tabNames = useMemo(() => {
+        const seen: string[] = [];
         for (const i of items) {
-            const t = i.tab || 'Other';
-            map.set(t, [...(map.get(t) || []), i]);
+            const t = tabLabel(i.tab);
+            if (!seen.includes(t)) seen.push(t);
         }
-        return [...map.entries()];
+        return seen;
     }, [items]);
 
+    const counts = useMemo(() => {
+        const map: Record<string, number> = {};
+        for (const i of items) map[tabLabel(i.tab)] = (map[tabLabel(i.tab)] || 0) + 1;
+        return map;
+    }, [items]);
+
+    /**
+     * ALL is the default and stays available.
+     *
+     * The tabs are for working one category at a time, but "is the whole menu
+     * right?" is the other half of the job — and 19 items across two tabs means
+     * the answer used to be a scroll. Verification wants one view; editing wants
+     * a narrow one.
+     */
+    const [activeTab, setActiveTab] = useState<string>(ALL_TABS);
+
+    // A tab can vanish under you — delete its last item, or rename the tab on
+    // the one item that had it — and the pane would silently render empty with
+    // a chip selected that no longer exists.
+    useEffect(() => {
+        if (activeTab !== ALL_TABS && !tabNames.includes(activeTab)) setActiveTab(ALL_TABS);
+    }, [tabNames, activeTab]);
+
+    const visible = useMemo(
+        () => (activeTab === ALL_TABS
+            ? items
+            : items.filter((i) => tabLabel(i.tab) === activeTab)),
+        [items, activeTab],
+    );
+
     return (
-        <Modal title={stall.title} onClose={onClose} wide>
+        <Modal title={stall.title} onClose={onClose} size="xl">
             <div className="flex flex-wrap gap-2 mb-4">
                 <button onClick={() => setAdding(true)} className="px-3 py-2 rounded-lg bg-emerald-600 text-sm flex items-center gap-1.5">
                     <Plus className="w-4 h-4" /> Add item
@@ -355,50 +409,84 @@ function StallDetail({ stall, onClose, onPasscode }: {
                     No items yet. Add the first tile — its price here is the counter price.
                 </p>
             ) : (
-                <div className="space-y-5">
-                    {byTab.map(([tabName, list]) => (
-                        <div key={tabName}>
-                            <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">{tabName}</h4>
-                            <div className="space-y-1.5">
-                                {list.map((item) => (
-                                    <div key={item.id}
-                                        className={`flex items-center gap-3 p-3 rounded-xl bg-slate-900/60 border ${
-                                            item.is_active ? 'border-slate-800' : 'border-slate-800/50 opacity-50'
-                                        }`}>
-                                        <div className="min-w-0 flex-1">
-                                            <div className="text-sm font-medium truncate">
-                                                {item.label}
-                                                {item.size_text && <span className="text-slate-400"> · {item.size_text}</span>}
-                                            </div>
-                                            <div className="text-xs text-slate-500 truncate">{item.product_title}</div>
-                                            {item.warn_morning_only && (
-                                                <div className="text-[11px] text-amber-300 mt-0.5">
-                                                    Morning-only product — it won&apos;t appear in the customer app
-                                                </div>
-                                            )}
-                                            {item.warn_variant_archived && (
-                                                <div className="text-[11px] text-amber-300 mt-0.5">This variant is archived</div>
-                                            )}
-                                        </div>
-                                        <div className="font-semibold whitespace-nowrap">{money(item.price)}</div>
-                                        <button onClick={() => setEditing(item)} className="p-2 rounded-lg bg-slate-800">
-                                            <Pencil className="w-3.5 h-3.5 text-slate-400" />
-                                        </button>
-                                        <button onClick={() => remove(item)} className="p-2 rounded-lg bg-slate-800">
-                                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                                        </button>
+                <>
+                    {/* Shown even for ONE category: the chip tells the admin what
+                        they are looking at and carries the count, which is how you
+                        spot "13 flavours" being 12 without counting rows. */}
+                    <div className="flex flex-wrap gap-2 mb-3 pb-3 border-b border-slate-800">
+                        <TabChip
+                            label="All" count={items.length}
+                            active={activeTab === ALL_TABS} onClick={() => setActiveTab(ALL_TABS)}
+                        />
+                        {tabNames.map((t) => (
+                            <TabChip
+                                key={t} label={t} count={counts[t] ?? 0}
+                                active={activeTab === t} onClick={() => setActiveTab(t)}
+                            />
+                        ))}
+                    </div>
+
+                    {/* Two columns at this width. The modal is wide precisely so a
+                        13-flavour category fits without scrolling, which is what
+                        makes it checkable at a glance rather than row by row. */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+                        {visible.map((item) => (
+                            <div key={item.id}
+                                className={`flex items-center gap-3 p-3 rounded-xl bg-slate-900/60 border ${
+                                    item.is_active ? 'border-slate-800' : 'border-slate-800/50 opacity-50'
+                                }`}>
+                                <div className="min-w-0 flex-1">
+                                    <div className="text-sm font-medium truncate">
+                                        {item.label}
+                                        {item.size_text && <span className="text-slate-400"> · {item.size_text}</span>}
                                     </div>
-                                ))}
+                                    <div className="text-xs text-slate-500 truncate">{item.product_title}</div>
+                                    {/* On All, say which category a row belongs to —
+                                        without the grouping headings there is
+                                        otherwise nothing to tell you. */}
+                                    {activeTab === ALL_TABS && (
+                                        <div className="text-[11px] text-slate-600 mt-0.5">{tabLabel(item.tab)}</div>
+                                    )}
+                                    {item.warn_morning_only && (
+                                        <div className="text-[11px] text-amber-300 mt-0.5">
+                                            Morning-only product — it won&apos;t appear in the customer app
+                                        </div>
+                                    )}
+                                    {item.warn_variant_archived && (
+                                        <div className="text-[11px] text-amber-300 mt-0.5">This variant is archived</div>
+                                    )}
+                                </div>
+                                <div className="font-semibold whitespace-nowrap">{money(item.price)}</div>
+                                <button onClick={() => setEditing(item)} aria-label={`Edit ${item.label}`}
+                                    className="p-2 rounded-lg bg-slate-800">
+                                    <Pencil className="w-3.5 h-3.5 text-slate-400" />
+                                </button>
+                                <button onClick={() => remove(item)} aria-label={`Remove ${item.label}`}
+                                    className="p-2 rounded-lg bg-slate-800">
+                                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                                </button>
                             </div>
-                        </div>
-                    ))}
-                </div>
+                        ))}
+                        {!visible.length && (
+                            <p className="col-span-full text-sm text-slate-500 py-8 text-center">
+                                Nothing in {activeTab} yet.
+                            </p>
+                        )}
+                    </div>
+                </>
             )}
 
             {(adding || editing) && (
                 <MenuItemModal
                     stallId={stall.id}
                     item={editing}
+                    // Adding while a category is selected pre-fills it. Thirteen
+                    // gelato flavours means retyping "Gelato" thirteen times
+                    // otherwise, and one typo puts a flavour on its own tab.
+                    // initialTabValue owns the two rules that made this go wrong:
+                    // editing never inherits the chip, and UNTABBED is a label
+                    // this screen invents, not a category anyone chose.
+                    activeTab={activeTab}
                     onClose={() => { setAdding(false); setEditing(null); }}
                     onSaved={async () => { setAdding(false); setEditing(null); await load(); }}
                 />
@@ -408,14 +496,15 @@ function StallDetail({ stall, onClose, onPasscode }: {
     );
 }
 
-function MenuItemModal({ stallId, item, onClose, onSaved }: {
-    stallId: number; item: StallMenuItem | null; onClose: () => void; onSaved: () => Promise<void>;
+function MenuItemModal({ stallId, item, activeTab, onClose, onSaved }: {
+    stallId: number; item: StallMenuItem | null; activeTab: string;
+    onClose: () => void; onSaved: () => Promise<void>;
 }) {
     const [productId, setProductId] = useState<number | ''>(item?.product_id ?? '');
     const [label, setLabel] = useState(item?.label ?? '');
     const [sizeText, setSizeText] = useState(item?.size_text ?? '');
     const [price, setPrice] = useState(item ? String(item.price) : '');
-    const [tab, setTab] = useState(item?.tab ?? '');
+    const [tab, setTab] = useState(() => initialTabValue(item, activeTab));
     const [busy, setBusy] = useState(false);
 
     const save = async () => {
@@ -540,8 +629,13 @@ const Field = ({ label, hint, children }: { label: string; hint?: string; childr
  * `mounted` guards SSR: document does not exist during the server render, and
  * rendering null on the first client pass keeps hydration consistent.
  */
-function Modal({ title, onClose, children, wide }: {
-    title: string; onClose: () => void; children: React.ReactNode; wide?: boolean;
+const MODAL_WIDTH = { md: 'max-w-md', wide: 'max-w-2xl', xl: 'max-w-5xl' } as const;
+
+function Modal({ title, onClose, children, wide, size }: {
+    title: string; onClose: () => void; children: React.ReactNode;
+    /** @deprecated pass size="wide" — kept so existing callers keep working. */
+    wide?: boolean;
+    size?: keyof typeof MODAL_WIDTH;
 }) {
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
@@ -560,7 +654,7 @@ function Modal({ title, onClose, children, wide }: {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
             onClick={onClose}>
             <div
-                className={`w-full ${wide ? 'max-w-2xl' : 'max-w-md'} max-h-[90vh] overflow-y-auto glass rounded-2xl p-5`}
+                className={`w-full ${MODAL_WIDTH[size ?? (wide ? 'wide' : 'md')]} max-h-[90vh] overflow-y-auto glass rounded-2xl p-5`}
                 onClick={(e) => e.stopPropagation()}
                 role="dialog"
                 aria-modal="true"
