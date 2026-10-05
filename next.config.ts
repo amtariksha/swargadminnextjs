@@ -13,6 +13,24 @@ const nextConfig: NextConfig = {
   // from node_modules at runtime instead.
   serverExternalPackages: ['drizzle-kit'],
 
+  // next/image rejects any remote host that isn't listed here, and this config
+  // had no `images` block at all — so /_next/image returned 400 for every
+  // Payload media URL (verified against the live admin on both the r2.dev and
+  // custom-domain hosts). Pre-existing, but it would have looked like fallout
+  // from moving R2_PUBLIC_URL off r2.dev, so it is fixed alongside.
+  //
+  // media.swargfood.com is the R2 bucket's custom domain; **.r2.dev stays for
+  // anything still holding a URL minted before the switch.
+  images: {
+    remotePatterns: [
+      { protocol: 'https', hostname: 'media.swargfood.com' },
+      { protocol: 'https', hostname: '**.r2.dev' },
+      // Ops catalog images: node.desicowmilk.com 302s these to the R2 domain,
+      // and next/image validates the redirect target as well as the source.
+      { protocol: 'https', hostname: 'node.desicowmilk.com' },
+    ],
+  },
+
   // Historical note: a `rewrites()` block previously mapped legacy WACRM
   // webhook paths (`/api/webhooks/*`, `/api/ctwa/*`, `/api/meta/*`) to the
   // namespaced `/api/whatsapp/*` handlers so external services could keep
