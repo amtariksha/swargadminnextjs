@@ -61,6 +61,7 @@ import {
     Search,
     Store,
     ListOrdered,
+    Milk,
 } from 'lucide-react';
 
 interface NavItem {
@@ -281,6 +282,7 @@ const navItems: NavItem[] = [
                     { name: 'Vendor Payments', href: '/inventory/payments', icon: <Banknote className="w-4 h-4" /> },
                     { name: 'Vendor Ledger', href: '/inventory/ledger', icon: <BookText className="w-4 h-4" /> },
                     { name: 'Purchase Report', href: '/inventory/report', icon: <BarChart3 className="w-4 h-4" /> },
+                    { name: 'Dairy Records', href: '/inventory/dairy-records', icon: <Milk className="w-4 h-4" /> },
                     { name: 'Cost Prices (Bulk)', href: '/inventory/cost-prices', icon: <Calculator className="w-4 h-4" /> },
                     {
                         name: 'Production',

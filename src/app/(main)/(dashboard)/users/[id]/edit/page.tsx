@@ -91,7 +91,11 @@ export default function EditUserPage() {
 
     const onSubmit = async (data: UserFormData) => {
         try {
-            await updateUser.mutateAsync({ id: Number(id), ...data });
+            const cleanData = {
+                ...data,
+                email: data.email?.trim() || null,
+            };
+            await updateUser.mutateAsync({ id: Number(id), ...cleanData });
             toast.success('User updated successfully');
             router.push(`/users/${id}`);
         } catch (error) {

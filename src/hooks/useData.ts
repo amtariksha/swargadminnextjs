@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { GET, POST, PUT, DELETE } from '@/lib/api';
+import { GET, POST, PUT, DELETE, PATCH } from '@/lib/api';
 import { uploadViaPresign } from '@/lib/uploads';
 import { wfetch } from '@/lib/whatsapp/wfetch';
 import { CALL_TYPE_OPTIONS, callTypeLabel, type Option } from '@/lib/crm';
@@ -1949,6 +1949,65 @@ export function useRefundReport(from: string, to: string) {
     });
 }
 
+export interface RefundTransactionItem {
+    id: number;
+    user_id: number;
+    customer_name: string;
+    customer_phone: string;
+    order_id: number | null;
+    order_amount: number | null;
+    amount: number;
+    refund_reason: string;
+    delivery_date: string | null;
+    billed_to_driver: number;
+    billed_driver_id: number | null;
+    billed_driver_name: string | null;
+    created_at: string | null;
+}
+
+export function useRefundTransactions(params: { from: string; to: string; reason?: string; driver_id?: number }) {
+    return useQuery({
+        queryKey: ['refund-transactions', params.from, params.to, params.reason ?? '', params.driver_id ?? ''],
+        queryFn: async () => {
+            const searchParams = new URLSearchParams({
+                from: params.from,
+                to: params.to,
+            });
+            if (params.reason) searchParams.set('reason', params.reason);
+            if (params.driver_id) searchParams.set('driver_id', String(params.driver_id));
+            const response = await GET<RefundTransactionItem[]>(`/refund/transactions?${searchParams.toString()}`);
+            return response.data || [];
+        },
+        enabled: !!params.from && !!params.to,
+    });
+}
+
+export function useUpdateRefundTransaction() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ id, refund_reason }: { id: number; refund_reason: string }) => {
+            return await PATCH(`/refund/transaction/${id}`, { refund_reason });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['refund-transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['refund-report'] });
+        },
+    });
+}
+
+export function useReclassifyRefundReason() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (payload: { from_reason?: string; to_reason: string; transaction_ids?: number[] }) => {
+            return await POST('/refund/reclassify_reason', payload);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['refund-transactions'] });
+            queryClient.invalidateQueries({ queryKey: ['refund-report'] });
+        },
+    });
+}
+
 // ==========================================
 // Feature 15 — Driver payroll
 // ==========================================
@@ -2609,3 +2668,172 @@ export function useRemoteTemplates() {
         staleTime: 60_000,
     });
 }
+
+// ==========================================
+// Milk Dairy Records & Tally (Certified parent record & usages)
+// ==========================================
+
+export interface DairyCan {
+    can_no: number;
+    gross_weight: number;
+    tare_weight: number;
+    net_weight: number;
+}
+
+export interface DairyQualityReading {
+    param_name: string;
+    unit: string | null;
+    value: number | string;
+}
+
+export interface DairyUsage {
+    usage_type: string;
+    label: string;
+    qty: number;
+    notes?: string | null;
+}
+
+export interface DairyReceipt {
+    id: number;
+    receipt_date: string;
+    total_net_qty: number;
+    certified_by: string;
+    certification_status: string;
+    notes: string | null;
+    created_at: string;
+    source_material_name: string;
+    target_material_name: string;
+    unit: string;
+    created_by_name: string | null;
+    cans: DairyCan[];
+    quality_readings: DairyQualityReading[];
+    usages: DairyUsage[];
+}
+
+export interface DairySummary {
+    date: string;
+    collected_total: number;
+    received_total: number;
+    variance_transit: number;
+    usages_total: number;
+    tally_difference: number;
+    is_balanced: boolean;
+    usage_breakdown: { usage_type: string; label: string; qty: number }[];
+}
+
+export interface FarmerCollectionItem {
+    id: number;
+    purchase_date: string;
+    qty: number;
+    unit_price: number;
+    total_amount: number;
+    status: string;
+    farmer_id: number;
+    farmer_name: string;
+    farmer_phone: string;
+    raw_material_name: string;
+    raw_material_unit: string;
+    quality_readings: DairyQualityReading[];
+}
+
+export interface DairyCollectionsResponse {
+    date: string;
+    count: number;
+    total_qty: number;
+    total_amount: number;
+    collections: FarmerCollectionItem[];
+}
+
+export function useDairySummary(date: string) {
+    return useQuery({
+        queryKey: ['dairy-summary', date],
+        queryFn: async () => {
+            const response = await GET<DairySummary>(`/collection/dairy-summary?date=${date}`);
+            return response.data;
+        },
+        enabled: !!date,
+    });
+}
+
+export function useDairyReceipts(date: string) {
+    return useQuery({
+        queryKey: ['dairy-receipts', date],
+        queryFn: async () => {
+            const response = await GET<DairyReceipt[]>(`/collection/dairy-receipts?date=${date}`);
+            return response.data || [];
+        },
+        enabled: !!date,
+    });
+}
+
+export function useDairyCollections(date: string) {
+    return useQuery({
+        queryKey: ['dairy-collections', date],
+        queryFn: async () => {
+            const response = await GET<DairyCollectionsResponse>(`/collection/dairy-collections?date=${date}`);
+            return response.data;
+        },
+        enabled: !!date,
+    });
+}
+
+export function useDairySourceMaterials() {
+    return useQuery({
+        queryKey: ['dairy-source-materials'],
+        queryFn: async () => {
+            const response = await GET<{ id: number; name: string; unit: string }[]>('/collection/dairy-source-materials');
+            return response.data || [];
+        },
+    });
+}
+
+export function useCreateDairyReceipt() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (payload: {
+            receipt_date: string;
+            source_raw_material_id: number;
+            certified_by?: string;
+            certification_status?: string;
+            notes?: string;
+            client_ref?: string;
+            cans: { can_no?: number; gross_weight: number; tare_weight: number }[];
+            quality_readings?: { raw_material_quality_param_id: number; value: number | string }[];
+            usages?: { usage_type: string; label: string; qty: number; notes?: string | null }[];
+        }) => {
+            return await POST('/collection/dairy-receipts', payload as unknown as Record<string, unknown>);
+        },
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['dairy-summary', variables.receipt_date] });
+            queryClient.invalidateQueries({ queryKey: ['dairy-receipts', variables.receipt_date] });
+            queryClient.invalidateQueries({ queryKey: ['dairy-collections', variables.receipt_date] });
+        },
+    });
+}
+
+export interface RawMaterialQualityParam {
+    id: number;
+    raw_material_id: number;
+    name: string;
+    unit?: string | null;
+    value_type: 'numeric' | 'text';
+    min_value?: number | null;
+    max_value?: number | null;
+    warn_min?: number | null;
+    warn_max?: number | null;
+    sort_order?: number;
+}
+
+export function useRawMaterialQualityParams(rawMaterialId?: number) {
+    return useQuery({
+        queryKey: ['raw-material-quality-params', rawMaterialId],
+        queryFn: async () => {
+            if (!rawMaterialId) return [];
+            const response = await GET<RawMaterialQualityParam[]>(`/inventory/raw-materials/${rawMaterialId}/quality-params`);
+            return response.data || [];
+        },
+        enabled: !!rawMaterialId,
+    });
+}
+
+
