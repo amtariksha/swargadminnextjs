@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit --incremental false",
     "test:units": "vitest run tests/",
     "test:units:watch": "vitest tests/",
     "recover:wp": "dotenv -e .env.local -- tsx scripts/recover-wp-content.ts"
