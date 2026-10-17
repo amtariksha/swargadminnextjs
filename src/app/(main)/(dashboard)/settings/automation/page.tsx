@@ -181,6 +181,19 @@ const CRON_JOBS: CronJob[] = [
             'Costs a Gemini call per bill — the card shows Enabled by default, but the job itself ' +
             'stays OFF until this flag is explicitly set to 1.',
     },
+    {
+        key: 'desk-tick',
+        name: 'Desk Tick',
+        flagTitle: 'Desk Tick Enabled',
+        timeTitle: null,
+        everyMinute: true,
+        description:
+            'Runs the Desk ticket engine: once a minute the backend scheduler calls the admin panel ' +
+            '(/api/agent-tools/desk/tick), which turns stored WhatsApp messages into tickets. ' +
+            'Ships OFF and, unlike the other jobs, stays OFF while the flag row is missing or holds ' +
+            'anything but 1. Requires app_db migration 117_desk_tick_flag.sql. Turn it ON only after ' +
+            'the tick route answers a manual call; the engine has a second switch (desk_engine_enabled).',
+    },
 ];
 
 // Values that mean "off". Everything else (incl. unknown) means "on" —
