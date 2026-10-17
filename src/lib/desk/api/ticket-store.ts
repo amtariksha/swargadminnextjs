@@ -1,10 +1,10 @@
 // Small shared reads and writes of the ticket routes (a split of the files listed in the P3a
 // spec section 5.1): load a ticket or a category, run one conditional update, write one event,
 // and mirror a change onto the existing conversation columns. Every call reads data and error and
-// maps the error through dbGuard; no lookup uses .single().
+// maps the error through dbGuard; a lookup reads at most one row with limit(1).
 
 import { supabaseAdmin } from '@/lib/whatsapp/supabase';
-import type { EventType, TicketStatus } from '../constants';
+import type { ClassificationSource, EventType, TicketStatus } from '../constants';
 import { DeskApiError, dbGuard } from '../api-error';
 import { computeTicketView } from '../ticket-view';
 import type { Category, DeskContext, EventDataMap, Ticket, TicketView } from '../types';
@@ -101,4 +101,32 @@ export async function mirrorToConversation(
     } catch {
         console.error(`[desk-api] conversation mirror failed what=${what}`);
     }
+}
+
+/** type, queue and priority are always copied from the chosen category; a request never sends them. */
+export async function classifyTicket(
+    ctx: DeskContext,
+    ticket: Ticket,
+    category: Category,
+    source: ClassificationSource,
+): Promise<Ticket | null> {
+    const updated = await updateTicket(ticket.id, {
+        category_slug: category.slug,
+        type: category.type,
+        queue: category.queue,
+        priority: category.priority,
+        classification_source: source,
+        classified_at: new Date().toISOString(),
+        classified_by: ctx.actor.id,
+    });
+    if (updated === null) return null;
+    await recordEvent(ctx, ticket.id, 'classified', {
+        category_slug: category.slug,
+        type: category.type,
+        queue: category.queue,
+        previous_category: ticket.category_slug,
+        source,
+        after_resolution: ticket.status === 'resolved',
+    });
+    return updated;
 }
