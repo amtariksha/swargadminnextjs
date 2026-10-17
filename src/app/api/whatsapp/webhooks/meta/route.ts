@@ -267,7 +267,10 @@ export async function POST(request: NextRequest) {
                 .select("id")
                 .eq("contact_id", contactId)
                 .eq("integrated_number", integratedNum)
-                .single();
+                // Oldest row wins; see the MSG91 webhook for why .single() is unsafe here.
+                .order("created_at", { ascending: true })
+                .limit(1)
+                .maybeSingle();
 
             if (existingConv) {
                 conversationId = existingConv.id;

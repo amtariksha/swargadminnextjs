@@ -553,7 +553,12 @@ export async function POST(request: NextRequest) {
             .select("id")
             .eq("contact_id", contact!.id)
             .eq("integrated_number", actualBusinessPhone || "default")
-            .single();
+            // Oldest row wins. Duplicate (contact, number) rows exist in production;
+            // .single() returns null for 2+ rows, which used to spawn yet another
+            // conversation per inbound and drop outbound echoes.
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle();
 
         // Append-to-existing-only for outbound: don't open a new thread for an
         // outbound notification to a contact that has no conversation on this
