@@ -269,3 +269,12 @@ function emptyReview(input: ReviewInput, window: { from: IsoDateTime; to: IsoDat
         },
     };
 }
+
+/** DeskReview as the page receives it: every ticket row carries the eight review fields. */
+export interface ReviewView extends Omit<DeskReview, 'carry_over' | 'complaints' | 'sales' | 'sample' | 'health'> {
+    carry_over: Omit<DeskReview['carry_over'], 'open_over_24h' | 'on_hold'> & { open_over_24h: ReviewTicketItem[]; on_hold: ReviewTicketItem[] };
+    complaints: Array<Omit<DeskReview['complaints'][number], 'tickets'> & { tickets: ReviewTicketItem[] }>;
+    sales: Record<keyof DeskReview['sales'], ReviewTicketItem[]>;
+    sample: ReviewTicketItem[];
+    health: Omit<DeskReview['health'], 'resolved_over_unseen'> & { resolved_over_unseen: ReviewTicketItem[] };
+}
