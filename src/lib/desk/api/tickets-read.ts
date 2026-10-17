@@ -227,7 +227,7 @@ async function withConversationFields(rows: Array<ListRow & { attention_since: s
     });
 }
 
-export function listTickets(query: TicketListQuery, ctx: DeskContext): Promise<TicketListResponse> {
+export async function listTickets(query: TicketListQuery, ctx: DeskContext): Promise<TicketListResponse> {
     assertListAllowed(query, ctx);
     return isQueueView(query.view) ? queueResponse(query, ctx) : pageResponse(query, ctx);
 }
