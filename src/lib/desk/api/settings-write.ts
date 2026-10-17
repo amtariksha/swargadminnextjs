@@ -41,10 +41,14 @@ export async function writeSettings(body: SettingsPutBody): Promise<DeskSettings
         new Date(),
     );
     if (!verdict.ok) throw new DeskApiError(verdict.code, verdict.message);
-    for (const key of DESK_SETTING_KEYS) {
-        const value = (body as Record<string, unknown>)[key];
-        if (value !== undefined) await writeSetting(key, value);
+    try {
+        for (const key of DESK_SETTING_KEYS) {
+            const value = (body as Record<string, unknown>)[key];
+            if (value !== undefined) await writeSetting(key, value);
+        }
+    } finally {
+        // Also after a partial write: this instance must not serve the old flags for 30 s.
+        clearDeskSettingsCache();
     }
-    clearDeskSettingsCache();
     return readSettingsResponse();
 }

@@ -19,6 +19,13 @@ type FetchOutcome = { kind: 'fresh'; whoami: DeskWhoami } | { kind: 'unauthorize
 interface CacheEntry { whoami: DeskWhoami; fetchedAt: number }
 
 const cache = new Map<string, CacheEntry>();
+/**
+ * When the backend last FAILED for a token (not 200, not 401). Inside WHOAMI_FAILURE_BACKOFF_MS the
+ * backend is not asked again: legacy inbox polls (every 5-10 s) would otherwise spend the user's own
+ * backend rate-limit bucket on retries. A remembered failure never means "allowed".
+ */
+const failedAt = new Map<string, number>();
+export const WHOAMI_FAILURE_BACKOFF_MS = 60_000;
 const inFlight = new Map<string, Promise<FetchOutcome>>();
 const responseSchema = backendEnvelope(whoamiData);
 
@@ -33,6 +40,15 @@ function remember(key: string, whoami: DeskWhoami, now: number): void {
         const oldest = cache.keys().next().value;
         if (oldest === undefined) break;
         cache.delete(oldest);
+    }
+}
+
+function rememberFailure(key: string, now: number): void {
+    failedAt.set(key, now);
+    while (failedAt.size > WHOAMI_CACHE_MAX_ENTRIES) {
+        const oldest = failedAt.keys().next().value;
+        if (oldest === undefined) break;
+        failedAt.delete(oldest);
     }
 }
 
@@ -68,7 +84,13 @@ export async function resolveWhoami(
     if (entry && nowMs - entry.fetchedAt < WHOAMI_CACHE_MS) {
         return { kind: 'ok', whoami: entry.whoami, stale: false };
     }
-    const outcome = await sharedAsk(key, token);
+    const lastFailure = failedAt.get(key);
+    const backingOff = lastFailure !== undefined && nowMs - lastFailure < WHOAMI_FAILURE_BACKOFF_MS;
+    const outcome: FetchOutcome = backingOff ? { kind: 'failed' } : await sharedAsk(key, token);
+    if (!backingOff) {
+        if (outcome.kind === 'failed') rememberFailure(key, Date.now());
+        else failedAt.delete(key);
+    }
     if (outcome.kind === 'unauthorized') {
         cache.delete(key);
         return { kind: 'unauthorized' };
@@ -85,6 +107,7 @@ export async function resolveWhoami(
 
 export function resetWhoamiCacheForTests(): void {
     cache.clear();
+    failedAt.clear();
     inFlight.clear();
 }
 

@@ -3,6 +3,8 @@
 # Usage:
 #   BASE=https://<host> AGENT_TOKEN=… MANAGER_TOKEN=… ROLELESS_TOKEN=… ./scripts/desk-smoke-p3a.sh
 #   READ_ONLY=1 …   stop before the block that switches desk_ui_enabled on (use this on production)
+# Safe on production: it reads the current flags first. When desk_ui_enabled is already on it skips
+# every check that writes a flag, and it never switches a flag it did not switch on itself.
 # AGENT_TOKEN     admin login of a user whose role has 'desk' but not 'desk-manager'
 # MANAGER_TOKEN   admin login of a full-access user, or of a role with 'desk-manager'
 # ROLELESS_TOKEN  a customer-app login (a user with no role)
@@ -51,6 +53,13 @@ check p01-agent-me             200 ok                         GET /api/desk/me "
 check p02-agent-health         200 ok                         GET /api/desk/health "$AGENT_TOKEN"
 check p03-agent-categories     200 ok                         GET /api/desk/categories "$AGENT_TOKEN"
 check p04-manager-settings     200 ok                         GET /api/desk/settings "$MANAGER_TOKEN"
+ui_before=$(node -e 'try{const b=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));console.log(b.data.raw.desk_ui_enabled==="0"?"0":"1")}catch{console.log("1")}' "$tmp")
+if [ "$ui_before" != 0 ]; then
+  echo "--- desk_ui_enabled is ON (or unreadable): skipping every check that writes a flag"
+  check l01-legacy-desk-key      400 "desk_* settings are changed in Desk settings" PUT /api/whatsapp/settings "$MANAGER_TOKEN" '{"desk_ui_enabled":"1"}'
+  check r01-report-only-roleless 200 "*"                        GET "/api/whatsapp/conversations?status=resolved&search=zzzzzzzzzz" "$ROLELESS_TOKEN"
+  exit "$fail"
+fi
 check f01-ui-off-tickets       403 ui_disabled                GET "/api/desk/tickets?view=all&limit=5" "$AGENT_TOKEN"
 check s01-tick-key-refused     400 validation_failed          PUT /api/desk/settings "$MANAGER_TOKEN" '{"desk_last_tick_at":"2026-01-01T00:00:00+00:00"}'
 check s02-redirect-needs-ui    422 setting_locked             PUT /api/desk/settings "$MANAGER_TOKEN" '{"desk_cutover_redirect":true}'

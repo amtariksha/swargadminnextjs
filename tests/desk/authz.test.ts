@@ -241,3 +241,37 @@ describe('withDesk', () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 });
+
+describe('whoami failure back-off (review finding 1)', () => {
+    it('WB1 asks the backend once per minute while it fails, and a remembered failure is never allowed', async () => {
+        fetchMock.mockImplementation(() => Promise.resolve(new Response('{}', { status: 404 })));
+        expect((await call(echo)).status).toBe(503);
+        vi.setSystemTime(T0 + 30_000);
+        expect((await call(echo)).status).toBe(503);
+        expect((await call(echo)).status).toBe(503);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        vi.setSystemTime(T0 + 60_000);
+        expect((await call(echo)).status).toBe(503);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('WB2 a success after the back-off clears it', async () => {
+        fetchMock.mockImplementationOnce(() => Promise.reject(new Error('down')));
+        expect((await call(echo)).status).toBe(503);
+        vi.setSystemTime(T0 + 60_000);
+        fetchMock.mockImplementation(() => Promise.resolve(OK()));
+        expect((await call(echo)).status).toBe(200);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('WB3 a stale allowed entry still serves during the back-off', async () => {
+        fetchMock.mockImplementationOnce(() => Promise.resolve(OK()));
+        await call(echo);
+        fetchMock.mockImplementation(() => Promise.resolve(new Response('{}', { status: 503 })));
+        vi.setSystemTime(T0 + 6 * MIN);
+        expect((await call(echo)).status).toBe(200);
+        vi.setSystemTime(T0 + 6 * MIN + 30_000);
+        expect((await call(echo)).status).toBe(200);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+});
