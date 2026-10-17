@@ -13,6 +13,14 @@ const EXPECTED: Expected[] = [
     { file: 'categories/route.ts', method: 'PUT', level: 'manager', alwaysOn: true },
     { file: 'settings/route.ts', method: 'GET', level: 'manager', alwaysOn: true },
     { file: 'settings/route.ts', method: 'PUT', level: 'manager', alwaysOn: true },
+    { file: 'tickets/route.ts', method: 'GET', level: 'agent', alwaysOn: false },
+    { file: 'tickets/route.ts', method: 'POST', level: 'agent', alwaysOn: false },
+    { file: 'tickets/[id]/route.ts', method: 'GET', level: 'agent', alwaysOn: false },
+    { file: 'tickets/[id]/route.ts', method: 'PATCH', level: 'agent', alwaysOn: false },
+    { file: 'tickets/[id]/resolve/route.ts', method: 'POST', level: 'agent', alwaysOn: false },
+    { file: 'action-items/route.ts', method: 'GET', level: 'manager', alwaysOn: false },
+    { file: 'action-items/route.ts', method: 'POST', level: 'manager', alwaysOn: false },
+    { file: 'action-items/route.ts', method: 'PATCH', level: 'manager', alwaysOn: false },
 ];
 
 const ROUTE_ROOT = '../../src/app/api/desk/';
