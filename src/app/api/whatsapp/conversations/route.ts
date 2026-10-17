@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { renderTemplateBody } from "@/lib/whatsapp/utils";
+import { reportInboxAccess } from "@/lib/desk/inbox-gate";
 
 // ─── Supabase row → app Contact type mapper ───────────────
 function mapContact(row: Record<string, unknown>) {
@@ -48,6 +49,7 @@ function mapConversation(row: Record<string, unknown>) {
 
 // ─── GET /api/conversations ────────────────────────────────
 export async function GET(request: NextRequest) {
+    reportInboxAccess(request, "conversations.list");
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
     const search = searchParams.get("search")?.toLowerCase();

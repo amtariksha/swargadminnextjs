@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { renderTemplateBody } from "@/lib/whatsapp/utils";
+import { reportInboxAccess } from "@/lib/desk/inbox-gate";
 
 function mapMessage(row: Record<string, unknown>) {
     return {
@@ -39,6 +40,7 @@ export async function GET(
     { params }: { params: Promise<{ id: string }> }
 ) {
     const { id } = await params;
+    reportInboxAccess(request, "conversations.get");
 
     // Fetch conversation with contact and assigned user
     const convQuery = supabaseAdmin
@@ -101,6 +103,7 @@ export async function PATCH(
     { params }: { params: Promise<{ id: string }> }
 ) {
     const { id } = await params;
+    reportInboxAccess(request, "conversations.patch");
     const body = await request.json();
 
     const updateData: Record<string, unknown> = {};

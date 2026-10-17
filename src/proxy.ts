@@ -77,6 +77,7 @@ async function verifyAdminToken(
 
 const WHATSAPP_API_PREFIX = '/api/whatsapp/';
 const LMS_API_PREFIX = '/api/lms/';
+const DESK_API_PREFIX = '/api/desk/';
 const AGENT_TOOLS_PREFIX = '/api/agent-tools/';
 const AGENT_FORCE_WEBHOOK_PATH = '/api/agent-force/webhook';
 
@@ -161,7 +162,8 @@ export async function proxy(request: NextRequest) {
     // pages) are gated client-side by src/app/(dashboard)/layout.tsx via useAuth().
     const isGatedApi =
         pathname.startsWith(WHATSAPP_API_PREFIX) ||
-        pathname.startsWith(LMS_API_PREFIX);
+        pathname.startsWith(LMS_API_PREFIX) ||
+        pathname.startsWith(DESK_API_PREFIX);
     if (!isGatedApi) {
         return NextResponse.next();
     }
@@ -237,6 +239,7 @@ export const config = {
     matcher: [
         '/api/whatsapp/:path*',
         '/api/lms/:path*',
+        '/api/desk/:path*',
         '/api/agent-tools/:path*',
     ],
 };

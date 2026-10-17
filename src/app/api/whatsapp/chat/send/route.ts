@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { getRequestContext } from "@/lib/whatsapp/request";
 import { getAppSetting } from "@/lib/whatsapp/settings";
+import { reportInboxAccess } from "@/lib/desk/inbox-gate";
 
 // ─── POST /api/chat/send ──────────────────────────────────
 export async function POST(request: NextRequest) {
+    reportInboxAccess(request, "chat.send");
     const { orgId } = getRequestContext(request.headers);
     const body = await request.json();
 

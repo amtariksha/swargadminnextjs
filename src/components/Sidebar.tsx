@@ -172,6 +172,18 @@ const navItems: NavItem[] = [
     // not inside WhatsApp: since the channel slider it broadcasts on BOTH
     // channels (in-app push via FCM and WhatsApp templates via msg91).
     { name: 'Notifications', href: '/notifications', icon: <Bell className="w-5 h-5" />, permissionKey: 'broadcast' },
+    // Desk. Each leaf is gated on its own: filterNav ignores a permissionKey on a group.
+    {
+        name: 'Desk',
+        icon: <MessageSquare className="w-5 h-5" />,
+        children: [
+            { name: 'Workspace', href: '/desk', icon: <Inbox className="w-4 h-4" />, anyPermissionKeys: ['desk', 'desk-manager'] },
+            { name: 'Tickets', href: '/desk/tickets', icon: <ClipboardList className="w-4 h-4" />, anyPermissionKeys: ['desk', 'desk-manager'] },
+            { name: 'Dashboard', href: '/desk/dashboard', icon: <BarChart3 className="w-4 h-4" />, permissionKey: 'desk-manager' },
+            { name: 'Morning Review', href: '/desk/review', icon: <CalendarDays className="w-4 h-4" />, permissionKey: 'desk-manager' },
+            { name: 'Settings', href: '/desk/settings', icon: <Settings className="w-4 h-4" />, permissionKey: 'desk-manager' },
+        ],
+    },
     {
         name: 'WhatsApp',
         icon: <MessageCircle className="w-5 h-5" />,
@@ -402,6 +414,10 @@ const KNOWN_PERMISSION_KEYS = new Set([
     'pos',
     'pos-queue',
     'stalls',
+    // Desk (ticket workspace): 'desk' = agent, 'desk-manager' = dashboard, review,
+    // settings. The server decides (withDesk); these keys only filter the sidebar.
+    'desk',
+    'desk-manager',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
