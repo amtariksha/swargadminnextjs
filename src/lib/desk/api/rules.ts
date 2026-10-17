@@ -1,16 +1,20 @@
 // Pure rule checks of the Desk API: the settings write rules (and, in a later task, the resolve
 // rules). No I/O, no clock: the caller passes `now`.
 
-import type { DeskErrorCode } from '../contracts';
-import type { SettingsPutBody } from '../contracts';
+import {
+    DUPLICATE_REQUIRED_CODES, HUMAN_RESOLUTION_CODES, LOST_REASON_REQUIRED_CODES, NOTE_REQUIRED_CODES,
+    type HumanResolutionCode, type LinkStatus, type LostReason, type ResolutionCode,
+} from '../constants';
+import type { DeskErrorCode, SettingsPutBody } from '../contracts';
 import { DESK_GO_LIVE_REGEX } from '../settings';
 
 const MS_PER_HOUR = 3_600_000;
 
-export type RuleResult = { ok: true } | { ok: false; code: DeskErrorCode; message: string };
+export interface RuleFailure { ok: false; code: DeskErrorCode; message: string }
+export type RuleResult = { ok: true } | RuleFailure;
 
-const OK: RuleResult = { ok: true };
-const fail = (code: DeskErrorCode, message: string): RuleResult => ({ ok: false, code, message });
+const OK = { ok: true } as const;
+const fail = (code: DeskErrorCode, message: string): RuleFailure => ({ ok: false, code, message });
 
 export interface StoredSettingsText {
     desk_go_live_at: string;
@@ -66,4 +70,62 @@ export function settingToText(value: unknown): string {
     if (typeof value === 'number') return String(value);
     if (typeof value === 'string') return value;
     return JSON.stringify(value);
+}
+
+// ── Resolve rules (blueprint section 1.3) ──────────────────────────────────
+
+export interface ResolveRuleInput {
+    mode: 'resolve' | 'wrap_up';
+    ticket: { id: string; link_status: LinkStatus | null };
+    category: { default_resolution_code: ResolutionCode | null; requires_delivery_link: boolean } | null;
+    body: {
+        resolution_code?: HumanResolutionCode;
+        resolution_note?: string;
+        lost_reason?: LostReason;
+        link_status?: 'none_found' | 'not_a_customer';
+    };
+    /** The ticket found by duplicate_of_ticket_no, or null when none was sent or none exists. */
+    duplicateTarget: { id: string } | null;
+}
+
+export type ResolveRuleResult =
+    | { ok: true; resolution_code: HumanResolutionCode; resolution_note: string | null; lost_reason: LostReason | null }
+    | RuleFailure;
+
+const isOneOf = <T extends string>(list: readonly T[], value: string): boolean => list.includes(value as T);
+
+function codeFor(input: ResolveRuleInput): HumanResolutionCode | null {
+    if (input.body.resolution_code) return input.body.resolution_code;
+    const fallback = input.category?.default_resolution_code ?? null;
+    return fallback !== null && isOneOf(HUMAN_RESOLUTION_CODES, fallback) ? (fallback as HumanResolutionCode) : null;
+}
+
+function checkResolveOnly(input: ResolveRuleInput, code: HumanResolutionCode): RuleResult {
+    if (isOneOf(DUPLICATE_REQUIRED_CODES, code)
+        && (input.duplicateTarget === null || input.duplicateTarget.id === input.ticket.id)) {
+        return fail('duplicate_target_required', 'Say which ticket this duplicates.');
+    }
+    const needsLink = input.category?.requires_delivery_link === true;
+    if (needsLink && input.ticket.link_status === null && input.body.link_status === undefined) {
+        return fail('delivery_link_required', 'Link the delivery, or say there is no matching delivery.');
+    }
+    return OK;
+}
+
+export function checkResolveRules(input: ResolveRuleInput): ResolveRuleResult {
+    if (input.category === null) return fail('category_required', 'Choose a category first.');
+    const code = codeFor(input);
+    if (code === null) return fail('resolution_code_required', 'Choose how this was resolved.');
+    const note = input.body.resolution_note?.trim() || null;
+    if (isOneOf(NOTE_REQUIRED_CODES, code) && note === null) return fail('note_required', 'Add a note.');
+    const lostReason = input.body.lost_reason ?? null;
+    if (isOneOf(LOST_REASON_REQUIRED_CODES, code)) {
+        if (lostReason === null) return fail('lost_reason_required', 'Say why it was lost.');
+        if (lostReason === 'other' && note === null) return fail('note_required', 'Add a note.');
+    }
+    if (input.mode === 'resolve') {
+        const verdict = checkResolveOnly(input, code);
+        if (!verdict.ok) return verdict;
+    }
+    return { ok: true, resolution_code: code, resolution_note: note, lost_reason: isOneOf(LOST_REASON_REQUIRED_CODES, code) ? lostReason : null };
 }
