@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { invalidateCTWASettingsCache } from "@/lib/whatsapp/ctwa-settings";
 import { getRequestContext } from "@/lib/whatsapp/request";
+import { DESK_SETTING_PREFIX } from "@/lib/desk/constants";
 
 // Settings that are always global (org_id = NULL) and only super_admin can edit
 const GLOBAL_ONLY_KEYS = new Set([
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest) {
 
     const settings: Record<string, string> = {};
     for (const row of globalRows || []) {
+        if (row.key.startsWith(DESK_SETTING_PREFIX)) continue;
         settings[row.key] = row.value;
     }
 
@@ -45,6 +47,7 @@ export async function GET(request: NextRequest) {
             .eq("org_id", targetOrgId);
 
         for (const row of orgRows || []) {
+            if (row.key.startsWith(DESK_SETTING_PREFIX)) continue;
             settings[row.key] = row.value;
         }
     }
@@ -62,6 +65,13 @@ export async function PUT(request: NextRequest) {
     if (!body || typeof body !== "object") {
         return NextResponse.json(
             { error: "Request body must be a key-value object" },
+            { status: 400 }
+        );
+    }
+    // desk_* keys are written only by PUT /api/desk/settings (manager).
+    if (Object.keys(body).some((key) => key.startsWith(DESK_SETTING_PREFIX))) {
+        return NextResponse.json(
+            { error: "desk_* settings are changed in Desk settings" },
             { status: 400 }
         );
     }
@@ -143,6 +153,7 @@ export async function PUT(request: NextRequest) {
 
     const merged: Record<string, string> = {};
     for (const row of allGlobal || []) {
+        if (row.key.startsWith(DESK_SETTING_PREFIX)) continue;
         merged[row.key] = row.value;
     }
 
@@ -153,6 +164,7 @@ export async function PUT(request: NextRequest) {
             .eq("org_id", targetOrgId);
 
         for (const row of allOrg || []) {
+            if (row.key.startsWith(DESK_SETTING_PREFIX)) continue;
             merged[row.key] = row.value;
         }
     }
