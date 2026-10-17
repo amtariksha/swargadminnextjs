@@ -20,6 +20,9 @@ export interface AssignableUser {
     phone?: string;
 }
 
+// A holder of any of these keys can be assigned a conversation (Desk agents work tickets there too).
+const ASSIGNABLE_PERMISSION_KEYS = ["whatsapp", "desk", "desk-manager"];
+
 /**
  * True when an admin user can work WhatsApp conversations: they have the
  * `whatsapp` permission, or full access (a role with empty/missing
@@ -29,7 +32,7 @@ function userHasWhatsappAccess(user: AdminUser): boolean {
     const roles = user.role ?? [];
     if (roles.length === 0) return true; // no roles → full access (legacy super-admin)
     if (roles.some((r) => !r.permissions || r.permissions.length === 0)) return true;
-    return roles.some((r) => (r.permissions ?? []).includes("whatsapp"));
+    return roles.some((r) => (r.permissions ?? []).some((p) => ASSIGNABLE_PERMISSION_KEYS.includes(p)));
 }
 
 export function useAssignableUsers() {

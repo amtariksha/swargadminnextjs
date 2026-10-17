@@ -55,6 +55,10 @@ const AVAILABLE_PERMISSIONS = [
     // Settings). Full-access roles (empty permissions array) automatically
     // see this entry too. Default: ON for super-admin, OFF for other roles.
     { key: 'whatsapp', label: 'WhatsApp', icon: '💬' },
+    // Desk — ticket workspace under /desk/**. 'desk' is the agent right;
+    // 'desk-manager' adds dashboard, morning review, settings and category editing.
+    { key: 'desk', label: 'Desk (tickets)', icon: '🎫' },
+    { key: 'desk-manager', label: 'Desk manager (dashboard, review, settings)', icon: '📋' },
     // CRM — customer feedback log, call worklist, and guided call scripts
     // under /crm/**. Granting this exposes the CRM section in the Sidebar
     // and the Feedback tab on the customer-detail page.
