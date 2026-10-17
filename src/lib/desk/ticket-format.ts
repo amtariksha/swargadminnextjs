@@ -2,7 +2,7 @@
 // shifting the epoch by 330 minutes and reading UTC fields, so the process time zone never matters.
 // Nothing here reads the clock: a function that needs "now" takes it as an argument.
 
-import { IST_OFFSET, STATS_MAX_DAYS, TICK_STALE_SECS } from './constants';
+import { IST_OFFSET, STATS_MAX_DAYS, TICKET_TYPES, TICK_STALE_SECS, type TicketType } from './constants';
 import { IST_OFFSET_MINUTES, isIstDate } from './business-hours';
 import type { Category, DeskHealth, TicketListItem, TicketView } from './types';
 
@@ -172,4 +172,15 @@ export function healthSummary(health: DeskHealth): HealthSummary {
         return { level: 'warn', text: `${lastTick} · ${count} messages without a ticket (oldest ${oldest}) · ${failed}` };
     }
     return { level: 'ok', text: `${lastTick} · no orphans · ${failed}` };
+}
+
+// ── Category lists ─────────────────────────────────────────────────────────
+
+export interface CategoryGroup { type: TicketType; items: Category[] }
+
+/** Groups in TICKET_TYPES order; inside a group the order received (sort_order) is kept. Empty groups are left out. */
+export function groupCategoriesByType(categories: readonly Category[]): CategoryGroup[] {
+    return TICKET_TYPES
+        .map((type) => ({ type, items: categories.filter((category) => category.type === type) }))
+        .filter((group) => group.items.length > 0);
 }

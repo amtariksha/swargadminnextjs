@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import type { DeskEnvelope, DeskErrorCode } from '@/lib/desk/contracts';
 import {
-    DeskClientError, deskPollInterval, deskRetry, ticketListPath, toResolveOutcome, unwrapDesk,
+    DeskClientError, deskPollInterval, deskRetry, describeDeskError, ticketListPath, toResolveOutcome, unwrapDesk,
 } from '@/lib/desk/desk-query';
 import type { TicketConflictData, TicketResolveResponse, TicketView } from '@/lib/desk/types';
 
@@ -107,5 +107,22 @@ describe('deskPollInterval', () => {
         expect(deskPollInterval(10000, new DeskClientError('authz_unavailable', 'm'))).toBe(10000);
         expect(deskPollInterval(10000, new DeskClientError('internal_error', 'm'))).toBe(10000);
         expect(deskPollInterval(10000, new Error('net'))).toBe(10000);
+    });
+});
+
+describe('describeDeskError', () => {
+    it('marks the resolve refusals as inline', () => {
+        expect(describeDeskError(new DeskClientError('note_required', 'm'))).toEqual({
+            code: 'note_required', text: 'This needs a note.', inline: true,
+        });
+    });
+    it('keeps other Desk errors out of the dialog and passes unknown text through', () => {
+        expect(describeDeskError(new DeskClientError('ticket_resolved', 'm')).inline).toBe(false);
+        expect(describeDeskError(new DeskClientError('internal_error', 'boom'))).toEqual({
+            code: 'internal_error', text: 'boom', inline: false,
+        });
+    });
+    it('treats a plain Error as internal_error', () => {
+        expect(describeDeskError(new Error('net'))).toEqual({ code: 'internal_error', text: 'net', inline: false });
     });
 });

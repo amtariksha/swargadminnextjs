@@ -1,11 +1,11 @@
-// Display texts for the Desk vocabularies. Each map is a Record over its union, so adding a value
-// to constants.ts without a label here fails the type check.
+// Display texts for the Desk vocabularies. Each map is a Record over its union: a missing label fails tsc.
 
 import type {
     ActionType, EventType, HoldReason, HumanResolutionCode, LostReason, ResolutionCode,
     TicketStatus, TicketType,
 } from './constants';
 import type { DeskErrorCode } from './contracts';
+import type { ResolveMissing } from './resolve-plan';
 
 export const TICKET_STATUS_LABEL: Record<TicketStatus, string> = {
     new: 'New',
@@ -94,7 +94,7 @@ export const ACTION_TITLE: Record<ActionType, string> = {
     app_link_sent: 'App link sent',
 };
 
-/** Presentation only: these codes are listed first in the resolution select. Every human code stays selectable. */
+/** Presentation only: listed first in the resolution select; every human code stays selectable. */
 export const USUAL_CODES_BY_TYPE: Record<TicketType, readonly HumanResolutionCode[]> = {
     complaint: ['explained', 'not_valid', 'no_action', 'no_response'],
     sales: ['won', 'lost', 'no_response'],
@@ -125,4 +125,26 @@ const ERROR_TEXT: Partial<Record<DeskErrorCode, string>> = {
 
 export function deskErrorText(code: DeskErrorCode, fallback: string): string {
     return ERROR_TEXT[code] ?? fallback;
+}
+
+export const TICKET_TYPE_LABEL: Record<TicketType, string> = {
+    complaint: 'Complaint',
+    sales: 'Sales',
+    request: 'Request',
+    enquiry: 'Enquiry',
+    other: 'Other',
+};
+
+const MISSING_ERROR_CODE: Record<ResolveMissing, DeskErrorCode> = {
+    category: 'category_required',
+    resolution_code: 'resolution_code_required',
+    note: 'note_required',
+    lost_reason: 'lost_reason_required',
+    duplicate_target: 'duplicate_target_required',
+    delivery_link: 'delivery_link_required',
+};
+
+/** The sentence for the first unmet resolve rule: the same text the server's 422 would give. */
+export function resolveMissingText(missing: ResolveMissing): string {
+    return deskErrorText(MISSING_ERROR_CODE[missing], 'Complete the form.');
 }

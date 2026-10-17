@@ -2,6 +2,7 @@
 // query keys. No React, no window. The hooks that use them live in ticket-hooks.ts.
 
 import type { DeskEnvelope, DeskErrorCode, TicketListView } from './contracts';
+import { deskErrorText } from './ticket-labels';
 import type { Queue, TicketStatus, TicketType } from './constants';
 import type { TicketConflictData, TicketResolveResponse, TicketView } from './types';
 
@@ -118,3 +119,14 @@ export const deskKeys = {
     ticketNo: (ticketNo: number) => ['desk', 'ticket-no', ticketNo] as const,
     ticket: (id: string) => ['desk', 'ticket', id] as const,
 };
+
+/** Refusals a dialog shows under its fields; every other error is a toast. */
+const INLINE_CODES: readonly DeskErrorCode[] = [
+    'category_required', 'resolution_code_required', 'note_required', 'lost_reason_required',
+    'duplicate_target_required', 'delivery_link_required',
+];
+
+export function describeDeskError(error: Error): { code: DeskErrorCode; text: string; inline: boolean } {
+    const code = error instanceof DeskClientError ? error.code : 'internal_error';
+    return { code, text: deskErrorText(code, error.message), inline: INLINE_CODES.includes(code) };
+}

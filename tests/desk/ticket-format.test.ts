@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-    categoryLabel, deskHref, formatIstDateTime, formatWaiting, healthSummary, inboxHref, isNewerInbound,
+    categoryLabel, deskHref, formatIstDateTime, formatWaiting, groupCategoriesByType, healthSummary, inboxHref, isNewerInbound,
     istIsoAfter, istIsoAt, listItemDiffers, nextIstClockIso, parseTabParam, parseTicketParam,
     validateRange, waitingSecsAt,
 } from '@/lib/desk/ticket-format';
@@ -209,5 +209,17 @@ describe('healthSummary', () => {
         const capped = healthSummary(withStats({ orphans: 100, orphans_capped: true, oldest_orphan_age_s: 7200 }));
         expect(capped.level).toBe('warn');
         expect(capped.text).toContain('100+ messages');
+    });
+});
+
+describe('groupCategoriesByType', () => {
+    const category = (slug: string, type: Category['type']) => ({ slug, type, label: slug }) as Category;
+    it('groups in type order, keeps the received order inside a group and drops empty groups', () => {
+        const groups = groupCategoriesByType([
+            category('b_enquiry', 'enquiry'), category('a_complaint', 'complaint'),
+            category('c_complaint', 'complaint'), category('d_sales', 'sales'),
+        ]);
+        expect(groups.map((group) => group.type)).toEqual(['complaint', 'sales', 'enquiry']);
+        expect(groups[0].items.map((item) => item.slug)).toEqual(['a_complaint', 'c_complaint']);
     });
 });

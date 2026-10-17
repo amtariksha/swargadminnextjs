@@ -83,7 +83,7 @@ export function presetDraft(preset: ResolvePreset, ticket: PlanTicket): ResolveD
     }
 }
 
-function noteIsRequired(draft: ResolveDraft): boolean {
+export function noteIsRequired(draft: ResolveDraft): boolean {
     const code = draft.resolution_code;
     if (code === null) return false;
     if ((NOTE_REQUIRED_CODES as readonly string[]).includes(code)) return true;
@@ -159,4 +159,35 @@ export function buildWrapUpBody(draft: ResolveDraft): Extract<TicketPatchBody, {
         ...(note !== '' ? { resolution_note: note } : {}),
         ...(draft.resolution_code === 'lost' && draft.lost_reason !== null ? { lost_reason: draft.lost_reason } : {}),
     };
+}
+
+const FIXED_CATEGORY_PRESETS: readonly ResolvePreset[] = ['spam', 'wrong_number', 'internal'];
+
+/**
+ * The draft for a preset and whether it needs the dialog regardless of completeness: "Duplicate of #N"
+ * always does, and so does a preset that would change the ticket's category to a suggestion.
+ */
+export function presetStart(
+    preset: ResolvePreset,
+    ticket: PlanTicket,
+    events: readonly TicketEvent[],
+): { draft: ResolveDraft; forceDialog: boolean } {
+    const base = presetDraft(preset, ticket);
+    const draft: ResolveDraft = preset === 'no_action' && base.category_slug !== null
+        ? { ...base, classification_source: classificationSourceFor(base.category_slug, ticket, events) }
+        : base;
+    const fixed = FIXED_CATEGORY_PRESETS.includes(preset) || draft.category_slug === ticket.category_slug;
+    return { draft, forceDialog: preset === 'duplicate' || !fixed };
+}
+
+/** The wrap-up dialog starts from the ticket's own resolution when it is a human code other than duplicate. */
+export function wrapUpDraft(
+    ticket: PlanTicket & Pick<Ticket, 'resolution_code'>,
+    category: PlanCategory | null,
+): ResolveDraft {
+    const base = initialResolveDraft(ticket, category);
+    const code = isHumanCode(ticket.resolution_code) && ticket.resolution_code !== 'duplicate'
+        ? ticket.resolution_code
+        : base.resolution_code;
+    return { ...base, resolution_code: code };
 }

@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     buildResolveBody, buildWrapUpBody, classificationSourceFor, initialResolveDraft, presetDraft,
-    resolveMissing, wrapUpMissing, type ResolveDraft,
+    presetStart, resolveMissing, wrapUpDraft, wrapUpMissing, type ResolveDraft,
 } from '@/lib/desk/resolve-plan';
 import type { Category, Ticket, TicketEvent } from '@/lib/desk/types';
 
@@ -185,5 +185,37 @@ describe('wrap-up', () => {
         expect(buildWrapUpBody(spoiled)).toEqual({
             op: 'wrap_up', category_slug: 'milk_spoilage', resolution_code: 'explained', resolution_note: 'x',
         });
+    });
+});
+
+describe('presetStart', () => {
+    it('posts at once for the fixed-category presets', () => {
+        for (const preset of ['spam', 'wrong_number', 'internal'] as const) {
+            expect(presetStart(preset, ticketOf(), []).forceDialog).toBe(false);
+        }
+    });
+    it('always opens the dialog for a duplicate', () => {
+        expect(presetStart('duplicate', ticketOf({ category_slug: 'general_enquiry' }), []).forceDialog).toBe(true);
+    });
+    it('posts "no action" at once only when the category is already on the ticket', () => {
+        expect(presetStart('no_action', ticketOf({ category_slug: 'general_enquiry' }), []).forceDialog).toBe(false);
+        expect(presetStart('no_action', ticketOf({ suggested_category: 'late_delivery' }), []).forceDialog).toBe(true);
+    });
+    it('takes the source of the suggestion when "no action" uses it', () => {
+        const ticket = ticketOf({ suggested_category: 'not_delivered' });
+        const { draft } = presetStart('no_action', ticket, [suggestedEvent(1, 'ai')]);
+        expect(draft).toMatchObject({ category_slug: 'not_delivered', classification_source: 'ai' });
+    });
+});
+
+describe('wrapUpDraft', () => {
+    const resolvedTicket = (code: Ticket['resolution_code']) => ({ ...ticketOf({ category_slug: 'general_enquiry' }), resolution_code: code });
+    it('starts from the ticket resolution when it is a human code', () => {
+        expect(wrapUpDraft(resolvedTicket('no_response'), CATEGORIES.general_enquiry).resolution_code).toBe('no_response');
+    });
+    it('falls back to the category default for duplicate and system-only codes', () => {
+        expect(wrapUpDraft(resolvedTicket('duplicate'), CATEGORIES.general_enquiry).resolution_code).toBe('answered');
+        expect(wrapUpDraft(resolvedTicket('closed_unclassified'), CATEGORIES.general_enquiry).resolution_code).toBe('answered');
+        expect(wrapUpDraft(resolvedTicket(null), null).resolution_code).toBeNull();
     });
 });
