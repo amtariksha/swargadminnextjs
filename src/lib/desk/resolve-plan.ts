@@ -163,10 +163,7 @@ export function buildWrapUpBody(draft: ResolveDraft): Extract<TicketPatchBody, {
 
 const FIXED_CATEGORY_PRESETS: readonly ResolvePreset[] = ['spam', 'wrong_number', 'internal'];
 
-/**
- * The draft for a preset and whether it needs the dialog regardless of completeness: "Duplicate of #N"
- * always does, and so does a preset that would change the ticket's category to a suggestion.
- */
+/** The draft for a preset, and whether it needs the dialog even when complete (a duplicate, or a category change). */
 export function presetStart(
     preset: ResolvePreset,
     ticket: PlanTicket,
@@ -186,8 +183,6 @@ export function wrapUpDraft(
     category: PlanCategory | null,
 ): ResolveDraft {
     const base = initialResolveDraft(ticket, category);
-    const code = isHumanCode(ticket.resolution_code) && ticket.resolution_code !== 'duplicate'
-        ? ticket.resolution_code
-        : base.resolution_code;
-    return { ...base, resolution_code: code };
+    const own = ticket.resolution_code;
+    return { ...base, resolution_code: isHumanCode(own) && own !== 'duplicate' ? own : base.resolution_code };
 }
