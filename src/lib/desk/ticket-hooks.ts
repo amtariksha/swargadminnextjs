@@ -113,7 +113,8 @@ export function useDeskQueue(
         staleTime: 0,
         refetchInterval: (query) => deskPollInterval(QUEUE_POLL_MS, query.state.error),
         refetchOnWindowFocus: true,
-        placeholderData: (previous) => previous,
+        // Keep the old rows while the queue filter changes, but never show another tab's rows under this tab.
+        placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[2].view === view ? previous : undefined),
         retry: deskRetry,
     });
 }
