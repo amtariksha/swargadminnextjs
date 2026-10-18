@@ -109,7 +109,7 @@ export function TicketHeader({ detail, tab, categories, resolveBlock, busy, acti
                         <button type="button" disabled={busy} onClick={actions.onOpenHold} className={SECONDARY}>
                             {ticket.status === 'on_hold' ? 'Change hold' : 'Hold'}
                         </button>
-                        <PresetMenu availableSlugs={new Set(categories.items.map((item) => item.slug))} disabled={resolveBlock !== null || busy} disabledReason={resolveBlock} onPick={actions.onPreset} />
+                        <PresetMenu availableSlugs={new Set(categories.items.map((item) => item.slug))} disabled={resolveBlock !== null || busy} disabledReason={resolveBlock} onPick={actions.onPreset} contact={{ phone: ticket.customer_phone, name: ticket.customer_name }} />
                         <button
                             type="button"
                             disabled={resolveBlock !== null || busy}

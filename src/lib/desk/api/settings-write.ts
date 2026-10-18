@@ -17,9 +17,10 @@ export async function readSettingsResponse(): Promise<DeskSettingsResponse> {
     if (!settings.readable) throw new DeskApiError('internal_error', 'Desk settings could not be read.');
     const known: Partial<Record<DeskSettingKey, string>> = {};
     for (const key of DESK_SETTING_KEYS) {
-        if (key in raw) known[key] = raw[key];
+        // Staff phone numbers never leave the server (planner decision Q-10); the tick alone writes them.
+        if (key in raw && key !== 'desk_staff_phones') known[key] = raw[key];
     }
-    return { settings, raw: known };
+    return { settings: { ...settings, staff_phones: [] }, raw: known };
 }
 
 async function writeSetting(key: DeskSettingKey, value: unknown): Promise<void> {
