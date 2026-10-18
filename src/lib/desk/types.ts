@@ -643,6 +643,8 @@ export interface DeskStats {
         recontact_72h_rate: number | null;
         classified_pct: number | null;
         handled_in_desk_pct: number | null;
+        /** Tickets of V whose category is in STATS_EXCLUDED_CATEGORIES (left out of every other block). */
+        excluded_tickets: number;
     };
     complaints: {
         total: number;
