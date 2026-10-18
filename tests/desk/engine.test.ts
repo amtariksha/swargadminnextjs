@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { deriveAndWrite, isAckMessage } from '@/lib/desk/engine';
+import { deriveAndWrite, isAckMessage, resolveBySystem } from '@/lib/desk/engine';
+import { buildInternalMatcher } from '@/lib/desk/internal-contacts';
 import {
     NOW, addMessage, addResolvedTicket, addTicket, attach, eventsOf, makeMessage, makeTicket, minutesAgo, setup, ts,
 } from './fake-repo';
@@ -476,5 +477,80 @@ describe('sanity of the fixtures', () => {
         expect(NOW.toISOString()).toBe('2026-10-12T06:30:00.000Z');
         expect(ts(60)).toBe('2026-10-12T06:29:00.123456+00:00');
         expect(makeTicket().status).toBe('open');
+    });
+});
+
+describe('internal contacts (P1e)', () => {
+    const STAFF = buildInternalMatcher({ staffPhones: ['9900000011'], flags: [] });
+
+    it('EI1 an internal phone with no ticket: skipped, unclaimed, no event', async () => {
+        const h = await setup({}, {}, STAFF);
+        const { message, result } = await attach(h, { created_at: minutesAgo(5) });
+        expect(result).toEqual({ outcome: 'internal_skipped', ticket_id: null, event_errors: 0 });
+        expect(h.fake.tickets).toHaveLength(0);
+        expect(message.ticket_id).toBeNull();
+        expect(h.fake.events).toHaveLength(0);
+    });
+
+    it('EI2 an open manual ticket on an internal phone still takes the message', async () => {
+        const h = await setup({}, {}, STAFF);
+        const ticket = addTicket(h.fake, { origin: 'manual', last_inbound_at: null });
+        const { message, result } = await attach(h, { created_at: minutesAgo(5) });
+        expect(result.outcome).toBe('appended');
+        expect(message.ticket_id).toBe(ticket.id);
+    });
+
+    it('EI3 an open inbound ticket on an internal phone does not take the message', async () => {
+        const h = await setup({}, {}, STAFF);
+        addTicket(h.fake, { last_inbound_at: minutesAgo(20) });
+        const { message, result } = await attach(h, { created_at: minutesAgo(5) });
+        expect(result.outcome).toBe('internal_skipped');
+        expect(message.ticket_id).toBeNull();
+    });
+
+    it('EI4 a resolved inbound ticket inside the window is not reopened; a manual one is', async () => {
+        const inbound = await setup({}, {}, STAFF);
+        addResolvedTicket(inbound.fake, { resolvedMinutesAgo: 30 });
+        expect((await attach(inbound, { created_at: minutesAgo(5) })).result.outcome).toBe('internal_skipped');
+        const manual = await setup({}, {}, STAFF);
+        addResolvedTicket(manual.fake, { resolvedMinutesAgo: 30 }, { origin: 'manual' });
+        expect((await attach(manual, { created_at: minutesAgo(5) })).result.outcome).toBe('reopened');
+    });
+
+    it('EI5 a customer flag on a staff phone, and any other phone, behave as before', async () => {
+        const override = buildInternalMatcher({ staffPhones: ['9900000011'], flags: [{ phone: '919900000011', kind: 'customer' }] });
+        expect((await attach(await setup({}, {}, override), { created_at: minutesAgo(5) })).result.outcome).toBe('created');
+        const other = buildInternalMatcher({ staffPhones: ['9811111111'], flags: [] });
+        expect((await attach(await setup({}, {}, other), { created_at: minutesAgo(5) })).result.outcome).toBe('created');
+    });
+
+    it('EI6 resolveBySystem internal: classifies, resolves, auto_internal then resolved', async () => {
+        const h = await setup({}, {}, STAFF);
+        const ticket = addTicket(h.fake, { status: 'on_hold', customer_phone: '919900000011', follow_up_at: minutesAgo(-60), hold_reason: 'other' });
+        const row = { id: ticket.id, status: ticket.status, customer_phone: ticket.customer_phone }; // as the repo returns it
+        const result = await resolveBySystem(h.ctx, row, 'internal', { kind: 'internal' });
+        expect(result).toEqual({ outcome: 'resolved', event_errors: 0 });
+        expect(ticket).toMatchObject({
+            status: 'resolved', resolved_at: NOW.toISOString(), resolution_code: 'no_action', resolved_via: 'system',
+            category_slug: 'internal', type: 'other', classified_at: NOW.toISOString(), classified_by: null,
+            classification_source: null, follow_up_at: null, hold_reason: null, first_resolved_code: 'no_action',
+        });
+        expect(h.fake.events.map((e) => [e.type, e.from_status, e.to_status, e.actor_id, e.data])).toEqual([
+            ['auto_internal', null, null, 'system', { source: 'staff_list' }],
+            ['resolved', 'on_hold', 'resolved', 'system', {
+                resolution_code: 'no_action', resolved_via: 'system', note: null, lost_reason: null, action_id: null, duplicate_of_ticket_no: null,
+            }],
+        ]);
+    });
+
+    it('EI7 resolveBySystem internal skips a manual ticket and a phone that is not internal', async () => {
+        const h = await setup({}, {}, STAFF);
+        const manual = addTicket(h.fake, { origin: 'manual', customer_phone: '919900000011' });
+        expect((await resolveBySystem(h.ctx, manual, 'internal', { kind: 'internal' })).outcome).toBe('skipped');
+        const customer = addTicket(h.fake, { conversation_id: 'C2', customer_phone: '919811111111' });
+        expect((await resolveBySystem(h.ctx, customer, 'internal', { kind: 'internal' })).outcome).toBe('skipped');
+        expect(manual.status).toBe('open');
+        expect(customer.status).toBe('open');
+        expect(h.fake.calls.resolveSystem).toBe(1);
     });
 });

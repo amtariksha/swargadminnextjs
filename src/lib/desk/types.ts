@@ -1,7 +1,7 @@
 // AD/src/lib/desk/types.ts — shapes of rows and of derived values. Field names are the
 // database column names. The only runtime export is TICKET_LIST_COLUMNS.
 import type {
-    ActionType, AckSuppressMode, Channel, ClassificationSource, CustomerMatch,
+    ActionType, AckSuppressMode, Channel, ClassificationSource, ContactFlagKind, CustomerMatch,
     DayOrderPaymentStep, DaytimePaymentStatus, DeadlineRule, DeliveryStatusCode, DeskSettingKey, DeskVia,
     EscalationReason, EventType, FirstResponseSource, HoldReason, LinkStatus, LostReason,
     MarkPaidMode, Origin, Queue, RefType, ReopenReason, ReportGroup, ResolutionCode,
@@ -252,6 +252,8 @@ export interface EventDataMap {
     lead_updated: { lead_id: string; lead_status: 'lost'; lost_reason: LostReason | null };
     reviewed: { root_cause: RootCause | null; preventive_action: string | null; review_note: string | null };
     cutoff_alerted: { cutoff: string; reason: 'awaiting_reply' | 'unclassified' | 'before_cutoff' };
+    /** The tick closed the ticket because the contact is internal. No phone number in here. */
+    auto_internal: { source: 'staff_list' | 'flag' };
 }
 
 interface TicketEventBase {
@@ -386,6 +388,8 @@ export interface DeskSettings {
     business_hours: BusinessHours;
     credit_max_agent: number;
     last_tick_at: IsoDateTime | null;
+    /** desk_staff_phones: 10-digit phones of backend staff, as last sent by the backend tick. */
+    staff_phones: string[];
     /** false when the settings read failed; every flag is then off and every number is its default. */
     readable: boolean;
 }
@@ -443,6 +447,7 @@ export interface DeskTickResult {
         missing?: DeskTickStepBase & { scanned: number; flagged: number };
         lifecycle?: DeskTickStepBase & { followups_due: number; idle_closed: number; ack_closed: number; cutoff_watch: number };
         health?: DeskTickStepBase & { orphans: number; orphans_capped: boolean; oldest_orphan_age_s: number | null; failed_replies_24h: number; stats_written: boolean };
+        internal?: DeskTickStepBase & { staff_list: number | null; flags: number; skipped_messages: number; resolved: number };
     };
 }
 /** Parsed value of the setting desk_last_tick_stats. */
@@ -712,3 +717,43 @@ export interface DeskReview {
         tick_stale: boolean;
     };
 }
+
+// ── Slice 2 · P1e: internal contacts ───────────────────────────────────────
+/** One row of desk_contact_flags. phone is the 10-digit form. */
+export interface ContactFlag {
+    id: number;
+    phone: string;
+    kind: ContactFlagKind;
+    label: string | null;
+    added_by: StaffId;
+    added_by_name: string | null;
+    added_at: IsoDateTime;
+    removed_at: IsoDateTime | null;
+    removed_by: StaffId | null;
+    removed_by_name: string | null;
+}
+export interface ContactFlagsResponse { items: ContactFlag[] }
+export interface ContactFlagResponse { item: ContactFlag }
+export interface InternalConversationItem {
+    conversation_id: string;
+    integrated_number: string | null;
+    contact_name: string | null;
+    /** Last four digits of the contact's phone. */
+    phone_tail: string;
+    source: 'staff_list' | 'flag';
+    last_inbound_at: IsoDateTime | null;
+    /** The flag's label when source is 'flag'. */
+    label: string | null;
+}
+export interface InternalConversationsResponse { items: InternalConversationItem[] }
+
+/** `data` of GET /api/support/delivery-counts. */
+export interface DeliveryCounts {
+    from: IstDate;
+    to: IstDate;
+    total: { stops: number; delivered_stops: number; not_delivered_stops: number; delivered_qty: number };
+    by_day: Array<{ day: IstDate; stops: number; delivered_stops: number; not_delivered_stops: number; delivered_qty: number }>;
+    by_driver: Array<{ driver_id: number; driver_name: string | null; stops: number; delivered_stops: number; not_delivered_stops: number; delivered_qty: number }>;
+    by_product: Array<{ product_id: number; product_title: string | null; delivered_qty: number }>;
+}
+// Slice 2 · P1e

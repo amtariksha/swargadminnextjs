@@ -1,7 +1,7 @@
 // AD/src/lib/desk/contracts.ts — one zod schema per request, and the envelope.
 import { z } from 'zod';
 import {
-    ACK_SUPPRESS_MODES, CLASSIFICATION_SOURCES, CUSTOMER_MATCHES, DAY_ORDER_PAYMENT_STEPS,
+    ACK_SUPPRESS_MODES, CLASSIFICATION_SOURCES, CONTACT_FLAG_KINDS, CUSTOMER_MATCHES, DAY_ORDER_PAYMENT_STEPS,
     DAYTIME_PAYMENT_STATUSES, DEADLINE_RULES, DESK_VIA, ESCALATION_REASONS,
     EXEC_HOLD_REASONS, HUMAN_RESOLUTION_CODES, LINK_STATUSES, LIST_MAX_LIMIT, LOST_REASONS,
     MARK_PAID_MODES, MESSAGES_MAX_LIMIT, QUEUES, REPORT_GROUPS, ROOT_CAUSES,
@@ -432,3 +432,28 @@ export const whoamiData = z.object({
 /** The backend envelope, as far as AD needs it. */
 export const backendEnvelope = <T extends z.ZodType>(data: T) =>
     z.object({ response: z.number(), status: z.boolean().optional(), message: z.string().optional(), data });
+
+// ── Slice 2 · P1e: tick body and internal contacts ─────────────────────────
+/** Body of POST /api/agent-tools/desk/tick. Not strict: unknown keys are ignored. */
+export const tickBody = z.object({
+    staff_phones: z.array(z.string().regex(/^[0-9]{10}$/)).max(5000).optional(),
+});
+const flagLabel = z.string().trim().min(1).max(80);
+export const contactFlagsQuery = z.strictObject({
+    kind: z.enum(CONTACT_FLAG_KINDS).optional(),
+    /** Manager only. */
+    include_removed: z.literal('1').optional(),
+    limit: limitSchema,
+});
+export const contactFlagCreateBody = z.strictObject({
+    phone: numberSchema,
+    kind: z.enum(CONTACT_FLAG_KINDS),
+    label: flagLabel.optional(),
+});
+export const contactFlagPatchBody = z.strictObject({
+    id: positiveInt,
+    removed: z.literal(true),
+    label: flagLabel.optional(),
+});
+export const internalConversationsQuery = z.strictObject({ limit: limitSchema });
+// Slice 2 · P1e

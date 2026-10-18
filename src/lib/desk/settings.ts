@@ -11,6 +11,8 @@ import { parseHHMM } from './business-hours';
 import type { DeskRepo, SettingRow } from './repo';
 import type { BusinessHours, DeskSettings } from './types';
 
+const TEN_DIGITS = /^[0-9]{10}$/;
+
 export const DESK_GO_LIVE_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{2}:\d{2})$/;
 
 const DEFAULT_BUSINESS_HOURS: BusinessHours = {
@@ -36,6 +38,7 @@ export function allOffDeskSettings(): DeskSettings {
         business_hours: { ...DEFAULT_BUSINESS_HOURS, days: [...DEFAULT_BUSINESS_HOURS.days] },
         credit_max_agent: SETTING_DEFAULTS.desk_credit_max_agent,
         last_tick_at: null,
+        staff_phones: [],
         readable: false,
     };
 }
@@ -85,6 +88,14 @@ function parseNumberQueues(value: string | undefined): Record<string, Queue> {
     return queues;
 }
 
+/** desk_staff_phones: a JSON array of 10-digit strings. Not an array = []; other elements are dropped. */
+function parseStaffPhones(value: string | undefined): string[] {
+    const parsed = parseJson(value);
+    if (!Array.isArray(parsed)) return [];
+    const phones = parsed.filter((phone): phone is string => typeof phone === 'string' && TEN_DIGITS.test(phone));
+    return [...new Set(phones)].sort();
+}
+
 function parseBusinessHours(value: string | undefined): BusinessHours {
     const parsed = parseJson(value);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return { ...DEFAULT_BUSINESS_HOURS };
@@ -127,6 +138,7 @@ export function parseDeskSettings(rows: ReadonlyArray<SettingRow>): DeskSettings
         business_hours: parseBusinessHours(get('desk_business_hours')),
         credit_max_agent: parseBounded(get('desk_credit_max_agent'), { min: 0, max: 5000 }, SETTING_DEFAULTS.desk_credit_max_agent),
         last_tick_at: Number.isFinite(Date.parse(get('desk_last_tick_at') ?? '')) ? (get('desk_last_tick_at') as string) : null,
+        staff_phones: parseStaffPhones(get('desk_staff_phones')),
         readable: true,
     };
 }

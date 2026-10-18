@@ -7,9 +7,11 @@ import { supabaseAdmin } from '@/lib/whatsapp/supabase';
 import { lmsAdmin } from '@/lib/lms/supabase';
 import { DESK_SETTING_KEYS } from './constants';
 import { DESK_MESSAGE_COLUMNS } from './clock';
+import { phoneVariants } from './phone';
 import {
     DESK_QUERY_TIMEOUT_MS, DESK_TICKET_CLOCK_COLUMNS, classifyDeskDbError, reportNotInstalled,
-    type ConversationRow, type DeskDb, type DeskRepo, type EngineCategory, type LatestResolvedRow,
+    type ContactFlagRow, type ConversationRow, type DeskDb, type DeskRepo, type EngineCategory, type InternalTicketRow,
+    type LatestResolvedRow,
     type MessageRow, type MirrorTicketRow, type OpenConversationRow, type ProbeTarget, type ResolvedTicketRow,
     type SettingRow, type TicketClockRow, type TicketStubRow, type UnresolvedTicketRow,
 } from './repo';
@@ -30,7 +32,18 @@ const embedded = <T>(value: unknown): T | null => (Array.isArray(value) ? ((valu
 
 const CONVERSATION_COLUMNS = 'id, contact_id, integrated_number, contacts(id, name, phone)';
 const RESOLVED_COLUMNS =
-    'id, opened_at, resolved_at, resolved_by, resolved_by_name, resolution_code, resolution_note, resolved_via, lost_reason, reopen_count, last_outbound_at';
+    'id, opened_at, resolved_at, resolved_by, resolved_by_name, resolution_code, resolution_note, resolved_via, lost_reason, reopen_count, last_outbound_at, origin';
+const IN_CHUNK = 100;
+
+/** PostgREST filter that keeps rows without a conversation and drops the listed conversations. */
+const notInConversations = (ids: readonly string[]): string =>
+    `conversation_id.is.null,conversation_id.not.in.(${ids.join(',')})`;
+
+function chunked<T>(items: readonly T[]): T[][] {
+    const chunks: T[][] = [];
+    for (let index = 0; index < items.length; index += IN_CHUNK) chunks.push(items.slice(index, index + IN_CHUNK));
+    return chunks;
+}
 
 function createExec(runSignal?: AbortSignal): Exec {
     const signalFor = (): AbortSignal => (
@@ -92,11 +105,13 @@ function readMethods(exec: Exec): Pick<DeskRepo,
     'listUnticketedInbound' | 'getConversation' | 'listActiveCategories' | 'findKnownCustomer'
     | 'getUnresolvedTicket' | 'getLatestResolvedTicket' | 'listConversationMessages' | 'getTicketClock'> {
     return {
-        listUnticketedInbound: (afterIso, beforeIso, limit) => exec('messages', (signal) => supabaseAdmin
-            .from('messages').select(DESK_MESSAGE_COLUMNS).eq('direction', 'inbound').is('ticket_id', null)
-            .gt('created_at', afterIso).lt('created_at', beforeIso)
-            .order('created_at', { ascending: true }).limit(limit).abortSignal(signal),
-        (data) => rowsOf<MessageRow>(data)),
+        listUnticketedInbound: (afterIso, beforeIso, limit, exclude) => exec('messages', (signal) => {
+            const base = supabaseAdmin
+                .from('messages').select(DESK_MESSAGE_COLUMNS).eq('direction', 'inbound').is('ticket_id', null)
+                .gt('created_at', afterIso).lt('created_at', beforeIso);
+            const kept = exclude.length === 0 ? base : base.or(notInConversations(exclude));
+            return kept.order('created_at', { ascending: true }).limit(limit).abortSignal(signal);
+        }, (data) => rowsOf<MessageRow>(data)),
         getConversation: (conversationId) => exec('conversations', (signal) => supabaseAdmin
             .from('conversations').select(CONVERSATION_COLUMNS).eq('id', conversationId)
             .limit(1).abortSignal(signal).maybeSingle(), (data): ConversationRow | null => {
@@ -117,7 +132,7 @@ function readMethods(exec: Exec): Pick<DeskRepo,
             });
         },
         getUnresolvedTicket: (conversationId) => exec('desk_tickets', (signal) => supabaseAdmin
-            .from('desk_tickets').select('id, status, last_inbound_at, category_slug, suggested_type, priority')
+            .from('desk_tickets').select('id, status, last_inbound_at, category_slug, suggested_type, priority, origin')
             .eq('conversation_id', conversationId).neq('status', 'resolved')
             .limit(1).abortSignal(signal).maybeSingle(), (data) => oneOf<UnresolvedTicketRow>(data)),
         getLatestResolvedTicket: (conversationId) => exec('desk_tickets', (signal) => supabaseAdmin
@@ -157,6 +172,9 @@ function ticketTransitionMethods(exec: Exec): Pick<DeskRepo, 'insertTicket' | 't
             .select('id').abortSignal(signal), countOf),
         resolveSystem: (id, patch, guard) => exec('desk_tickets', (signal) => {
             const base = supabaseAdmin.from('desk_tickets').update(patch).eq('id', id);
+            if (guard.kind === 'internal') {
+                return base.neq('status', 'resolved').neq('origin', 'manual').select('id').abortSignal(signal);
+            }
             if (guard.kind === 'idle') {
                 return base.eq('status', 'waiting_customer').is('awaiting_reply_since', null)
                     .lte('last_outbound_at', guard.idleCutoffIso).select('id').abortSignal(signal);
@@ -232,7 +250,7 @@ function deriveAndMirrorLists(exec: Exec): Pick<DeskRepo,
             .gte('created_at', sinceIso).order('created_at', { ascending: true }).limit(limit).abortSignal(signal),
         (data) => rowsOf<{ id: string; ticket_id: string; created_at: string }>(data)),
         listResolvedTicketsByIds: (ids) => exec('desk_tickets', (signal) => tickets()
-            .select('id, status, resolved_at, resolved_by, resolved_by_name, resolution_code, resolution_note, resolved_via, lost_reason, reopen_count, last_outbound_at, is_ack_only')
+            .select('id, status, resolved_at, resolved_by, resolved_by_name, resolution_code, resolution_note, resolved_via, lost_reason, reopen_count, last_outbound_at, is_ack_only, customer_phone, origin')
             .in('id', [...ids]).eq('status', 'resolved').limit(100).abortSignal(signal), (data) => rowsOf<ResolvedTicketRow>(data)),
         listSuppressedAckMessageIds: (ticketId) => exec('desk_ticket_events', (signal) => supabaseAdmin
             .from('desk_ticket_events').select('data').eq('ticket_id', ticketId).eq('type', 'ack_suppressed')
@@ -270,11 +288,13 @@ function missingLifecycleAndHealthLists(exec: Exec): Pick<DeskRepo,
             .select('id').eq('is_ack_only', true).in('status', ['new', 'open', 'waiting_customer']).lte('last_inbound_at', ackCutoffIso)
             .order('last_inbound_at', { ascending: true }).limit(limit).abortSignal(signal), idsOf('id')),
         listCutoffWatchIds: (beforeCutoffSlugs, limit) => listCutoffWatch(exec, beforeCutoffSlugs, limit),
-        listOrphans: (afterIso, beforeIso, limit) => exec('messages', (signal) => supabaseAdmin
-            .from('messages').select('id, created_at').eq('direction', 'inbound').is('ticket_id', null)
-            .gt('created_at', afterIso).lt('created_at', beforeIso)
-            .order('created_at', { ascending: true }).limit(limit).abortSignal(signal),
-        (data) => rowsOf<{ id: string; created_at: string }>(data)),
+        listOrphans: (afterIso, beforeIso, limit, exclude) => exec('messages', (signal) => {
+            const base = supabaseAdmin
+                .from('messages').select('id, created_at').eq('direction', 'inbound').is('ticket_id', null)
+                .gt('created_at', afterIso).lt('created_at', beforeIso);
+            const kept = exclude.length === 0 ? base : base.or(notInConversations(exclude));
+            return kept.order('created_at', { ascending: true }).limit(limit).abortSignal(signal);
+        }, (data) => rowsOf<{ id: string; created_at: string }>(data)),
         listFailedPanelReplyIds: (sinceIso, limit) => exec('messages', (signal) => supabaseAdmin
             .from('messages').select('id').eq('direction', 'outbound').eq('status', 'failed').eq('source', 'webapp')
             .gte('created_at', sinceIso).limit(limit).abortSignal(signal), idsOf('id')),
@@ -294,6 +314,61 @@ async function listCutoffWatch(exec: Exec, slugs: readonly string[], limit: numb
     return { outcome: 'ok', data: distinct([...waiting.data, ...deadline.data]) };
 }
 
+// ── Slice 2 · P1e — internal contacts ───────────────────────────────────────
+
+async function listInternalConversationIds(
+    exec: Exec, phones: readonly string[], sinceIso: string, limit: number,
+): Promise<DeskDb<string[]>> {
+    const variants = [...new Set(phones.flatMap((phone) => phoneVariants(phone)))];
+    const contactIds: string[] = [];
+    for (const part of chunked(variants)) {
+        const read = await exec('contacts', (signal) => supabaseAdmin
+            .from('contacts').select('id').in('phone', part).limit(1000).abortSignal(signal), idsOf('id'));
+        if (read.outcome !== 'ok') return read;
+        contactIds.push(...read.data);
+    }
+    const found: Array<{ id: string; last_incoming_timestamp: string }> = [];
+    for (const part of chunked(distinct(contactIds))) {
+        const read = await exec('conversations', (signal) => supabaseAdmin
+            .from('conversations').select('id, last_incoming_timestamp').in('contact_id', part)
+            .gt('last_incoming_timestamp', sinceIso).order('last_incoming_timestamp', { ascending: false })
+            .limit(limit).abortSignal(signal), (data) => rowsOf<{ id: string; last_incoming_timestamp: string }>(data));
+        if (read.outcome !== 'ok') return { outcome: read.outcome, data: null };
+        found.push(...read.data);
+    }
+    const newestFirst = found.sort((a, b) => Date.parse(b.last_incoming_timestamp) - Date.parse(a.last_incoming_timestamp));
+    return { outcome: 'ok', data: distinct(newestFirst.map((row) => String(row.id))).slice(0, limit) };
+}
+
+async function listUnresolvedTicketsForPhones(
+    exec: Exec, whatsAppPhones: readonly string[], limit: number,
+): Promise<DeskDb<InternalTicketRow[]>> {
+    const rows: InternalTicketRow[] = [];
+    for (const part of chunked(distinct(whatsAppPhones))) {
+        const read = await exec('desk_tickets', (signal) => supabaseAdmin
+            .from('desk_tickets').select('id, status, customer_phone, origin').in('customer_phone', part)
+            .neq('status', 'resolved').neq('origin', 'manual').order('opened_at', { ascending: true })
+            .limit(limit).abortSignal(signal), (data) => rowsOf<InternalTicketRow>(data));
+        if (read.outcome !== 'ok') return read;
+        rows.push(...read.data);
+    }
+    return { outcome: 'ok', data: rows.slice(0, limit) };
+}
+
+function internalMethods(exec: Exec): Pick<DeskRepo, 'readContactFlags' | 'listInternalConversationIds' | 'listUnresolvedTicketsForPhones'> {
+    return {
+        readContactFlags: () => exec('desk_contact_flags', (signal) => supabaseAdmin
+            .from('desk_contact_flags').select('phone, kind').is('removed_at', null)
+            .limit(5000).abortSignal(signal), (data) => rowsOf<ContactFlagRow>(data)),
+        listInternalConversationIds: (phones, sinceIso, limit) => (phones.length === 0
+            ? Promise.resolve({ outcome: 'ok', data: [] })
+            : listInternalConversationIds(exec, phones, sinceIso, limit)),
+        listUnresolvedTicketsForPhones: (whatsAppPhones, limit) => (whatsAppPhones.length === 0
+            ? Promise.resolve({ outcome: 'ok', data: [] })
+            : listUnresolvedTicketsForPhones(exec, whatsAppPhones, limit)),
+    };
+}
+
 export function createSupabaseDeskRepo(options: { runSignal?: AbortSignal } = {}): DeskRepo {
     const exec = createExec(options.runSignal);
     return {
@@ -304,5 +379,6 @@ export function createSupabaseDeskRepo(options: { runSignal?: AbortSignal } = {}
         ...linkMethods(exec),
         ...deriveAndMirrorLists(exec),
         ...missingLifecycleAndHealthLists(exec),
+        ...internalMethods(exec),
     };
 }

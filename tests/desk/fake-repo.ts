@@ -6,9 +6,12 @@
 import type { ResolvedVia } from '@/lib/desk/constants';
 import { attachInbound, type AttachResult, type ConversationContext, type EngineContext } from '@/lib/desk/engine';
 import { readDeskSettings } from '@/lib/desk/settings';
+import { EMPTY_INTERNAL_MATCHER, type InternalMatcher } from '@/lib/desk/internal-contacts';
+import { phoneVariants } from '@/lib/desk/phone';
 import {
     classifyDeskDbError,
-    type ConversationRow, type ContactBrief, type DeskDb, type DeskRepo, type EngineCategory, type LatestResolvedRow,
+    type ContactFlagRow, type ConversationRow, type ContactBrief, type DeskDb, type DeskRepo, type EngineCategory,
+    type InternalTicketRow, type LatestResolvedRow,
     type MessageRow, type ResolvedTicketRow, type TicketClockRow, type UnresolvedTicketRow,
 } from '@/lib/desk/repo';
 import { DESK_SETTING_KEYS } from '@/lib/desk/constants';
@@ -25,7 +28,7 @@ export function ts(secondsAgo: number): string {
 export const minutesAgo = (minutes: number): string => ts(minutes * 60);
 export const hoursAgo = (hours: number): string => ts(hours * 3600);
 
-export type InstallMode = 'ok' | 'no_015a' | 'no_015b' | 'no_service_key';
+export type InstallMode = 'ok' | 'no_015a' | 'no_015b' | 'no_service_key' | 'no_016';
 
 export interface FakeConversation {
     id: string;
@@ -56,6 +59,7 @@ export interface FakeSeed {
     categories?: EngineCategory[];
     knownCustomers?: Array<{ phone: string; backend_user_id: number }>;
     settings?: Record<string, string>;
+    flags?: ContactFlagRow[];
 }
 
 export interface FakeDeskRepo extends DeskRepo {
@@ -66,6 +70,9 @@ export interface FakeDeskRepo extends DeskRepo {
     categories: EngineCategory[];
     knownCustomers: Array<{ phone: string; backend_user_id: number }>;
     settings: Map<string, string>;
+    flags: ContactFlagRow[];
+    /** Keys passed to writeTickSetting that changed a row, in order. */
+    settingWrites: string[];
     writes: Array<{ table: string; columns: string[] }>;
     calls: Record<string, number>;
     failNext(method: keyof DeskRepo, code: string, times?: number): void;
@@ -124,7 +131,7 @@ export const FIXTURE_CATEGORIES: EngineCategory[] = [
     { slug: 'cancel_subscription', type: 'request', priority: 3, sort_order: 4, active: true, keywords: ['cancel subscription'], default_resolution_code: null, deadline_rule: 'before_cutoff' },
 ];
 
-/** The 16 desk_* rows as seeded by migration 015a, with the fixture go-live and the engine on. */
+/** The 17 desk_* rows as seeded by migrations 015a and 016, with the fixture go-live and the engine on. */
 export function defaultSettings(overrides: Record<string, string> = {}): Record<string, string> {
     return {
         desk_engine_enabled: '1', desk_inline_hooks: '0', desk_ui_enabled: '0', desk_cutover_redirect: '0',
@@ -133,7 +140,7 @@ export function defaultSettings(overrides: Record<string, string> = {}): Record<
         desk_reply_alert_mins: '15',
         desk_number_queues: '{"917090166111":"sales","917996196111":"care"}',
         desk_business_hours: '{"start":"05:30","end":"22:00","days":[0,1,2,3,4,5,6]}',
-        desk_credit_max_agent: '200', desk_last_tick_at: '', desk_last_tick_stats: '',
+        desk_credit_max_agent: '200', desk_last_tick_at: '', desk_last_tick_stats: '', desk_staff_phones: '[]',
         ...overrides,
     };
 }
@@ -152,6 +159,8 @@ export function createFakeDeskRepo(seed: FakeSeed = {}): FakeDeskRepo {
     const tickets = (seed.tickets ?? []).map(makeTicket);
     const categories = [...(seed.categories ?? FIXTURE_CATEGORIES)];
     const knownCustomers = [...(seed.knownCustomers ?? [])];
+    const flags = [...(seed.flags ?? [])];
+    const settingWrites: string[] = [];
     const settings = new Map(Object.entries(seed.settings ?? defaultSettings()));
     const events: FakeEvent[] = [];
     const writes: Array<{ table: string; columns: string[] }> = [];
@@ -221,6 +230,8 @@ export function createFakeDeskRepo(seed: FakeSeed = {}): FakeDeskRepo {
         { id: c.id, contact_id: c.contact_id, integrated_number: c.integrated_number, contacts: c.contacts }
     );
     const idList = (rows: Array<{ id: string }>): DeskDb<string[]> => ok(rows.map((row) => row.id));
+    /** PostgREST "conversation_id is null or not in (…)": a message without a conversation is never excluded. */
+    const excluded = (m: MessageRow, ids: readonly string[]): boolean => typeof m.conversation_id === 'string' && ids.includes(m.conversation_id);
     const visibleSettingKeys = (): string[] => (install === 'no_015a' ? [] : [...settings.keys()].filter((k) => (DESK_SETTING_KEYS as readonly string[]).includes(k)));
 
     const repo: DeskRepo = {
@@ -228,14 +239,15 @@ export function createFakeDeskRepo(seed: FakeSeed = {}): FakeDeskRepo {
         writeTickSetting: wrap('writeTickSetting', 'settings', (key, value) => {
             if (install === 'no_015a' || !settings.has(key)) return ok(0);
             settings.set(key, value);
+            settingWrites.push(key);
             record('app_settings', ['value']);
             return ok(1);
         }),
         probe: wrap('probe', (target: string): Kind => (target.startsWith('messages.') ? 'messagesNew' : 'desk'), () => ok(true as const)),
         probeWrite: wrap('probeWrite', 'desk', () => ok(true as const)),
 
-        listUnticketedInbound: wrap('listUnticketedInbound', 'messagesNew', (afterIso, beforeIso, limit) => ok(
-            messages.filter((m) => m.direction === 'inbound' && m.ticket_id === null
+        listUnticketedInbound: wrap('listUnticketedInbound', 'messagesNew', (afterIso, beforeIso, limit, exclude) => ok(
+            messages.filter((m) => m.direction === 'inbound' && m.ticket_id === null && !excluded(m, exclude)
                 && parse(m.created_at) > parse(afterIso) && parse(m.created_at) < parse(beforeIso))
                 .sort((a, b) => parse(a.created_at) - parse(b.created_at)).slice(0, limit).map((m) => ({ ...m })),
         )),
@@ -251,12 +263,12 @@ export function createFakeDeskRepo(seed: FakeSeed = {}): FakeDeskRepo {
 
         getUnresolvedTicket: wrap('getUnresolvedTicket', 'desk', (conversationId) => {
             const found = tickets.find((t) => t.conversation_id === conversationId && UNRESOLVED(t));
-            return ok(found ? pick<UnresolvedTicketRow>(found, ['id', 'status', 'last_inbound_at', 'category_slug', 'suggested_type', 'priority']) : null);
+            return ok(found ? pick<UnresolvedTicketRow>(found, ['id', 'status', 'last_inbound_at', 'category_slug', 'suggested_type', 'priority', 'origin']) : null);
         }),
         getLatestResolvedTicket: wrap('getLatestResolvedTicket', 'desk', (conversationId) => {
             const found = tickets.filter((t) => t.conversation_id === conversationId && t.status === 'resolved')
                 .sort((a, b) => parse(b.resolved_at as string) - parse(a.resolved_at as string))[0];
-            return ok(found ? pick<LatestResolvedRow>(found, ['id', 'opened_at', 'resolved_at', 'resolved_by', 'resolved_by_name', 'resolution_code', 'resolution_note', 'resolved_via', 'lost_reason', 'reopen_count', 'last_outbound_at']) : null);
+            return ok(found ? pick<LatestResolvedRow>(found, ['id', 'opened_at', 'resolved_at', 'resolved_by', 'resolved_by_name', 'resolution_code', 'resolution_note', 'resolved_via', 'lost_reason', 'reopen_count', 'last_outbound_at', 'origin']) : null);
         }),
         listConversationMessages: wrap('listConversationMessages', 'messagesNew', (conversationId, fromIso, limit, offset) => ok(
             messages.filter((m) => m.conversation_id === conversationId && parse(m.created_at) >= parse(fromIso))
@@ -293,7 +305,9 @@ export function createFakeDeskRepo(seed: FakeSeed = {}): FakeDeskRepo {
         resolveSystem: wrap('resolveSystem', 'desk', (id, patch, guard) => {
             const t = findTicket(id);
             if (!t) return ok(0);
-            const passes = guard.kind === 'idle'
+            const passes = guard.kind === 'internal'
+                ? UNRESOLVED(t) && t.origin !== 'manual'
+                : guard.kind === 'idle'
                 ? t.status === 'waiting_customer' && t.awaiting_reply_since === null && t.last_outbound_at !== null && parse(t.last_outbound_at) <= parse(guard.idleCutoffIso)
                 : guard.kind === 'ack'
                     ? t.is_ack_only && t.status !== 'resolved' && t.status !== 'on_hold' && t.last_inbound_at !== null && parse(t.last_inbound_at) <= parse(guard.ackCutoffIso)
@@ -358,7 +372,7 @@ export function createFakeDeskRepo(seed: FakeSeed = {}): FakeDeskRepo {
         )),
         listResolvedTicketsByIds: wrap('listResolvedTicketsByIds', 'desk', (ids) => ok(
             tickets.filter((t) => t.status === 'resolved' && ids.includes(t.id)).slice(0, 100)
-                .map((t) => pick<ResolvedTicketRow>(t, ['id', 'status', 'resolved_at', 'resolved_by', 'resolved_by_name', 'resolution_code', 'resolution_note', 'resolved_via', 'lost_reason', 'reopen_count', 'last_outbound_at', 'is_ack_only'])),
+                .map((t) => pick<ResolvedTicketRow>(t, ['id', 'status', 'resolved_at', 'resolved_by', 'resolved_by_name', 'resolution_code', 'resolution_note', 'resolved_via', 'lost_reason', 'reopen_count', 'last_outbound_at', 'is_ack_only', 'customer_phone', 'origin'])),
         )),
         listSuppressedAckMessageIds: wrap('listSuppressedAckMessageIds', 'desk', (ticketId) => ok(
             events.filter((e) => e.ticket_id === ticketId && e.type === 'ack_suppressed')
@@ -401,17 +415,32 @@ export function createFakeDeskRepo(seed: FakeSeed = {}): FakeDeskRepo {
             ...(slugs.length === 0 ? [] : tickets.filter((t) => UNRESOLVED(t) && t.category_slug !== null && slugs.includes(t.category_slug)).slice(0, limit).map((t) => t.id)),
         ])])),
 
-        listOrphans: wrap('listOrphans', 'messagesNew', (afterIso, beforeIso, limit) => ok(
-            messages.filter((m) => m.direction === 'inbound' && m.ticket_id === null && parse(m.created_at) > parse(afterIso) && parse(m.created_at) < parse(beforeIso))
+        listOrphans: wrap('listOrphans', 'messagesNew', (afterIso, beforeIso, limit, exclude) => ok(
+            messages.filter((m) => m.direction === 'inbound' && m.ticket_id === null && !excluded(m, exclude) && parse(m.created_at) > parse(afterIso) && parse(m.created_at) < parse(beforeIso))
                 .sort((a, b) => parse(a.created_at) - parse(b.created_at)).slice(0, limit).map((m) => ({ id: m.id, created_at: m.created_at })),
         )),
         listFailedPanelReplyIds: wrap('listFailedPanelReplyIds', 'plain', (sinceIso, limit) => idList(
             messages.filter((m) => m.direction === 'outbound' && m.status === 'failed' && m.source === 'webapp' && parse(m.created_at) >= parse(sinceIso)).slice(0, limit),
         )),
+
+        readContactFlags: wrap('readContactFlags', 'plain', () => (install === 'no_016' ? failed('PGRST205') : ok(flags.map((f) => ({ ...f }))))),
+        listInternalConversationIds: wrap('listInternalConversationIds', 'plain', (phones, sinceIso, limit) => {
+            const forms = new Set(phones.flatMap((phone) => phoneVariants(phone)));
+            return idList(conversations
+                .filter((c) => c.contacts?.phone != null && forms.has(c.contacts.phone)
+                    && c.last_incoming_timestamp !== null && parse(c.last_incoming_timestamp) > parse(sinceIso))
+                .sort((a, b) => parse(b.last_incoming_timestamp as string) - parse(a.last_incoming_timestamp as string))
+                .slice(0, limit));
+        }),
+        listUnresolvedTicketsForPhones: wrap('listUnresolvedTicketsForPhones', 'desk', (whatsAppPhones, limit) => ok(
+            tickets.filter((t) => UNRESOLVED(t) && t.origin !== 'manual' && t.customer_phone !== null && whatsAppPhones.includes(t.customer_phone))
+                .sort((a, b) => parse(a.opened_at) - parse(b.opened_at)).slice(0, limit)
+                .map((t) => pick<InternalTicketRow>(t, ['id', 'status', 'customer_phone', 'origin'])),
+        )),
     };
 
     return Object.assign(repo, {
-        messages, conversations, tickets, events, categories, knownCustomers, settings, writes, calls,
+        messages, conversations, tickets, events, categories, knownCustomers, settings, flags, settingWrites, writes, calls,
         failNext(method: keyof DeskRepo, code: string, times = 1): void {
             failures.set(method, [...(failures.get(method) ?? []), { code, times }]);
         },
@@ -432,14 +461,16 @@ export interface Harness {
     conv: (id?: string, known?: { backend_user_id: number } | null) => ConversationContext;
 }
 
-export async function setup(seed: FakeSeed = {}, settingOverrides: Record<string, string> = {}): Promise<Harness> {
+export async function setup(
+    seed: FakeSeed = {}, settingOverrides: Record<string, string> = {}, internal: InternalMatcher = EMPTY_INTERNAL_MATCHER,
+): Promise<Harness> {
     const fake = createFakeDeskRepo({
         conversations: [{ id: 'C1' }, { id: 'C2' }],
         ...seed,
         settings: defaultSettings(settingOverrides),
     });
     const { settings } = await readDeskSettings(fake);
-    const ctx: EngineContext = { repo: fake, now: NOW, settings, categories: async () => fake.categories, expired: () => false };
+    const ctx: EngineContext = { repo: fake, now: NOW, settings, categories: async () => fake.categories, expired: () => false, internal };
     const conv: Harness['conv'] = (id = 'C1', known = null) => {
         const conversation = fake.conversations.find((c) => c.id === id);
         if (!conversation) throw new Error(`no conversation ${id}`);

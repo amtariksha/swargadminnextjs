@@ -231,7 +231,7 @@ export const EVENT_TYPES = [
     'customer_matched', 'delivery_linked', 'first_response', 'held', 'follow_up_due',
     'resolved', 'resolve_conflict', 'resolution_updated', 'ack_would_suppress',
     'ack_suppressed', 'missing_message_flagged', 'escalated', 'duplicate_marked',
-    'lead_updated', 'reviewed', 'cutoff_alerted',
+    'lead_updated', 'reviewed', 'cutoff_alerted', 'auto_internal',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
@@ -247,11 +247,11 @@ export const DESK_SETTING_KEYS = [
     'desk_ack_suppress', 'desk_go_live_at', 'desk_stats_from', 'desk_reopen_window_hours',
     'desk_idle_close_hours', 'desk_ack_autoclose_hours', 'desk_reply_alert_mins',
     'desk_number_queues', 'desk_business_hours', 'desk_credit_max_agent',
-    'desk_last_tick_at', 'desk_last_tick_stats',
+    'desk_last_tick_at', 'desk_last_tick_stats', 'desk_staff_phones',
 ] as const;
 export type DeskSettingKey = (typeof DESK_SETTING_KEYS)[number];
 /** Written by the tick only. PUT /api/desk/settings rejects them. */
-export const TICK_ONLY_SETTING_KEYS = ['desk_last_tick_at', 'desk_last_tick_stats'] as const;
+export const TICK_ONLY_SETTING_KEYS = ['desk_last_tick_at', 'desk_last_tick_stats', 'desk_staff_phones'] as const;
 /** Every key with this prefix is refused by PUT /api/whatsapp/settings. */
 export const DESK_SETTING_PREFIX = 'desk_';
 
@@ -296,3 +296,13 @@ export const APP_LINK_FOLLOW_UP_DAYS = 2;
 export const NEXT_MORNING_FOLLOW_UP_HHMM = '08:30';
 export const REVIEW_SAMPLE_SIZE = 5;
 export const IST_OFFSET = '+05:30';
+
+// ── Internal contacts ──────────────────────────────────────────────────────
+/** desk_contact_flags.kind. A 'customer' flag beats the automatic staff list. */
+export const CONTACT_FLAG_KINDS = ['internal', 'customer'] as const;
+export type ContactFlagKind = (typeof CONTACT_FLAG_KINDS)[number];
+/** Tickets of these categories are left out of volume, timing, waiting and the review. */
+export const STATS_EXCLUDED_CATEGORIES = ['internal', 'spam', 'wrong_number'] as const;
+/** The Internal lane lists conversations with a customer message in the last N IST days. */
+export const INTERNAL_LANE_DAYS = 7;
+// Slice 2 · P1e
