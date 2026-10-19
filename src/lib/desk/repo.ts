@@ -7,7 +7,7 @@ import type { EventType, Origin, ReopenReason, ResolutionCode, ResolvedVia, Tick
 import type { DeskMessageFacts, TicketClock } from './clock';
 import { toWhatsAppPhone } from './phone';
 import type { PreClassifyCategory, PreClassifyResult } from './rules';
-import type { DeskTickStepBase, EventDataMap, IsoDateTime, PriorResolution, StaffId, Ticket } from './types';
+import type { ContactFlag, DeskTickStepBase, EventDataMap, IsoDateTime, PriorResolution, StaffId, Ticket } from './types';
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -73,14 +73,14 @@ export type EngineCategory = PreClassifyCategory & {
 };
 
 export interface SettingRow { key: string; value: string | null }
-export type TickSettingKey = 'desk_last_tick_at' | 'desk_last_tick_stats';
+export type TickSettingKey = 'desk_last_tick_at' | 'desk_last_tick_stats' | 'desk_staff_phones';
 
 export type UnresolvedTicketRow = Pick<Ticket,
-    'id' | 'status' | 'last_inbound_at' | 'category_slug' | 'suggested_type' | 'priority'>;
+    'id' | 'status' | 'last_inbound_at' | 'category_slug' | 'suggested_type' | 'priority' | 'origin'>;
 
 export type LatestResolvedRow = Pick<Ticket,
     'id' | 'opened_at' | 'resolved_by' | 'resolved_by_name' | 'resolution_note' | 'lost_reason'
-    | 'reopen_count' | 'last_outbound_at'>
+    | 'reopen_count' | 'last_outbound_at' | 'origin'>
     & { resolved_at: IsoDateTime; resolution_code: ResolutionCode | null; resolved_via: ResolvedVia | null };
 
 export type TicketClockRow = Pick<Ticket,
@@ -93,7 +93,7 @@ export type MirrorTicketRow = Pick<Ticket,
 
 export type ResolvedTicketRow = Pick<Ticket,
     'id' | 'status' | 'resolved_by' | 'resolved_by_name' | 'resolution_note' | 'lost_reason' | 'reopen_count'
-    | 'last_outbound_at' | 'is_ack_only'>
+    | 'last_outbound_at' | 'is_ack_only' | 'customer_phone' | 'origin'>
     & { resolved_at: IsoDateTime; resolution_code: ResolutionCode | null; resolved_via: ResolvedVia | null };
 
 export interface OpenConversationRow {
@@ -140,10 +140,24 @@ export interface SystemResolvePatch {
     awaiting_reply_since: null;
 }
 
+/** The internal close also classifies the ticket: category internal, type other (plan section 8). */
+export interface InternalResolvePatch extends SystemResolvePatch {
+    category_slug: 'internal';
+    type: 'other';
+    classified_at: IsoDateTime;
+    classified_by: null;
+    classification_source: null;
+}
+
 export type ResolveGuard =
     | { kind: 'idle'; idleCutoffIso: string }
     | { kind: 'ack'; ackCutoffIso: string }
-    | { kind: 'mirror'; readLastInboundAt: string | null };
+    | { kind: 'mirror'; readLastInboundAt: string | null }
+    | { kind: 'internal' };
+
+/** An unresolved, non-manual ticket of an internal phone (tick step "internal"). */
+export type InternalTicketRow = Pick<Ticket, 'id' | 'status' | 'customer_phone' | 'origin'>;
+export type ContactFlagRow = Pick<ContactFlag, 'phone' | 'kind'>;
 
 export interface FirstResolutionValues {
     first_resolved_at: IsoDateTime;
@@ -183,7 +197,10 @@ export interface DeskRepo {
     probe(target: ProbeTarget): Promise<DeskDb<true>>;
     probeWrite(): Promise<DeskDb<true>>;
 
-    listUnticketedInbound(afterIso: string, beforeIso: string, limit: number): Promise<DeskDb<MessageRow[]>>;
+    /** excludeConversationIds: internal conversations (risk R-E1); messages without a conversation stay included. */
+    listUnticketedInbound(
+        afterIso: string, beforeIso: string, limit: number, excludeConversationIds: readonly string[],
+    ): Promise<DeskDb<MessageRow[]>>;
     getConversation(conversationId: string): Promise<DeskDb<ConversationRow | null>>;
     listActiveCategories(): Promise<DeskDb<EngineCategory[]>>;
     findKnownCustomer(phones: readonly string[]): Promise<DeskDb<{ backend_user_id: number } | null>>;
@@ -198,7 +215,7 @@ export interface DeskRepo {
     insertTicket(row: NewTicketRow): Promise<DeskDb<{ id: string; ticket_no: number }>>;
     touchInbound(id: string, readLastInboundAt: string | null, next: string): Promise<DeskDb<number>>;
     reopenTicket(id: string, readResolvedAt: string, patch: ReopenPatch): Promise<DeskDb<number>>;
-    resolveSystem(id: string, patch: SystemResolvePatch, guard: ResolveGuard): Promise<DeskDb<number>>;
+    resolveSystem(id: string, patch: SystemResolvePatch | InternalResolvePatch, guard: ResolveGuard): Promise<DeskDb<number>>;
     writeFirstResolution(id: string, values: FirstResolutionValues): Promise<DeskDb<number>>;
     claimMessage(messageId: string, ticketId: string): Promise<DeskDb<number>>;
     writeDerived(
@@ -238,9 +255,18 @@ export interface DeskRepo {
     listCutoffWatchIds(beforeCutoffSlugs: readonly string[], limit: number): Promise<DeskDb<string[]>>;
 
     listOrphans(
-        afterIso: string, beforeIso: string, limit: number,
+        afterIso: string, beforeIso: string, limit: number, excludeConversationIds: readonly string[],
     ): Promise<DeskDb<Array<{ id: string; created_at: string }>>>;
     listFailedPanelReplyIds(sinceIso: string, limit: number): Promise<DeskDb<string[]>>;
+
+    // Slice 2 · P1e — internal contacts
+    /** Active rows of desk_contact_flags (removed_at IS NULL), at most 5000. */
+    readContactFlags(): Promise<DeskDb<ContactFlagRow[]>>;
+    /** Conversations whose contact phone is one of `phones` (10-digit, every stored form is asked for)
+     *  with a customer message after `sinceIso`; newest first, at most `limit`. */
+    listInternalConversationIds(phones: readonly string[], sinceIso: string, limit: number): Promise<DeskDb<string[]>>;
+    /** Unresolved tickets with origin <> 'manual' whose customer_phone is one of `whatsAppPhones` (91 + 10 digits). */
+    listUnresolvedTicketsForPhones(whatsAppPhones: readonly string[], limit: number): Promise<DeskDb<InternalTicketRow[]>>;
 }
 
 // ── Pure helpers shared by the engine, the lifecycle steps and the runner ─────

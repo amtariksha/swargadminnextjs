@@ -12,11 +12,12 @@ import { ACK_MAX_LENGTH, isAckOnly } from './ack';
 import { compareMessages, deriveTicketClock, isHumanReply, type DeskMessageFacts } from './clock';
 import { decideInbound, isQuestionText, type InboundDecision, type InboundState } from './decide';
 import { preClassify, type PreClassifyResult } from './rules';
+import type { InternalMatcher } from './internal-contacts';
 import {
     DESK_MESSAGE_PAGE, asTicketType, buildDerivedPatch, buildReopenPatch, buildTicketRow, isInsideWindow, isLater,
     reopenReason, syntheticInbound, wholeSeconds,
     type ConversationRow, type DeskDb, type DeskDbOutcome, type DeskRepo, type DerivedPatch, type EngineCategory,
-    type LatestResolvedRow, type MessageRow, type ResolveGuard,
+    type InternalResolvePatch, type LatestResolvedRow, type MessageRow, type ResolveGuard,
     type SystemResolvePatch, type TicketClockRow, type UnresolvedTicketRow,
 } from './repo';
 import type { DeskSettings, EventDataMap } from './types';
@@ -33,6 +34,8 @@ export interface EngineContext {
     categories: () => Promise<readonly EngineCategory[]>;
     /** The current step's time box has passed. */
     expired: () => boolean;
+    /** Built once per run from the staff list and the contact flags (internal-contacts.ts). */
+    internal: InternalMatcher;
 }
 
 export interface ConversationContext {
@@ -42,7 +45,8 @@ export interface ConversationContext {
 }
 
 export type AttachOutcome =
-    | 'created' | 'appended' | 'reopened' | 'ack_attached' | 'noop' | 'gave_up' | 'not_installed' | 'error';
+    | 'created' | 'appended' | 'reopened' | 'ack_attached' | 'noop' | 'gave_up' | 'not_installed' | 'error'
+    | 'internal_skipped';
 export interface AttachResult {
     outcome: AttachOutcome;
     ticket_id: string | null;
@@ -55,10 +59,15 @@ export type DeriveOutcome =
     | 'updated' | 'unchanged' | 'raced' | 'skipped' | 'too_large' | 'not_installed' | 'error';
 export interface DeriveResult { outcome: DeriveOutcome; messages: readonly MessageRow[]; event_errors: number }
 
-export type SystemResolutionKind = 'idle_close' | 'ack_autoclose' | 'legacy_inbox';
+export type SystemResolutionKind = 'idle_close' | 'ack_autoclose' | 'legacy_inbox' | 'internal';
 export interface SystemResolveTicket {
     id: string; status?: TicketStatus | null; category_slug?: string | null; awaiting_reply_since?: string | null;
+    /** Needed for kind 'internal' only: the event source is ctx.internal.sourceOf(customer_phone). */
+    customer_phone?: string | null;
 }
+
+/** Plan section 8: the internal close is a system resolution that also sets the category. */
+const INTERNAL_RESOLUTION = { resolved_via: 'system', resolution_code: 'no_action' } as const;
 export interface ResolveResult { outcome: 'resolved' | 'skipped' | 'not_installed' | 'error'; event_errors: number }
 
 const MAX_PASSES = 3;
@@ -291,6 +300,13 @@ async function doAckAttach(ctx: EngineContext, message: MessageRow, resolved: La
     return finish(log, 'ack_attached', resolved.id);
 }
 
+/** On an internal contact only a manual ticket may take the message (plan section 8, risk R-E2). */
+function allowedForInternal(decision: InboundDecision, state: PassState): boolean {
+    if (decision.action === 'append') return state.unresolved?.origin === 'manual';
+    if (decision.action === 'reopen' || decision.action === 'ack_attach') return state.latest?.origin === 'manual';
+    return false;
+}
+
 async function runPass(
     ctx: EngineContext, conv: ConversationContext, message: MessageRow, isAck: boolean, log: EventLog,
 ): Promise<Step> {
@@ -298,6 +314,9 @@ async function runPass(
     if ('failed' in read) return failStep(log, read.failed, null);
     const { state } = read;
     const decision = decideInbound(state.inbound, { id: message.id, created_at: message.created_at, is_ack: isAck }, ctx.settings);
+    if (ctx.internal.isInternal(conv.conversation.contacts?.phone) && !allowedForInternal(decision, state)) {
+        return finish(log, 'internal_skipped', null);
+    }
     switch (decision.action) {
         case 'append':
             return state.unresolved ? doAppend(ctx, conv, message, isAck, state.unresolved, log) : RETRY;
@@ -395,6 +414,7 @@ export async function deriveAndWrite(ctx: EngineContext, ticketId: string): Prom
 async function resolutionCodeFor(
     ctx: EngineContext, kind: SystemResolutionKind, categorySlug: string | null | undefined,
 ): Promise<ResolutionCode | null> {
+    if (kind === 'internal') return INTERNAL_RESOLUTION.resolution_code;
     const fallback: ResolutionCode = SYSTEM_RESOLUTIONS[kind].resolution_code;
     if (kind !== 'legacy_inbox' || !categorySlug) return fallback;
     const categories = await loadCategories(ctx);
@@ -403,26 +423,39 @@ async function resolutionCodeFor(
     return declared && (RESOLUTION_CODES as readonly string[]).includes(declared) ? (declared as ResolutionCode) : fallback;
 }
 
+/** The patch of a system resolution; the internal close also sets the category (plan section 8). */
+function systemPatch(kind: SystemResolutionKind, code: ResolutionCode, nowIso: string): SystemResolvePatch | InternalResolvePatch {
+    const base: SystemResolvePatch = {
+        status: 'resolved', resolved_at: nowIso, resolved_by: null, resolved_by_name: null,
+        resolution_code: code, resolution_note: null,
+        resolved_via: kind === 'internal' ? INTERNAL_RESOLUTION.resolved_via : SYSTEM_RESOLUTIONS[kind].resolved_via,
+        lost_reason: null, follow_up_at: null, hold_reason: null, awaiting_reply_since: null,
+    };
+    if (kind !== 'internal') return base;
+    return { ...base, category_slug: 'internal', type: 'other', classified_at: nowIso, classified_by: null, classification_source: null };
+}
+
 /** One conditional update (the guard re-checks every condition in SQL), then first_resolved_* and the event. */
 export async function resolveBySystem(
     ctx: EngineContext, ticket: SystemResolveTicket, kind: SystemResolutionKind, guard: ResolveGuard,
 ): Promise<ResolveResult> {
     const log: EventLog = { errors: 0 };
+    const source = kind === 'internal' ? ctx.internal.sourceOf(ticket.customer_phone) : null;
+    if (kind === 'internal' && source === null) return { outcome: 'skipped', event_errors: 0 };
     const code = await resolutionCodeFor(ctx, kind, ticket.category_slug);
     if (code === null) return { outcome: 'error', event_errors: 0 };
-    const resolvedVia = SYSTEM_RESOLUTIONS[kind].resolved_via;
     const nowIso = ctx.now.toISOString();
-    const patch: SystemResolvePatch = {
-        status: 'resolved', resolved_at: nowIso, resolved_by: null, resolved_by_name: null,
-        resolution_code: code, resolution_note: null, resolved_via: resolvedVia, lost_reason: null,
-        follow_up_at: null, hold_reason: null, awaiting_reply_since: null,
-    };
+    const patch = systemPatch(kind, code, nowIso);
+    const resolvedVia = patch.resolved_via;
     const written = await ctx.repo.resolveSystem(ticket.id, patch, guard);
     if (written.outcome !== 'ok') {
         return { outcome: written.outcome === 'not_installed' ? 'not_installed' : 'error', event_errors: 0 };
     }
     if (written.data === 0) return { outcome: 'skipped', event_errors: 0 };
     noteFailure(log, await ctx.repo.writeFirstResolution(ticket.id, { first_resolved_at: nowIso, first_resolved_by: null, first_resolved_code: code }));
+    if (source !== null) {
+        await emitEvent(ctx, log, { ticketId: ticket.id, type: 'auto_internal', from: null, to: null, data: { source } });
+    }
     await emitEvent(ctx, log, {
         ticketId: ticket.id, type: 'resolved', from: ticket.status ?? null, to: 'resolved',
         actor: kind === 'legacy_inbox' ? LEGACY_INBOX_ACTOR : SYSTEM_ACTOR,

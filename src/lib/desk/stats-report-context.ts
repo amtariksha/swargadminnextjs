@@ -2,9 +2,9 @@
 // list inside a loop over tickets. Pure: no I/O, no clock beyond `input.now`.
 
 import { istRangeUtc } from './business-hours';
-import { isAtOrAfter, isNotDuplicateOrSpam, round2 } from './stats-helpers';
+import { isAtOrAfter, isNotDuplicateOrSpam, isStatsExcluded, round2 } from './stats-helpers';
 import type { MoneyActionRow, StatsInput, StatsTicketRow, StatusEventRow } from './stats-report';
-import type { DeliveryCounts } from './stats-report';
+import type { DeliveryCounts } from './types';
 
 type TicketInfo = { id: string; queue: string; category_slug: string | null; opened_at: string };
 
@@ -17,8 +17,10 @@ export interface StatsContext {
     settings: StatsInput['settings'];
     deliveryCounts: DeliveryCounts | null;
     categories: Map<string, StatsInput['categories'][number]>;
-    /** Every loaded ticket on or after the epoch, any queue. */
+    /** Every loaded ticket on or after the epoch, any queue, except STATS_EXCLUDED_CATEGORIES. */
     keptTickets: StatsTicketRow[];
+    /** Tickets opened in the range and in the queue whose category is excluded. */
+    excludedCount: number;
     /** Set V: opened in the range and in the queue, oldest first. */
     volume: StatsTicketRow[];
     /** Members of V with status resolved. */
@@ -66,12 +68,13 @@ export function buildContext(input: StatsInput, epoch: string): StatsContext {
     const gteMs = Date.parse(bounds.gte);
     const ltMs = Date.parse(bounds.lt);
     const inRange = (instant: string): boolean => Date.parse(instant) >= gteMs && Date.parse(instant) < ltMs;
-    const keptTickets = input.tickets.filter((ticket) => isAtOrAfter(ticket.opened_at, epoch));
-    const volume = keptTickets
-        .filter((ticket) => inRange(ticket.opened_at) && inQueue(input.range.queue, ticket.queue))
-        .sort(byOpened);
+    const afterEpoch = input.tickets.filter((ticket) => isAtOrAfter(ticket.opened_at, epoch));
+    const keptTickets = afterEpoch.filter((ticket) => !isStatsExcluded(ticket.category_slug));
+    const inScope = (ticket: StatsTicketRow): boolean => inRange(ticket.opened_at) && inQueue(input.range.queue, ticket.queue);
+    const volume = keptTickets.filter(inScope).sort(byOpened);
     const ticketInfo = new Map<string, TicketInfo>();
-    for (const ticket of [...keptTickets, ...input.actionTickets.filter((row) => isAtOrAfter(row.opened_at, epoch))]) {
+    // Money actions keep their ticket even when it is excluded: refunds are counted as issued.
+    for (const ticket of [...afterEpoch, ...input.actionTickets.filter((row) => isAtOrAfter(row.opened_at, epoch))]) {
         ticketInfo.set(ticket.id, ticket);
     }
     const money = input.moneyActions
@@ -93,12 +96,13 @@ export function buildContext(input: StatsInput, epoch: string): StatsContext {
         deliveryCounts: input.deliveryCounts,
         categories: new Map(input.categories.map((category) => [category.slug, category])),
         keptTickets,
+        excludedCount: afterEpoch.filter((ticket) => inScope(ticket) && isStatsExcluded(ticket.category_slug)).length,
         volume,
         resolved: volume.filter((ticket) => ticket.status === 'resolved'),
         complaints: volume.filter((ticket) => ticket.type === 'complaint' && isNotDuplicateOrSpam(ticket.resolution_code)),
         openTickets: input.openTickets.filter((ticket) =>
             isAtOrAfter(ticket.opened_at, epoch) && inQueue(input.range.queue, ticket.queue)
-            && ticket.status !== 'resolved' && !ticket.is_ack_only),
+            && ticket.status !== 'resolved' && !ticket.is_ack_only && !isStatsExcluded(ticket.category_slug)),
         money,
         moneyByTicket,
         ticketInfo,

@@ -155,3 +155,23 @@ describe('getDeskSettings', () => {
         expect(fake.calls.readSettingRows).toBe(2);
     });
 });
+
+describe('desk_staff_phones (P1e)', () => {
+    it.each([
+        ['["9876543210","9000000001"]', ['9000000001', '9876543210']],
+        ['["9876543210","9876543210"]', ['9876543210']],
+        ['["9876543210", 5, "12", null]', ['9876543210']],
+        ['[]', []],
+        ['', []],
+        ['not json', []],
+        ['{"a":"9876543210"}', []],
+        ['"9876543210"', []],
+        [null, []],
+    ] as const)('SP1 %j -> %j', (value, expected) => {
+        expect(parse('desk_staff_phones', value).staff_phones).toEqual(expected);
+    });
+    it('SP2 a missing row and the all-off object give an empty list', () => {
+        expect(parseDeskSettings(rows({}, ['desk_staff_phones'])).staff_phones).toEqual([]);
+        expect(allOffDeskSettings().staff_phones).toEqual([]);
+    });
+});

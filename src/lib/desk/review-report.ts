@@ -7,10 +7,10 @@ import { HUMAN_RESOLVED_VIA, LIST_MAX_LIMIT, REVIEW_SAMPLE_SIZE, TICK_STALE_SECS
 import type { EventType } from './constants';
 import { buildClusters } from './review-report-clusters';
 import { per1000 } from './stats';
-import { epochOf, isAtOrAfter, isNotDuplicateOrSpam, round2 } from './stats-helpers';
-import type { ComplaintRow, DeliveryCounts } from './stats-report';
+import { epochOf, isAtOrAfter, isNotDuplicateOrSpam, isStatsExcluded, round2 } from './stats-helpers';
+import type { ComplaintRow } from './stats-report';
 import type {
-    ActionItem, Category, DeskReview, DeskSettings, IsoDateTime, IstDate, Ticket, TicketAction, TicketListItem,
+    ActionItem, Category, DeliveryCounts, DeskReview, DeskSettings, IsoDateTime, IstDate, Ticket, TicketAction, TicketListItem,
 } from './types';
 
 export const REVIEW_EXTRA_COLUMNS = [
@@ -234,7 +234,20 @@ function healthBlock(state: ReviewState): DeskReview['health'] {
     };
 }
 
-export function buildDeskReview(input: ReviewInput): DeskReviewData {
+/** Plan section 8: internal, spam and wrong_number tickets appear in no block of the review. */
+function withoutExcluded(input: ReviewInput): ReviewInput {
+    const kept = (rows: ReviewTicketItem[]): ReviewTicketItem[] => rows.filter((ticket) => !isStatsExcluded(ticket.category_slug));
+    return {
+        ...input,
+        windowTickets: kept(input.windowTickets),
+        openTickets: kept(input.openTickets),
+        resolvedTickets: kept(input.resolvedTickets),
+        lookupTickets: kept(input.lookupTickets),
+    };
+}
+
+export function buildDeskReview(fullInput: ReviewInput): DeskReviewData {
+    const input = withoutExcluded(fullInput);
     const window = reviewWindow(input.date, input.now);
     const epoch = epochOf(input.settings);
     if (epoch === null) return emptyReview(input, window);

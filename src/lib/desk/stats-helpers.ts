@@ -4,7 +4,9 @@
 // stats.ts and business-hours.ts, never re-written here. No I/O, no clock.
 
 import { z } from 'zod';
-import { HUMAN_RESOLVED_VIA, NON_INBOUND_ORIGINS, REPEAT_COMPLAINER_MIN, STATS_MAX_DAYS } from './constants';
+import {
+    HUMAN_RESOLVED_VIA, NON_INBOUND_ORIGINS, REPEAT_COMPLAINER_MIN, STATS_EXCLUDED_CATEGORIES, STATS_MAX_DAYS,
+} from './constants';
 import type { Queue } from './constants';
 import { statsQuery } from './contracts';
 import type { DeskDbOutcome } from './repo';
@@ -41,6 +43,10 @@ export const isHumanVia = (via: string | null | undefined): boolean =>
 
 /** NULL-safe: a ticket with no resolution code is still counted. */
 export const isNotDuplicateOrSpam = (code: string | null): boolean => code !== 'duplicate' && code !== 'spam';
+
+/** internal, spam and wrong_number tickets are left out of volume, timing, waiting and the review (plan section 8). */
+export const isStatsExcluded = (categorySlug: string | null): boolean =>
+    categorySlug !== null && (STATS_EXCLUDED_CATEGORIES as readonly string[]).includes(categorySlug);
 
 export const isInboundOrigin = (origin: string): boolean => !(NON_INBOUND_ORIGINS as readonly string[]).includes(origin);
 

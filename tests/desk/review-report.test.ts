@@ -175,3 +175,18 @@ describe('buildDeskReview, edges', () => {
         expect(JSON.stringify(input)).toBe(before);
     });
 });
+
+describe('buildDeskReview, internal / spam / wrong number (P1e)', () => {
+    it('RX1 an internal ticket appears in no block', () => {
+        const internalOpen = toItem({ ...T4, id: 't13', ticket_no: 113, origin: 'inbound', type: 'other', category_slug: 'internal', status: 'open', opened_at: ist('2026-10-12', '08:00') });
+        const internalClosed = toItem({ ...T4, id: 't14', ticket_no: 114, origin: 'inbound', type: 'other', category_slug: 'internal', status: 'resolved', opened_at: ist('2026-10-13', '07:00'), resolved_at: ist('2026-10-13', '07:05'), resolved_via: 'manual', resolution_code: 'no_action', awaiting_reply_since: null });
+        const base = reviewInput('2026-10-13');
+        const review = buildDeskReview({
+            ...base,
+            windowTickets: [...base.windowTickets, internalClosed],
+            openTickets: [...base.openTickets, internalOpen],
+            resolvedTickets: [...base.resolvedTickets, internalClosed],
+        });
+        expect(review).toEqual(buildDeskReview(base));
+    });
+});

@@ -10,7 +10,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const PURE_MODULES = [
-    'ack', 'authz-rules', 'business-hours', 'clock', 'decide', 'phone', 'rules', 'send-number', 'stats',
+    'ack', 'authz-rules', 'business-hours', 'clock', 'decide', 'internal-contacts', 'phone', 'rules', 'send-number', 'stats',
 ] as const;
 const ALLOWED_IMPORTS = new Set<string>(['./constants', './types', ...PURE_MODULES.map((name) => `./${name}`)]);
 const FORBIDDEN: ReadonlyArray<readonly [label: string, pattern: RegExp]> = [

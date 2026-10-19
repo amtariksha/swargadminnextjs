@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { AcksLane } from '@/components/desk/AcksLane';
 import { DeskErrorState } from '@/components/desk/DeskErrorState';
+import { InternalLane } from '@/components/desk/InternalLane';
 import { QueueRow } from '@/components/desk/QueueRow';
 import type { Queue } from '@/lib/desk/constants';
 import { deskKeys } from '@/lib/desk/desk-query';
@@ -141,6 +142,7 @@ export function DeskQueue({ tab, selectedTicketNo }: DeskQueueProps) {
                         onSelect={select}
                     />
                 ) : null}
+                {!isWrapUp ? <InternalLane /> : null}
             </div>
         </>
     );

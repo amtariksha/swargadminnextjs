@@ -15,7 +15,8 @@ function world(seed: FakeSeed = {}, settings: Record<string, string> = {}): Fake
         settings: defaultSettings(settings),
     });
 }
-const tick = (fake: FakeDeskRepo, now: Date = NOW, clock?: () => number) => runDeskTick({ repo: fake, now, clock });
+const tick = (fake: FakeDeskRepo, now: Date = NOW, clock?: () => number, staffPhones: string[] | null = null) =>
+    runDeskTick({ repo: fake, now, clock, staffPhones });
 const sweepable = (fake: FakeDeskRepo, conversationId = 'C1', createdAt = minutesAgo(5)) =>
     addMessage(fake, { conversation_id: conversationId, created_at: createdAt });
 const tables = (fake: FakeDeskRepo): string[] => [...new Set(fake.writes.map((w) => w.table))].sort();
@@ -153,7 +154,7 @@ describe('step 2 — message sweep', () => {
         fake.before('getConversation', () => { clock += 10_000; });
         const result = await tick(fake, NOW, () => clock);
         expect(result.steps.sweep).toMatchObject({ timed_out: true, ok: false, created: 1 });
-        expect(Object.keys(result.steps)).toEqual(['sweep', 'derive', 'mirror', 'missing', 'lifecycle', 'health']);
+        expect(Object.keys(result.steps)).toEqual(['internal', 'sweep', 'derive', 'mirror', 'missing', 'lifecycle', 'health']);
         expect(first.ticket_id).not.toBeNull();
         expect(second.ticket_id).toBeNull();
         expect((await tick(fake, NOW, () => clock)).steps.sweep?.created).toBe(1);
@@ -364,7 +365,7 @@ describe('step 6 — lifecycle', () => {
 });
 
 describe('the whole run', () => {
-    it('K23 writes only desk tables, messages.ticket_id and the two settings rows', async () => {
+    it('K23 writes only desk tables, messages.ticket_id and the settings rows', async () => {
         const fake = world({ conversations: [{ id: 'C1' }, { id: 'C2' }, { id: 'C3', status: 'resolved' }, { id: 'C4', last_incoming_timestamp: minutesAgo(5) }] });
         sweepable(fake, 'C1');
         addTicket(fake, { conversation_id: 'C2', last_inbound_at: minutesAgo(20), opened_at: minutesAgo(30) });
@@ -387,7 +388,7 @@ describe('the whole run', () => {
         const result = await tick(fake);
         expect(result.ran).toBe(true);
         expect(result.steps.derive?.ok).toBe(false);
-        expect(Object.keys(result.steps)).toEqual(['sweep', 'derive', 'mirror', 'missing', 'lifecycle', 'health']);
+        expect(Object.keys(result.steps)).toEqual(['internal', 'sweep', 'derive', 'mirror', 'missing', 'lifecycle', 'health']);
         expect(result.steps.mirror?.ok).toBe(true);
         expect(error).toHaveBeenCalledWith('[desk-tick] step failed', 'derive', 'Error');
     });
@@ -454,5 +455,151 @@ describe('the whole run', () => {
 
     it('a conversation helper builds what the fake expects', () => {
         expect(makeConversation({ id: 'C9' }).contacts?.phone).toBe('919900000011');
+    });
+});
+
+describe('step internal — internal contacts (P1e)', () => {
+    // Every fixture conversation's contact phone is 919900000011 (makeConversation).
+    const STAFF = ['9900000011'];
+    const recent = minutesAgo(3);
+    const staffWorld = (seed: FakeSeed = {}): FakeDeskRepo => world({
+        conversations: [
+            { id: 'C1', last_incoming_timestamp: recent },
+            { id: 'C2', contacts: { id: 'contact-C2', name: 'Customer C2', phone: '919811111111' } },
+        ],
+        ...seed,
+    });
+
+    it('I01 a staff phone in the body opens no ticket and the message is excluded, not an orphan', async () => {
+        const fake = staffWorld();
+        const message = sweepable(fake, 'C1', minutesAgo(10));
+        const result = await tick(fake, NOW, undefined, STAFF);
+        expect(fake.tickets).toHaveLength(0);
+        expect(message.ticket_id).toBeNull();
+        expect(result.steps.internal).toMatchObject({ ok: true, staff_list: 1, flags: 0, skipped_messages: 0, resolved: 0 });
+        expect(result.steps.sweep?.scanned).toBe(0);
+        expect(result.steps.health?.orphans).toBe(0);
+    });
+
+    it('I02 without a list in the body nothing is suppressed', async () => {
+        const fake = staffWorld();
+        sweepable(fake, 'C1');
+        const result = await tick(fake);
+        expect(fake.tickets).toHaveLength(1);
+        expect(result.steps.internal?.staff_list).toBeNull();
+    });
+
+    it('I03 an open inbound ticket of a staff phone is closed as internal, a manual one is not', async () => {
+        const fake = staffWorld();
+        const auto = addTicket(fake, { conversation_id: 'C1', customer_phone: '919900000011', status: 'open', last_inbound_at: minutesAgo(20), awaiting_reply_since: minutesAgo(20) });
+        const manual = addTicket(fake, { conversation_id: 'C3', origin: 'manual', customer_phone: '919900000011', status: 'waiting_customer' });
+        const result = await tick(fake, NOW, undefined, STAFF);
+        expect(auto).toMatchObject({
+            status: 'resolved', category_slug: 'internal', type: 'other', resolution_code: 'no_action', resolved_via: 'system',
+            resolved_by: null, awaiting_reply_since: null, classification_source: null, first_resolved_code: 'no_action',
+        });
+        expect(auto.classified_at).toBe(NOW.toISOString());
+        expect(manual.status).toBe('waiting_customer');
+        expect(result.steps.internal?.resolved).toBe(1);
+        expect(eventsOf(fake, 'auto_internal').map((e) => [e.ticket_id, e.data])).toEqual([[auto.id, { source: 'staff_list' }]]);
+        expect(eventsOf(fake, 'resolved').map((e) => e.data.resolved_via)).toEqual(['system']);
+    });
+
+    it('I04 an internal flag works without a staff list; a customer flag beats the list', async () => {
+        const flagged = staffWorld({ flags: [{ phone: '9811111111', kind: 'internal' }] });
+        sweepable(flagged, 'C2');
+        const first = await tick(flagged);
+        expect(flagged.tickets.filter((t) => t.conversation_id === 'C2')).toHaveLength(0);
+        expect(first.steps.internal).toMatchObject({ staff_list: null, flags: 1 });
+
+        const override = staffWorld({ flags: [{ phone: '9900000011', kind: 'customer' }] });
+        sweepable(override, 'C1');
+        await tick(override, NOW, undefined, STAFF);
+        expect(override.tickets.filter((t) => t.conversation_id === 'C1' && t.origin === 'inbound')).toHaveLength(1);
+    });
+
+    it('I05 desk_staff_phones is written only when the list changes', async () => {
+        const fake = staffWorld();
+        await tick(fake, NOW, undefined, ['9900000012', '9900000011', '9900000011']);
+        expect(fake.settings.get('desk_staff_phones')).toBe('["9900000011","9900000012"]');
+        expect(fake.settingWrites.filter((key) => key === 'desk_staff_phones')).toHaveLength(1);
+        await tick(fake, NOW, undefined, ['9900000011', '9900000012']);
+        await tick(fake);
+        expect(fake.settingWrites.filter((key) => key === 'desk_staff_phones')).toHaveLength(1);
+    });
+
+    it('I06 migration 016 missing: the staff list still works and the step reports not_installed', async () => {
+        const fake = staffWorld();
+        fake.setInstall('no_016');
+        fake.settings.delete('desk_staff_phones');
+        const auto = addTicket(fake, { conversation_id: 'C1', customer_phone: '919900000011', status: 'open' });
+        const second = addTicket(fake, { conversation_id: 'C3', customer_phone: '919900000011', status: 'new' });
+        sweepable(fake, 'C2');
+        const result = await tick(fake, NOW, undefined, STAFF);
+        expect(result.steps.internal).toMatchObject({ not_installed: true, ok: false, flags: 0, resolved: 2 });
+        expect([auto.status, second.status]).toEqual(['resolved', 'resolved']);
+        expect(fake.tickets.filter((t) => t.conversation_id === 'C2')).toHaveLength(1);
+        expect(result.steps.sweep?.ok).toBe(true);
+    });
+
+    it('I07 a failed flag read skips the close for this run but still suppresses', async () => {
+        const fake = staffWorld();
+        fake.failNext('readContactFlags', 'XX000');
+        const auto = addTicket(fake, { conversation_id: 'C1', customer_phone: '919900000011', status: 'open' });
+        sweepable(fake, 'C1');
+        const result = await tick(fake, NOW, undefined, STAFF);
+        expect(auto.status).not.toBe('resolved');
+        expect(result.steps.internal).toMatchObject({ errors: 1, resolved: 0 });
+        expect(fake.tickets).toHaveLength(1);
+    });
+
+    it('I08 safety net: an internal conversation the query did not exclude is skipped and counted', async () => {
+        const fake = staffWorld({ conversations: [{ id: 'C1', last_incoming_timestamp: null }] });
+        sweepable(fake, 'C1', minutesAgo(10));
+        sweepable(fake, 'C1', minutesAgo(9));
+        const result = await tick(fake, NOW, undefined, STAFF);
+        expect(fake.tickets).toHaveLength(0);
+        expect(result.steps.internal?.skipped_messages).toBe(2);
+        expect(result.steps.sweep).toMatchObject({ created: 0, scanned: 2 });
+    });
+
+    it('I09 101 unexcluded internal messages do not starve a customer message (re-list)', async () => {
+        const fake = staffWorld({ conversations: [{ id: 'C1', last_incoming_timestamp: null }, { id: 'C2', contacts: { id: 'contact-C2', name: 'Customer C2', phone: '919811111111' } }] });
+        for (let index = 0; index < 101; index += 1) sweepable(fake, 'C1', ts(3000 - index));
+        const customer = sweepable(fake, 'C2', minutesAgo(5));
+        const result = await tick(fake, NOW, undefined, STAFF);
+        expect(customer.ticket_id).not.toBeNull();
+        expect(result.steps.internal?.skipped_messages).toBe(100);
+        expect(result.steps.sweep).toMatchObject({ created: 1, scanned: 101 });
+    });
+
+    it('I09b internal messages the safety net skipped are not counted as orphans', async () => {
+        const fake = staffWorld({ conversations: [{ id: 'C1', last_incoming_timestamp: null }, { id: 'C2', contacts: { id: 'contact-C2', name: 'Customer C2', phone: '919811111111' } }] });
+        for (let index = 0; index < 101; index += 1) sweepable(fake, 'C1', ts(3000 - index));
+        sweepable(fake, 'C2', minutesAgo(5));
+        const result = await tick(fake, NOW, undefined, STAFF);
+        expect(result.steps.health?.orphans).toBe(0);
+    });
+
+    it('I10 the missing-message step never flags an internal conversation', async () => {
+        const fake = staffWorld({ conversations: [{ id: 'C1', last_incoming_timestamp: minutesAgo(5) }] });
+        const result = await tick(fake, NOW, undefined, STAFF);
+        expect(fake.tickets).toHaveLength(0);
+        expect(result.steps.missing).toMatchObject({ scanned: 1, flagged: 0 });
+    });
+
+    it('I11 mirror does not reopen a resolved non-manual ticket of an internal phone', async () => {
+        const fake = staffWorld();
+        const resolved = addResolvedTicket(fake, { resolvedMinutesAgo: 30, conversationId: 'C1' }, { customer_phone: '919900000011' });
+        addMessage(fake, { conversation_id: 'C1', created_at: minutesAgo(10), ticket_id: resolved.id });
+        const result = await tick(fake, NOW, undefined, STAFF);
+        expect(resolved.status).toBe('resolved');
+        expect(result.steps.mirror?.invariant_reopened).toBe(0);
+    });
+
+    it('I12 a run carries no phone number of the staff list', async () => {
+        const fake = staffWorld();
+        const json = JSON.stringify(await tick(fake, NOW, undefined, STAFF));
+        expect(json).not.toContain('9900000011');
     });
 });

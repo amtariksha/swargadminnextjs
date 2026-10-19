@@ -14,7 +14,7 @@ import { buildFirstResponse, buildResolution } from './stats-report-timing';
 import { epochOf, isHumanResolved, isHumanVia, isInboundOrigin } from './stats-helpers';
 import { countBy, istDatesInRange, pct, rate, volumeByIstDay } from './stats';
 import type {
-    Category, DeskSettings, DeskStats, IsoDateTime, IstDate, Ticket, TicketAction, TicketEvent,
+    Category, DeliveryCounts, DeskSettings, DeskStats, IsoDateTime, IstDate, Ticket, TicketAction, TicketEvent,
 } from './types';
 
 // ── Rows and input ─────────────────────────────────────────────────────────
@@ -35,18 +35,7 @@ export type MoneyActionRow = Pick<TicketAction, 'id' | 'ticket_id' | 'action_typ
     | 'actor_id' | 'actor_name' | 'created_at'>;
 export type StatusEventRow = Pick<TicketEvent, 'id' | 'ticket_id' | 'type' | 'from_status' | 'to_status' | 'created_at'>;
 
-/**
- * `data` of GET /api/support/delivery-counts (contract b-types-and-api.md, section 4.9). It is declared
- * here because the frozen types.ts of the earlier units does not export it.
- */
-export interface DeliveryCounts {
-    from: IstDate;
-    to: IstDate;
-    total: { stops: number; delivered_stops: number; not_delivered_stops: number; delivered_qty: number };
-    by_day: Array<{ day: IstDate; stops: number; delivered_stops: number; not_delivered_stops: number; delivered_qty: number }>;
-    by_driver: Array<{ driver_id: number; driver_name: string | null; stops: number; delivered_stops: number; not_delivered_stops: number; delivered_qty: number }>;
-    by_product: Array<{ product_id: number; product_title: string | null; delivered_qty: number }>;
-}
+export type { DeliveryCounts } from './types';
 
 export interface StatsInput {
     now: Date;
@@ -90,7 +79,7 @@ export function emptyDeskStats(range: StatsInput['range'], now: Date): DeskStats
             n: 0, median_secs: null, p90_secs: null, net_median_secs: null,
             by_via: countBy([], RESOLVED_VIA), by_code: countBy([], RESOLUTION_CODES), by_exec: [],
         },
-        quality: { reopen_rate: null, recontact_72h_rate: null, classified_pct: null, handled_in_desk_pct: null },
+        quality: { reopen_rate: null, recontact_72h_rate: null, classified_pct: null, handled_in_desk_pct: null, excluded_tickets: 0 },
         complaints: {
             total: 0, deliveries: null, per_1000_deliveries: null, by_category: [], by_group: [], by_driver: [],
             by_drop_point: [], by_pincode: [], by_product: [], by_root_cause: [],
@@ -185,6 +174,7 @@ function buildQuality(ctx: StatsContext): DeskStats['quality'] {
         recontact_72h_rate: rate(human.filter((ticket) => ticket.reopen_count > 0 || contactedAfter(ticket)).length, human.length),
         classified_pct: pct(classifiable.filter((ticket) => ticket.category_slug !== null).length, classifiable.length),
         handled_in_desk_pct: pct(resolvedByPeople.filter((ticket) => isHumanVia(ticket.resolved_via)).length, resolvedByPeople.length),
+        excluded_tickets: ctx.excludedCount,
     };
 }
 

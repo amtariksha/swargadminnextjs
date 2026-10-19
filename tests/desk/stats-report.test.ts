@@ -62,14 +62,14 @@ describe('buildDeskStats, no queue filter', () => {
     });
 
     it('S3 volume counts, cohorted by the IST day a ticket was opened', () => {
-        expect(stats.volume).toMatchObject({ opened: 8, resolved: 5, unclassified: 1 });
+        expect(stats.volume).toMatchObject({ opened: 7, resolved: 4, unclassified: 1 });
         expect(stats.volume.by_day).toEqual([
             { date: '2026-10-12', opened: 3, resolved: 3 },
-            { date: '2026-10-13', opened: 5, resolved: 2 },
+            { date: '2026-10-13', opened: 4, resolved: 1 },
         ]);
-        expect(stats.volume.by_type).toEqual({ complaint: 3, sales: 1, request: 1, enquiry: 0, other: 1 });
-        expect(stats.volume.by_queue).toEqual({ care: 6, sales: 2 });
-        expect(stats.volume.by_report_group).toEqual({ complaint: 3, sales: 2, other: 1 });
+        expect(stats.volume.by_type).toEqual({ complaint: 3, sales: 1, request: 1, enquiry: 0, other: 0 });
+        expect(stats.volume.by_queue).toEqual({ care: 5, sales: 2 });
+        expect(stats.volume.by_report_group).toEqual({ complaint: 3, sales: 2, other: 0 });
     });
 
     it('S4 first response', () => {
@@ -82,21 +82,22 @@ describe('buildDeskStats, no queue filter', () => {
     });
 
     it('S5 resolution', () => {
-        expect(stats.resolution).toMatchObject({ n: 4, median_secs: 2700, p90_secs: 7200, net_median_secs: 1050 });
+        expect(stats.resolution).toMatchObject({ n: 3, median_secs: 3600, p90_secs: 7200, net_median_secs: 1800 });
         expect(stats.resolution.by_via).toEqual({
-            manual: 2, action: 2, auto_idle: 0, legacy_inbox: 0, system: 1, migration: 0, auto_converted: 0,
+            manual: 1, action: 2, auto_idle: 0, legacy_inbox: 0, system: 1, migration: 0, auto_converted: 0,
         });
         expect(Object.fromEntries(Object.entries(stats.resolution.by_code).filter(([, count]) => count > 0)))
-            .toEqual({ refunded: 1, explained: 1, won: 1, no_action: 1, spam: 1 });
+            .toEqual({ refunded: 1, explained: 1, won: 1, no_action: 1 });
         expect(Object.keys(stats.resolution.by_code)).toHaveLength(15);
         expect(stats.resolution.by_exec.map((row) => [row.actor_id, row.actor_name, row.n, row.median_secs, row.p90_secs])).toEqual([
-            ['7', 'Asha', 3, 3600, 7200], ['8', 'Bala', 1, 1800, 1800],
+            ['7', 'Asha', 2, 5400, 7200], ['8', 'Bala', 1, 1800, 1800],
         ]);
     });
 
     it('S6 quality', () => {
         expect(stats.quality).toEqual({
-            reopen_rate: 0.25, recontact_72h_rate: 0.5, classified_pct: 85.7, handled_in_desk_pct: 100,
+            reopen_rate: 0.3333, recontact_72h_rate: 0.6667, classified_pct: 83.3, handled_in_desk_pct: 100,
+            excluded_tickets: 1,
         });
     });
 
@@ -151,7 +152,7 @@ describe('buildDeskStats, variants', () => {
         expect(sales.volume).toMatchObject({ opened: 2, resolved: 1, unclassified: 1 });
         expect(sales.first_response).toMatchObject({ n: 2, median_secs: 210, p90_secs: 300, business_median_secs: 60, unattributed: 1 });
         expect(sales.resolution).toMatchObject({ n: 1, median_secs: 1800, net_median_secs: 300 });
-        expect(sales.quality).toEqual({ reopen_rate: 0, recontact_72h_rate: 0, classified_pct: 50, handled_in_desk_pct: 100 });
+        expect(sales.quality).toEqual({ reopen_rate: 0, recontact_72h_rate: 0, classified_pct: 50, handled_in_desk_pct: 100, excluded_tickets: 0 });
         expect(sales.complaints.total).toBe(0);
         expect(sales.refunds.n).toBe(0);
         expect(sales.sales).toMatchObject({ opened: 1, won_unpaid: 1 });
@@ -172,14 +173,14 @@ describe('buildDeskStats, variants', () => {
     it('V3 no status events: the net median is null and nothing else changes', () => {
         const noEvents = buildDeskStats(statsInput({ statusEvents: null }));
         expect(noEvents.resolution.net_median_secs).toBeNull();
-        expect({ ...noEvents.resolution, net_median_secs: 1050 }).toEqual(stats.resolution);
+        expect({ ...noEvents.resolution, net_median_secs: 1800 }).toEqual(stats.resolution);
     });
 
     it('V4 stats_from missing: the epoch falls back to go-live and the older ticket counts', () => {
         const fallback = buildDeskStats(statsInput({ settings: { ...SETTINGS, stats_from: null } }));
         expect(fallback.range.stats_from).toBe(ist('2026-10-10', '00:00'));
         expect(fallback.now).toMatchObject({ awaiting: 3, oldest_wait_secs: 223200, over_alert: 3, open_over_24h: 2, unassigned: 3 });
-        expect(fallback.volume).toMatchObject({ opened: 8, resolved: 5 });
+        expect(fallback.volume).toMatchObject({ opened: 7, resolved: 4 });
         expect(fallback.refunds).toMatchObject({ n: 3, total: 144 });
         expect(fallback.refunds.by_category).toContainEqual({ category_slug: null, n: 1, total: 30 });
         expect(fallback.refunds.by_exec.map((row) => [row.actor_id, row.n, row.total])).toEqual([['7', 2, 94], ['8', 1, 50]]);
@@ -220,5 +221,30 @@ describe('buildDeskStats, variants', () => {
 
     it('V9 the column list matches the row type', () => {
         expect(new Set(STATS_TICKET_COLUMNS).size).toBe(STATS_TICKET_COLUMNS.length);
+    });
+});
+
+describe('buildDeskStats, internal / spam / wrong number (P1e)', () => {
+    const INTERNAL_OPEN = { ...T10, id: 't11', ticket_no: 111, opened_at: ist('2026-10-13', '12:00'), category_slug: 'internal', type: 'other' as const, status: 'open' as const, awaiting_reply_since: ist('2026-10-13', '12:00'), customer_phone: '919900000011' };
+    const WRONG = { ...T10, id: 't12', ticket_no: 112, opened_at: ist('2026-10-12', '12:00'), category_slug: 'wrong_number', type: 'other' as const, status: 'resolved' as const, resolved_at: ist('2026-10-12', '12:01'), resolved_via: 'manual' as const, resolution_code: 'no_action' as const, resolved_by: '7', resolved_by_name: 'Asha', awaiting_reply_since: null };
+    const input = statsInput({
+        tickets: [...statsInput().tickets, INTERNAL_OPEN, WRONG],
+        openTickets: [...statsInput().openTickets, INTERNAL_OPEN],
+    });
+    const withExcluded = buildDeskStats(input);
+
+    it('X1 excluded tickets change no number except excluded_tickets', () => {
+        expect(withExcluded.quality.excluded_tickets).toBe(3);
+        expect({ ...withExcluded, range: stats.range, quality: { ...withExcluded.quality, excluded_tickets: 1 } }).toEqual(stats);
+    });
+
+    it('X2 a money action on an excluded ticket still counts as a refund', () => {
+        const refundOnSpam = { ...A3, id: 9, ticket_id: 't12', created_at: ist('2026-10-12', '12:05') };
+        const result = buildDeskStats(statsInput({
+            tickets: [...statsInput().tickets, WRONG],
+            moneyActions: [...statsInput().moneyActions, toMoneyRow(refundOnSpam)],
+        }));
+        expect(result.refunds).toMatchObject({ n: 3, total: 144 });
+        expect(result.refunds.by_category).toContainEqual({ category_slug: 'wrong_number', n: 1, total: 30 });
     });
 });

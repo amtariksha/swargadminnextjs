@@ -78,6 +78,7 @@ export const EVENT_TITLE: Record<EventType, string> = {
     lead_updated: 'Lead updated',
     reviewed: 'Reviewed',
     cutoff_alerted: 'Cutoff alert',
+    auto_internal: 'Closed: internal contact',
 };
 
 export const ACTION_TITLE: Record<ActionType, string> = {

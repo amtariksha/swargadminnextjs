@@ -12,11 +12,13 @@ import {
     buildReopenPatch, contactFields, markTimedOut, trackOutcome, wholeSeconds,
     type MessageRow, type NewTicketRow, type OpenConversationRow,
 } from './repo';
+import { toWhatsAppPhone } from './phone';
 import type { DeskTickResult, DeskTickStepBase } from './types';
 
 export type MirrorCounters = NonNullable<DeskTickResult['steps']['mirror']>;
 export type MissingCounters = NonNullable<DeskTickResult['steps']['missing']>;
 export type LifecycleCounters = NonNullable<DeskTickResult['steps']['lifecycle']>;
+export type InternalCounters = NonNullable<DeskTickResult['steps']['internal']>;
 
 const IN_LIST_CHUNK = 100;
 const MIRROR_LIST_LIMIT = 1000;
@@ -31,6 +33,7 @@ const LIFECYCLE_BATCH = 25;
 const CUTOFF_WATCH_MS = 90 * 60_000;
 const CUTOFF_WATCH_LIMIT = 200;
 const MS_PER_HOUR = 3_600_000;
+const INTERNAL_RESOLVE_LIMIT = 25;
 
 export function chunk<T>(items: readonly T[], size: number = IN_LIST_CHUNK): T[][] {
     const chunks: T[][] = [];
@@ -103,6 +106,8 @@ async function mirrorUnseenInbound(
         }
         for (const ticket of tickets.data) {
             if (ctx.expired()) return markTimedOut(counters);
+            // R-E2: the internal close would undo the reopen on the next tick, every tick.
+            if (ticket.origin !== 'manual' && ctx.internal.isInternal(ticket.customer_phone)) continue;
             const newer = (byTicket.get(ticket.id) ?? [])
                 .filter((message) => Date.parse(message.created_at) > Date.parse(ticket.resolved_at));
             if (newer.length === 0) continue;
@@ -281,10 +286,12 @@ export async function runMissingStep(
 ): Promise<void> {
     if (ctx.settings.go_live_at === null) return;
     const lowerMs = Math.max(Date.parse(ctx.settings.go_live_at), windowStart.getTime());
-    const rows = await readOpenConversations(
+    const read = await readOpenConversations(
         ctx, counters, new Date(lowerMs).toISOString(), new Date(ctx.now.getTime() - MISSING_GAP_MS).toISOString(),
     );
-    counters.scanned = rows.length;
+    counters.scanned = read.length;
+    // An internal contact never gets a "message may be missing" ticket (plan section 8).
+    const rows = read.filter((row) => !ctx.internal.isInternal(row.contacts?.phone));
     if (rows.length === 0 || counters.not_installed) return;
     const gaps = await findGapCandidates(ctx, counters, rows, lowerMs);
     if (gaps === null || gaps.length === 0) return;
@@ -377,4 +384,27 @@ export async function runLifecycleStep(ctx: EngineContext, counters: LifecycleCo
     await closeAckLane(ctx, counters);
     if (counters.not_installed) return;
     await watchCutoff(ctx, counters);
+}
+
+// ── Internal contacts (tick step "internal", plan section 8) ───────────────
+
+/** Resolves unresolved, non-manual tickets of internal phones; at most INTERNAL_RESOLVE_LIMIT per tick. */
+export async function closeInternalTickets(
+    ctx: EngineContext, counters: InternalCounters, internalPhones: readonly string[],
+): Promise<void> {
+    const whatsAppPhones = internalPhones.map((phone) => toWhatsAppPhone(phone)).filter((phone): phone is string => phone !== null);
+    if (whatsAppPhones.length === 0) return;
+    const listed = await ctx.repo.listUnresolvedTicketsForPhones(whatsAppPhones, INTERNAL_RESOLVE_LIMIT);
+    if (listed.outcome !== 'ok') {
+        trackOutcome(counters, listed.outcome);
+        return;
+    }
+    for (const ticket of listed.data) {
+        if (ctx.expired()) return markTimedOut(counters);
+        if (ticket.origin === 'manual') continue;
+        const result = await resolveBySystem(ctx, ticket, 'internal', { kind: 'internal' });
+        if (countResolve(counters, result)) counters.resolved += 1;
+        // Not counters.not_installed: a missing desk_contact_flags table (016) sets it and must not stop the close.
+        if (result.outcome === 'not_installed') return;
+    }
 }
