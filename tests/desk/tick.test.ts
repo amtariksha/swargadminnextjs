@@ -573,6 +573,14 @@ describe('step internal — internal contacts (P1e)', () => {
         expect(result.steps.sweep).toMatchObject({ created: 1, scanned: 101 });
     });
 
+    it('I09b internal messages the safety net skipped are not counted as orphans', async () => {
+        const fake = staffWorld({ conversations: [{ id: 'C1', last_incoming_timestamp: null }, { id: 'C2', contacts: { id: 'contact-C2', name: 'Customer C2', phone: '919811111111' } }] });
+        for (let index = 0; index < 101; index += 1) sweepable(fake, 'C1', ts(3000 - index));
+        sweepable(fake, 'C2', minutesAgo(5));
+        const result = await tick(fake, NOW, undefined, STAFF);
+        expect(result.steps.health?.orphans).toBe(0);
+    });
+
     it('I10 the missing-message step never flags an internal conversation', async () => {
         const fake = staffWorld({ conversations: [{ id: 'C1', last_incoming_timestamp: minutesAgo(5) }] });
         const result = await tick(fake, NOW, undefined, STAFF);

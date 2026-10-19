@@ -37,6 +37,8 @@ const HEALTH_CAP = 100;
 const INTERNAL_EXCLUDE_CAP = 150;
 /** A full sweep page that still held internal conversations is read again at most this often. */
 const SWEEP_INTERNAL_RELISTS = 2;
+/** Cap on excluded conversation ids per sweep query: keeps the PostgREST `not.in` URL well under 8 KB. */
+const SWEEP_EXCLUDE_MAX = 200;
 
 type Steps = DeskTickResult['steps'];
 type SweepCounters = NonNullable<Steps['sweep']>;
@@ -165,7 +167,12 @@ function tally(counters: SweepCounters, result: AttachResult): Next {
     }
 }
 
-interface SweepInternal { exclude: readonly string[]; counters: InternalCounters }
+interface SweepInternal {
+    exclude: readonly string[];
+    counters: InternalCounters;
+    /** Receives the final exclusion list, so the orphan count skips what the safety net skipped. */
+    onExclude: (ids: readonly string[]) => void;
+}
 type GroupResult = 'next' | 'stop' | 'internal';
 
 async function sweepGroup(
@@ -208,6 +215,7 @@ async function runSweepStep(
         return;
     }
     const exclude = [...internal.exclude];
+    internal.onExclude(exclude);
     for (let listing = 0; listing <= SWEEP_INTERNAL_RELISTS; listing += 1) {
         const listed = await ctx.repo.listUnticketedInbound(
             ctx.settings.go_live_at, new Date(ctx.now.getTime() - SWEEP_MIN_AGE_MS).toISOString(), SWEEP_LIMIT, exclude,
@@ -226,7 +234,10 @@ async function runSweepStep(
         }
         // R-E1 safety net: internal conversations the query did not exclude must not hold the head of the queue.
         if (skipped.length === 0 || listed.data.length < SWEEP_LIMIT || ctx.expired()) return;
-        exclude.push(...skipped);
+        const room = SWEEP_EXCLUDE_MAX - exclude.length;
+        if (room <= 0) return;
+        exclude.push(...skipped.slice(0, room));
+        internal.onExclude(exclude);
     }
 }
 
@@ -362,8 +373,9 @@ export async function runDeskTick(deps: DeskTickDeps): Promise<DeskTickResult> {
     await run('internal', DESK_TICK_BOXES_MS.internal, internal, (ctx) => runInternalStep(ctx, internal, staffPhones, (next) => {
         internalRun = next;
     }));
+    let sweptExclude: readonly string[] = internalRun.excludeIds;
     await run('sweep', DESK_TICK_BOXES_MS.sweep, sweep, (ctx) => runSweepStep(ctx, sweep, derived, {
-        exclude: internalRun.excludeIds, counters: internal,
+        exclude: internalRun.excludeIds, counters: internal, onExclude: (ids) => { sweptExclude = [...ids]; },
     }));
     await run('derive', DESK_TICK_BOXES_MS.derive, derive, (ctx) => runDeriveStep(ctx, derive, windowStart, derived));
     await run('mirror', DESK_TICK_BOXES_MS.mirror, mirror, (ctx) => runMirrorStep(ctx, mirror, windowStart));
@@ -371,6 +383,6 @@ export async function runDeskTick(deps: DeskTickDeps): Promise<DeskTickResult> {
     await run('lifecycle', DESK_TICK_BOXES_MS.lifecycle, lifecycle, (ctx) => runLifecycleStep(ctx, lifecycle));
     await run('health', DESK_TICK_BOXES_MS.health, health, (ctx) => runHealthStep(ctx, health, (current) => (
         JSON.stringify(statsOf(tickAt, clock() - startedMs, { ...steps, health: { ...current, stats_written: true } }, current))
-    ), internalRun.excludeIds));
+    ), sweptExclude));
     return { ran: true, skipped: null, duration_ms: clock() - startedMs, steps, ...base };
 }
