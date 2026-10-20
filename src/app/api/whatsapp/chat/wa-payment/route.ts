@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { getRequestContext } from "@/lib/whatsapp/request";
 import { getAppSetting } from "@/lib/whatsapp/settings";
+import { storedSendNumber } from "@/lib/desk/send-number-io";
 
 // ─── POST /api/chat/wa-payment ────────────────────────────
 // Send a WA Native Payment (Cashfree via MSG91) interactive message
@@ -18,8 +19,10 @@ export async function POST(request: NextRequest) {
         headerImageUrl,
         items,
     } = body;
+    const storedNumber = await storedSendNumber({ conversationId, bodyNumber: integratedNumber, tag: "WA Payment" });
+    const sendFrom = storedNumber ?? integratedNumber;
 
-    if (!phone || !integratedNumber || !bodyText || !items?.length) {
+    if (!phone || !sendFrom || !bodyText || !items?.length) {
         return NextResponse.json(
             { error: "phone, integratedNumber, bodyText, and items are required" },
             { status: 400 }
@@ -105,7 +108,7 @@ export async function POST(request: NextRequest) {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    integrated_number: integratedNumber.replace(/^\+/, ""),
+                    integrated_number: sendFrom.replace(/^\+/, ""),
                     content_type: "interactive",
                     payload: {
                         to: phone.replace(/^\+/, ""),
@@ -142,7 +145,7 @@ export async function POST(request: NextRequest) {
                 body: `💳 Payment request: ${itemsSummary} (Total: ₹${totalAmount.toFixed(2)})`,
                 status: response.ok ? "sent" : "failed",
                 source: "webapp",
-                integrated_number: integratedNumber.replace(/^\+/, ""),
+                integrated_number: sendFrom.replace(/^\+/, ""),
                 failure_reason: response.ok ? null : `MSG91 HTTP ${response.status}: ${responseText}`.slice(0, 1000),
                 failed_at: response.ok ? null : new Date().toISOString(),
             });
