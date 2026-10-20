@@ -4,6 +4,8 @@ import { isPlaceholderName } from "@/lib/whatsapp/utils";
 import { maybeCreateWhatsAppLead } from "@/lib/lms/leads/whatsapp-intake";
 import { notifyStaffInbound } from "@/lib/whatsapp/staff-notify";
 import { createContactOrReselect, findContactByPhone, findOrCreateConversation } from "@/lib/whatsapp/conversation-lookup";
+import { noteClassifiedDirection, runJournaledWebhook } from "@/lib/whatsapp/webhook-journal";
+import { checkMsg91Secret } from "@/lib/whatsapp/webhook-auth";
 
 // Digits-only phone normalization + tolerant equality (exact digits OR the same
 // 10-digit national tail). MSG91 field formats drift — "+91…", "91…", bare
@@ -60,6 +62,8 @@ const normalizeTemplateEcho = (
 // never block or fail webhook processing. A cheap 7-day prune runs before each
 // insert (fine at this volume).
 const captureWebhookDebug = async (payload: unknown, classifiedDirection: string): Promise<void> => {
+    // The journal row carries the direction; this insert is the fallback when the journal is off or unavailable.
+    if (noteClassifiedDirection(classifiedDirection)) return;
     if (process.env.WA_WEBHOOK_DEBUG === "false") return;
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     try {
@@ -79,12 +83,25 @@ const captureWebhookDebug = async (payload: unknown, classifiedDirection: string
 };
 
 // ─── POST /api/webhooks/msg91 — Receive inbound messages ──
+// Shared-secret check (report-only while msg91_webhook_secret is blank), inbound journal
+// (webhook_debug, migration 017c) and replay support; the handler itself is processMsg91.
+// A rejected call still gets 200 so MSG91 never auto-pauses the webhook.
 export async function POST(request: NextRequest) {
+    return runJournaledWebhook({
+        provider: "msg91",
+        request,
+        authenticate: (req) => checkMsg91Secret(req),
+        reject: () => NextResponse.json({ received: true, skipped: "auth_failed" }, { status: 200 }),
+        process: processMsg91,
+    });
+}
+
+// The handler as it was before P1d; POST wraps it with auth and the journal.
+async function processMsg91(request: NextRequest) {
     try {
         const body = await request.json();
 
-        // Log the full payload for debugging
-        console.log("[MSG91 Webhook] Received payload:", JSON.stringify(body));
+        console.log("[MSG91 Webhook] Received payload keys:", Object.keys(body).join(","));
 
         /*
          * MSG91 "On Inbound Request Received" payload fields:

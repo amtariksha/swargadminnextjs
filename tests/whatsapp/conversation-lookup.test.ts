@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     createContactOrReselect, findContactByPhone, findOrCreateConversation, type LookupDb,
 } from '@/lib/whatsapp/conversation-lookup';
+import { clearWebhookAuthCache } from '@/lib/whatsapp/webhook-auth';
+import { clearWebhookJournalState } from '@/lib/whatsapp/webhook-journal';
 import { callsOf, createFakeStore, fakeClient, raceInsert, type FakeStore } from './fake-supabase';
 
 let store: FakeStore;
@@ -16,6 +18,8 @@ const conversation = (id: string, createdAt: string, number: string | null = 'N'
     ({ id, contact_id: 'c1', integrated_number: number, created_at: createdAt, status: 'open', unread_count: 0 });
 
 beforeEach(() => {
+    clearWebhookAuthCache();
+    clearWebhookJournalState();
     store = createFakeStore();
     db = fakeClient(store) as unknown as LookupDb;
     vi.spyOn(console, 'error').mockImplementation(() => undefined);

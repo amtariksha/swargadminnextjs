@@ -7,6 +7,8 @@ vi.mock('@/lib/whatsapp/supabase', async () => {
 });
 
 import { POST } from '@/app/api/whatsapp/conversations/route';
+import { clearWebhookAuthCache } from '@/lib/whatsapp/webhook-auth';
+import { clearWebhookJournalState } from '@/lib/whatsapp/webhook-journal';
 import { callsOf, fakeStore, raceInsert, resetFakeStore } from './fake-supabase';
 
 const CONTACT = { id: 'c1', name: 'Ravi', phone: '919845012345', created_at: '2026-10-01T00:00:00.000Z' };
@@ -22,6 +24,8 @@ function post(body: unknown): NextRequest {
 }
 
 beforeEach(() => {
+    clearWebhookAuthCache();
+    clearWebhookJournalState();
     resetFakeStore({ contacts: [{ ...CONTACT }] });
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
