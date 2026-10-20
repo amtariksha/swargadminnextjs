@@ -24,11 +24,14 @@ export function TicketBanners({ detail, tab, unseen, refused, onMarkRead }: Tick
                 <div className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
                     <span className="min-w-0 flex-1">
                         {refused ? 'The ticket was not resolved. ' : ''}
-                        The customer wrote again at {formatIstDateTime(ticket.last_inbound_at)}. Read it in the inbox before you resolve.
+                        The customer wrote again at {formatIstDateTime(ticket.last_inbound_at)}.{' '}
+                        {detail.conversation === null ? 'Check the old inbox before you resolve.' : 'Read it in the chat below before you resolve.'}
                     </span>
-                    <a href={inboxHref(ticket.integrated_number)} target="_blank" rel="noreferrer" className="underline">
-                        Open inbox
-                    </a>
+                    {detail.conversation === null ? (
+                        <a href={inboxHref(ticket.integrated_number)} target="_blank" rel="noreferrer" className="underline">
+                            Open inbox
+                        </a>
+                    ) : null}
                     <button
                         type="button"
                         onClick={onMarkRead}

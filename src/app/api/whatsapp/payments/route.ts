@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { getAppSetting } from "@/lib/whatsapp/settings";
 import { getRequestContext } from "@/lib/whatsapp/request";
+import { storedSendNumber } from "@/lib/desk/send-number-io";
 
 function mapPayment(row: Record<string, unknown>) {
     return {
@@ -165,6 +166,8 @@ export async function POST(request: NextRequest) {
         }
     }
 
+    const storedNumber = await storedSendNumber({ conversationId, bodyNumber: integratedNumber, tag: "Payments" });
+
     // ─── Store in Supabase ───────────────────────────────────
     const { data: payment, error } = await supabaseAdmin
         .from("payments")
@@ -181,7 +184,7 @@ export async function POST(request: NextRequest) {
             message_status: "pending",
             payment_status: "created",
             created_by: integratedNumber ? "Sales" : "Sales",
-            integrated_number: integratedNumber || null,
+            integrated_number: storedNumber ?? (integratedNumber || null),
         })
         .select()
         .single();
@@ -222,7 +225,7 @@ export async function POST(request: NextRequest) {
         // Resolve the sender number: explicit > the conversation's number > the
         // org's first active number. Never fall back to the "919999999999"
         // placeholder — it isn't a registered MSG91 number and guarantees failure.
-        let sendFromNumber: string | null = integratedNumber || null;
+        let sendFromNumber: string | null = storedNumber ?? (integratedNumber || null);
         if (!sendFromNumber && resolvedConversationId) {
             const { data: convRow } = await supabaseAdmin
                 .from("conversations")

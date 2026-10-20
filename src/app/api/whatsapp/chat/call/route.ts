@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { getRequestContext } from "@/lib/whatsapp/request";
 import { getAppSetting } from "@/lib/whatsapp/settings";
+import { storedSendNumber } from "@/lib/desk/send-number-io";
 
 // ─── POST /api/chat/call ──────────────────────────────────
 // Initiate a WhatsApp voice call via MSG91
@@ -30,8 +31,10 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { phone, integratedNumber, conversationId } = body;
+    const storedNumber = await storedSendNumber({ conversationId, bodyNumber: integratedNumber, tag: "Voice Call" });
+    const sendFrom = storedNumber ?? integratedNumber;
 
-    if (!phone || !integratedNumber) {
+    if (!phone || !sendFrom) {
         return NextResponse.json(
             { error: "phone and integratedNumber are required" },
             { status: 400 }
@@ -49,7 +52,7 @@ export async function POST(request: NextRequest) {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    integrated_number: integratedNumber.replace(/^\+/, ""),
+                    integrated_number: sendFrom.replace(/^\+/, ""),
                     recipient_number: phone.replace(/^\+/, ""),
                 }),
             }

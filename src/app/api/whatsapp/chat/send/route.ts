@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { getRequestContext } from "@/lib/whatsapp/request";
 import { getAppSetting } from "@/lib/whatsapp/settings";
 import { reportInboxAccess } from "@/lib/desk/inbox-gate";
+import { storedSendNumber } from "@/lib/desk/send-number-io";
 
 // ─── POST /api/chat/send ──────────────────────────────────
 export async function POST(request: NextRequest) {
@@ -67,7 +68,8 @@ export async function POST(request: NextRequest) {
     // ─── Resolve the sending number ────────────────────────────
     // The frontend sends activeNumber?.number || conversation.integratedNumber
     // Old conversations may have "default" or stale values, so we resolve properly
-    let sendFromNumber = integratedNumber;
+    const storedNumber = await storedSendNumber({ conversationId, bodyNumber: integratedNumber, tag: "Chat Send" });
+    let sendFromNumber = storedNumber ?? integratedNumber;
     let numConfig: Record<string, any> | null = null;
 
     // Try to find the specified number in DB
