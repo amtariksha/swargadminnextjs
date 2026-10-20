@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { settingsPutBody } from '@/lib/desk/contracts';
 import {
     checkResolveRules, checkSettingsPut, settingToText,
@@ -404,6 +404,10 @@ describe('GET tickets', () => {
     const query = (over: Row) => ({ view: 'all', limit: 10, ...over }) as Parameters<typeof listTickets>[0];
 
     it('orders a queue view by attention and filters mine / unassigned / acks', async () => {
+        // The seeds carry fixed times; pin the clock so none of them has turned overdue yet.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-10-19T00:00:00+00:00'));
+        onTestFinished(() => { vi.useRealTimers(); });
         seedTicket({ id: 'a', ticket_no: 1, awaiting_reply_since: '2026-10-20T03:00:00+00:00', assigned_to: '7' });
         seedTicket({ id: 'b', ticket_no: 2, conversation_id: 'c2', awaiting_reply_since: '2026-10-20T02:00:00+00:00', assigned_to: '9' });
         seedTicket({ id: 'c', ticket_no: 3, conversation_id: 'c3', is_ack_only: true });
