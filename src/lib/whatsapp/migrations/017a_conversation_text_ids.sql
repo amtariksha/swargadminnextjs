@@ -12,9 +12,13 @@
 -- type. The type change rewrites both (small) tables under an ACCESS EXCLUSIVE
 -- lock for well under a second; lock_timeout makes it fail fast (55P03) instead
 -- of queueing behind a long transaction. On 55P03 nothing changed: paste again.
--- If a view, policy or foreign key depends on either column, the ALTER fails
--- and the editor rolls the whole paste back: stop and ask (pre-flight D1 should
--- have shown it).
+-- Both columns carry a legacy foreign key to the old WACRM users table (uuid
+-- ids; pre-flight D1, 2026-10-20: conversations_assigned_to_fkey,
+-- reminders_user_id_fkey). A text column cannot reference a uuid key, and the
+-- admin-panel ids written here are never WACRM user ids, so the two constraints
+-- are dropped first. Their indexes stay (rebuilt by the type change). If any
+-- other view, policy or foreign key depends on either column, the ALTER fails
+-- and the editor rolls the whole paste back: stop and ask.
 --
 -- HOW TO APPLY (operator)
 --   Supabase SQL editor, project reyrthufoezeqymzwaer. ONE paste. Run outside
@@ -32,6 +36,7 @@ BEGIN
          WHERE table_schema = 'public' AND table_name = 'conversations'
            AND column_name = 'assigned_to' AND data_type = 'uuid'
     ) THEN
+        ALTER TABLE public.conversations DROP CONSTRAINT IF EXISTS conversations_assigned_to_fkey;
         ALTER TABLE public.conversations
             ALTER COLUMN assigned_to TYPE TEXT USING assigned_to::TEXT;
         RAISE NOTICE '017a: public.conversations.assigned_to uuid -> text';
@@ -42,6 +47,7 @@ BEGIN
          WHERE table_schema = 'public' AND table_name = 'reminders'
            AND column_name = 'user_id' AND data_type = 'uuid'
     ) THEN
+        ALTER TABLE public.reminders DROP CONSTRAINT IF EXISTS reminders_user_id_fkey;
         ALTER TABLE public.reminders
             ALTER COLUMN user_id TYPE TEXT USING user_id::TEXT;
         RAISE NOTICE '017a: public.reminders.user_id uuid -> text';
