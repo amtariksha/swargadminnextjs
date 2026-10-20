@@ -70,6 +70,7 @@ describe('providerMessageId', () => {
         ['P06', 'meta', metaValue({ statuses: [{ id: 'wamid.S' }] }), 'wamid.S'],
         ['P07', 'meta', { entry: [] }, null],
         ['P08', 'meta', {}, null],
+        ['P09', 'msg91', { uuid: 'u/1 x' }, null],
     ] as const)('%s', (_id, provider, payload, expected) => {
         expect(providerMessageId(provider as WebhookProvider, payload)).toBe(expected);
     });
@@ -110,6 +111,10 @@ describe('decideJournalRow', () => {
         ['R12', { journal_status: 'failed', outcome: 'unhandled_error', created_at: ago(49 * 60 * MIN) }, 'wait'],
     ] as const)('%s', (_id, over, expected) => {
         expect(decideJournalRow(journalRow(over as Partial<JournalRow>), NOW)).toBe(expected);
+    });
+
+    it('abandons a row whose MSG91 id the route could not dedup on', () => {
+        expect(decideJournalRow(journalRow({ payload: { ...BASE, uuid: 'u/1 x' } }), NOW)).toBe('abandon_no_provider_id');
     });
 
     it('waits on a provider it does not know', () => {
@@ -259,12 +264,20 @@ describe('replayJournal', () => {
         expect(journalRows()[0]).toMatchObject({ journal_status: 'failed', replay_count: 1 });
     });
 
-    it('RP04 skips a row another run claimed first', async () => {
+    it('RP04 skips a row another run claimed between the scan and the claim', async () => {
         seed([{ journal_status: 'failed', outcome: 'conversation_create_failed' }]);
-        fakeStore.failNext['webhook_debug.update'] = { empty: true };
+        let fired = false;
+        fakeStore.beforeUpdate = (table) => {
+            if (fired || table !== 'webhook_debug') return;
+            fired = true;   // the other run's claim lands first: same row, still open, count moved on
+            fakeStore.tables.webhook_debug = journalRows().map((row) => ({
+                ...row, journal_status: 'replaying', replay_count: 1, last_replay_at: NOW.toISOString(),
+            }));
+        };
         const msg91 = handlerReturning({ success: true, conversationId: 'c' });
         expect(await run({ msg91 })).toEqual({ scanned: 1, replayed: 0, failed: 0 });
         expect(msg91).not.toHaveBeenCalled();
+        expect(journalRows()[0]).toMatchObject({ journal_status: 'replaying', replay_count: 1 });
     });
 
     it('RP05 abandons a status-only row without calling the handler', async () => {

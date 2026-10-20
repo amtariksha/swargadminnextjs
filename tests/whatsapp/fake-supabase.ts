@@ -5,16 +5,16 @@
 // terms only), order, limit, abortSignal, maybeSingle, single, then. Unique rules: contacts.phone,
 // and conversations (contact_id, integrated_number) while store.uniqueConversations is true; both
 // answer { code: "23505" } like Postgres. Hooks: store.beforeInsert(table, row) runs before the
-// unique check (to simulate a racing request) and store.failNext["<table>.<action>"] makes the next
-// such call fail once. A select naming contacts(...) attaches the contact row. Every executed call
+// unique check and store.beforeUpdate(table) before an update matches rows (both simulate a racing
+// request); store.failNext["<table>.<action>"] makes the next such call fail once. A select naming contacts(...) attaches the contact row. Every executed call
 // is recorded in store.calls.
 
 export type Row = Record<string, unknown>;
 export type Action = "select" | "insert" | "update" | "delete";
 export interface FakeError { code: string; message: string }
 export interface FakeResult { data: unknown; error: FakeError | null }
-/** code = answer with this error; throws = the await rejects; empty = succeed with no rows. */
-export interface FailSpec { code?: string; throws?: boolean; empty?: boolean }
+/** code = answer with this error; throws = the await rejects. */
+export interface FailSpec { code?: string; throws?: boolean }
 export interface FakeCall { table: string; action: Action; payload: unknown }
 
 export interface FakeStore {
@@ -23,11 +23,12 @@ export interface FakeStore {
     uniqueConversations: boolean;
     failNext: Record<string, FailSpec | undefined>;
     beforeInsert: ((table: string, row: Row) => void) | null;
+    beforeUpdate: ((table: string) => void) | null;
     nextId: number;
 }
 
 export function createFakeStore(): FakeStore {
-    return { tables: {}, calls: [], uniqueConversations: true, failNext: {}, beforeInsert: null, nextId: 1 };
+    return { tables: {}, calls: [], uniqueConversations: true, failNext: {}, beforeInsert: null, beforeUpdate: null, nextId: 1 };
 }
 
 /** The store the vi.mock of @/lib/whatsapp/supabase serves; reset it in beforeEach. */
@@ -142,9 +143,9 @@ export class FakeQuery implements PromiseLike<FakeResult> {
         if (fail) {
             delete this.store.failNext[key];
             if (fail.throws) throw new Error(`fake ${key} failure`);
-            if (fail.empty) return this.shape([]);
             return { data: null, error: { code: fail.code ?? "XX000", message: `fake ${key} failure` } };
         }
+        if (this.action === "update") this.store.beforeUpdate?.(this.table);
         const rows = this.store.tables[this.table] ??= [];
         if (this.action === "insert") return this.runInsert(rows);
         const matched = this.matches(rows);

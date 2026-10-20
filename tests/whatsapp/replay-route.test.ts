@@ -10,6 +10,8 @@ vi.mock('@/app/api/whatsapp/webhooks/msg91/route', () => ({ POST: vi.fn() }));
 vi.mock('@/app/api/whatsapp/webhooks/meta/route', () => ({ POST: vi.fn() }));
 
 import { maxDuration, POST } from '@/app/api/agent-tools/whatsapp/replay/route';
+import { POST as metaWebhook } from '@/app/api/whatsapp/webhooks/meta/route';
+import { POST as msg91Webhook } from '@/app/api/whatsapp/webhooks/msg91/route';
 import { clearWebhookAuthCache } from '@/lib/whatsapp/webhook-auth';
 
 beforeEach(() => {
@@ -25,7 +27,7 @@ describe('POST /api/agent-tools/whatsapp/replay', () => {
         const response = await POST();
         expect(response.status).toBe(200);
         expect(await response.json()).toEqual({ ok: true, data: { scanned: 2, replayed: 1, failed: 1 } });
-        expect(journal.replayJournal).toHaveBeenCalledWith({ handlers: { msg91: expect.any(Function), meta: expect.any(Function) } });
+        expect(journal.replayJournal).toHaveBeenCalledWith({ handlers: { msg91: msg91Webhook, meta: metaWebhook } });
     });
 
     it('RR02 answers 503 not_installed before migration 017c', async () => {

@@ -30,12 +30,12 @@ export const REPLAY_BUDGET_MS = 45_000;
 const TABLE = "webhook_debug";
 const OPEN_STATUSES: readonly JournalStatus[] = ["received", "failed", "replaying"];
 const WRITE_TIMEOUT_MS = 1_500, REPLAY_WRITE_TIMEOUT_MS = 5_000, SCAN_TIMEOUT_MS = 8_000;
-const QUIET_MS = 10 * 60_000;                     // journal-off period and prune interval
-const KEEP_MS = 7 * 24 * 3_600_000;
+const QUIET_MS = 10 * 60_000, KEEP_MS = 7 * 24 * 3_600_000;   // journal-off period and prune interval; retention
 /** 017c not applied (column/table missing, schema cache stale) or the key has no grant. */
 const NOT_INSTALLED_CODES = new Set(["42703", "PGRST204", "PGRST205", "42P01", "42501"]);
 const STATUS_WORDS = ["sent", "delivered", "read", "failed"];
 const MSG91_BODY_FIELDS = ["content", "message", "text", "body"];
+const MSG91_DEDUP_ID = /^[A-Za-z0-9._:-]+$/;      // the only ids the MSG91 route's id dedup matches; others could store twice
 
 const replayContext = new AsyncLocalStorage<{ journalId: number }>();
 const journalContext = new AsyncLocalStorage<{ journalId: number | null; direction: string | null }>();
@@ -74,7 +74,8 @@ function firstId(list: unknown): string | null {
 
 export function providerMessageId(provider: WebhookProvider, payload: unknown): string | null {
     if (!isObject(payload)) return null;
-    if (provider === "msg91") return String(payload.uuid ?? payload.requestId ?? "").trim() || null;
+    const msg91Id = String(payload.uuid ?? payload.requestId ?? "").trim();
+    if (provider === "msg91") return MSG91_DEDUP_ID.test(msg91Id) ? msg91Id : null;
     const value = metaValue(payload);
     return value === null ? null : (firstId(value.messages) ?? firstId(value.statuses));
 }
