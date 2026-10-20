@@ -32,11 +32,14 @@ export function DeskThread({
     const call = useDeskVoiceCall(thread.refresh);
     const markRead = useMarkConversationRead();
     const markedRef = useRef<string | null | undefined>(undefined);
+    const lastTopRef = useRef(0);
 
     useEffect(() => {
-        // A hidden tab (display: none) may lose its scroll offset: snap back when it is shown again.
+        // A hidden tab (display: none) may lose its scroll offset: put it back when the tab is shown again.
         const element = scrollRef.current;
-        if (visible && atBottom && element !== null) element.scrollTop = element.scrollHeight;
+        if (!visible || element === null) return;
+        if (atBottom) element.scrollTop = element.scrollHeight;
+        else if (element.scrollTop === 0 && lastTopRef.current > 0) element.scrollTop = lastTopRef.current;
     }, [visible, atBottom, scrollRef]);
 
     useEffect(() => {
@@ -50,6 +53,10 @@ export function DeskThread({
         if (step.patch) markRead(conversation.id);
     }, [visible, atBottom, thread.messages, conversation.unread_count, conversation.id, markRead]);
 
+    const handleScroll = () => {
+        lastTopRef.current = scrollRef.current?.scrollTop ?? 0;
+        onScroll();
+    };
     const loadOlder = () => {
         keepPositionForOlder();
         thread.loadOlder();
@@ -79,7 +86,7 @@ export function DeskThread({
                 </Button>
             </div>
             <div className="relative flex min-h-0 flex-1 flex-col">
-                <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+                <div ref={scrollRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
                     {thread.messages.length === 0 ? (
                         <p className="py-8 text-center text-sm text-slate-500">No messages yet.</p>
                     ) : (

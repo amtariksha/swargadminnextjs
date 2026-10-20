@@ -47,7 +47,7 @@ export function TicketPanelLoaded({ detail, tab, onRefetch }: TicketPanelLoadedP
     const currentCategory = categories.bySlug.get(ticket.category_slug ?? '') ?? null;
     const close = () => setDialog({ kind: 'none' });
     const markRead = () => { setSeen(ticket.last_inbound_at); setRefused(false); };
-    const onSeen = () => { if (!refused && dialog.kind === 'none') setSeen(ticket.last_inbound_at); }; // R-3C1, D-4
+    const onSeen = () => { if (!refused && !resolve.isPending && dialog.kind === 'none') setSeen(ticket.last_inbound_at); }; // R-3C1, D-4
     const openDialog = (kind: 'resolve' | 'wrap_up', draft: ResolveDraft) => {
         setDialogError(null);
         setDialog({ kind, draft, nonce: Date.now() });

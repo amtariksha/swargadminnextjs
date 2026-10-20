@@ -66,9 +66,9 @@ export function useTicketMessages(ticketId: string, hasConversation: boolean): T
         void (async () => {
             try {
                 const page = await fetchPage(ticketId, MESSAGES_OLDER_LIMIT, cursor);
-                // An in-flight poll would otherwise overwrite the older page when it lands.
+                // Stop an in-flight poll (it would overwrite this page); merge only a page that still continues from this cursor.
                 await queryClient.cancelQueries({ queryKey: key });
-                queryClient.setQueryData<ThreadState>(key, (current) => (current === undefined ? current : mergeOlder(current, page)));
+                queryClient.setQueryData<ThreadState>(key, (current) => (current === undefined || current.olderCursor !== cursor ? current : mergeOlder(current, page)));
             } catch (error) {
                 toast.error(describeDeskError(error instanceof Error ? error : new Error('Could not load older messages')).text);
             } finally {
