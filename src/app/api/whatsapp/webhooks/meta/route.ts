@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { isPlaceholderName } from "@/lib/whatsapp/utils";
 import { maybeCreateWhatsAppLead } from "@/lib/lms/leads/whatsapp-intake";
 import { notifyStaffInbound } from "@/lib/whatsapp/staff-notify";
+import { createContactOrReselect, findContactByPhone, findOrCreateConversation } from "@/lib/whatsapp/conversation-lookup";
 
 // ─── GET /api/webhooks/meta ─────────────────────────────────
 // Handles webhook verification from Meta Developer Portal
@@ -203,11 +204,7 @@ export async function POST(request: NextRequest) {
 
             // ─── Find or create contact ──────────────────────────────
             let contactId: string;
-            const { data: existingContact } = await supabaseAdmin
-                .from("contacts")
-                .select("id")
-                .eq("phone", customerPhone)
-                .single();
+            const existingContact = await findContactByPhone(customerPhone);
 
             if (existingContact) {
                 contactId = existingContact.id;
@@ -228,19 +225,11 @@ export async function POST(request: NextRequest) {
                     }
                 }
             } else {
-                const { data: newContact, error: contactError } = await supabaseAdmin
-                    .from("contacts")
-                    .insert({
-                        phone: customerPhone,
-                        name: contactName || customerPhone,
-                    })
-                    .select("id")
-                    .single();
-
-                if (contactError || !newContact) {
+                const createdContact = await createContactOrReselect({ phone: customerPhone, name: contactName || customerPhone });
+                if (!createdContact) {
                     throw new Error("Failed to create contact");
                 }
-                contactId = newContact.id;
+                contactId = createdContact.row.id;
             }
 
             // ─── LMS: register a WhatsApp lead for new senders ──────────
@@ -261,19 +250,27 @@ export async function POST(request: NextRequest) {
             // this bump) — mirrors the MSG91 webhook behaviour.
             let conversationWasNew = false;
             let priorUnreadCount: number | null = null;
-            let conversationId: string;
-            const { data: existingConv } = await supabaseAdmin
-                .from("conversations")
-                .select("id")
-                .eq("contact_id", contactId)
-                .eq("integrated_number", integratedNum)
-                // Oldest row wins; see the MSG91 webhook for why .single() is unsafe here.
-                .order("created_at", { ascending: true })
-                .limit(1)
-                .maybeSingle();
-
-            if (existingConv) {
-                conversationId = existingConv.id;
+            // Oldest row wins; an insert that loses a race re-reads the winner (see conversation-lookup.ts).
+            const found = await findOrCreateConversation({
+                contactId,
+                integratedNumber: integratedNum,
+                insert: {
+                    contact_id: contactId,
+                    integrated_number: integratedNum,
+                    status: "open",
+                    last_message: messageBody,
+                    last_message_time: timestamp,
+                    last_incoming_timestamp: isEchoMessage ? undefined : timestamp,
+                    unread_count: isEchoMessage ? 0 : 1,
+                },
+            });
+            if (!found) {
+                throw new Error("Failed to create conversation");
+            }
+            const conversationId = found.row.id;
+            if (found.created) {
+                conversationWasNew = true;
+            } else {
                 // Only a genuine inbound message re-opens a resolved conversation —
                 // our own echoes update the preview but must NOT push it back into
                 // the action queue (mirrors the MSG91 webhook behaviour).
@@ -305,26 +302,6 @@ export async function POST(request: NextRequest) {
                             .eq("id", conversationId);
                     }
                 }
-            } else {
-                const { data: newConv, error: convError } = await supabaseAdmin
-                    .from("conversations")
-                    .insert({
-                        contact_id: contactId,
-                        integrated_number: integratedNum,
-                        status: "open",
-                        last_message: messageBody,
-                        last_message_time: timestamp,
-                        last_incoming_timestamp: isEchoMessage ? undefined : timestamp,
-                        unread_count: isEchoMessage ? 0 : 1,
-                    })
-                    .select("id")
-                    .single();
-
-                if (convError || !newConv) {
-                    throw new Error("Failed to create conversation");
-                }
-                conversationId = newConv.id;
-                conversationWasNew = true;
             }
 
             // ─── Insert Message ─────────────────────────────────────

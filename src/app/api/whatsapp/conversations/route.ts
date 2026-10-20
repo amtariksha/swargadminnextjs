@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { renderTemplateBody } from "@/lib/whatsapp/utils";
 import { reportInboxAccess } from "@/lib/desk/inbox-gate";
+import { findOrCreateConversation } from "@/lib/whatsapp/conversation-lookup";
 
 // ─── Supabase row → app Contact type mapper ───────────────
 function mapContact(row: Record<string, unknown>) {
@@ -95,8 +96,13 @@ export async function GET(request: NextRequest) {
 }
 
 // ─── POST /api/conversations ───────────────────────────────
+// Find-or-create: returns the oldest conversation of (contact, number) with 200 when one exists,
+// otherwise creates it (201). See src/lib/whatsapp/conversation-lookup.ts.
 export async function POST(request: NextRequest) {
     const body = await request.json();
+    if (typeof body?.contactId !== "string" || body.contactId === "") {
+        return NextResponse.json({ error: "contactId is required" }, { status: 400 });
+    }
 
     // Resolve the business number this conversation belongs to. The per-number
     // inbox passes it explicitly; if it's missing, fall back to the org's first
@@ -114,9 +120,10 @@ export async function POST(request: NextRequest) {
         integratedNumber = firstNumber?.number || null;
     }
 
-    const { data, error } = await supabaseAdmin
-        .from("conversations")
-        .insert({
+    const found = await findOrCreateConversation({
+        contactId: body.contactId,
+        integratedNumber,
+        insert: {
             contact_id: body.contactId,
             integrated_number: integratedNumber,
             status: "open",
@@ -124,14 +131,14 @@ export async function POST(request: NextRequest) {
             last_message_time: new Date().toISOString(),
             last_incoming_timestamp: new Date().toISOString(),
             unread_count: 0,
-        })
-        .select("*, contacts(*)")
-        .single();
+        },
+        select: "*, contacts(*)",
+    });
 
-    if (error) {
-        console.error("Create conversation error:", error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+    if (!found) {
+        console.error("Create conversation failed");
+        return NextResponse.json({ error: "Failed to create conversation" }, { status: 500 });
     }
 
-    return NextResponse.json(mapConversation(data), { status: 201 });
+    return NextResponse.json(mapConversation(found.row), { status: found.created ? 201 : 200 });
 }
