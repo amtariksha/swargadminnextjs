@@ -1,8 +1,8 @@
 // Route 5: PATCH /api/desk/tickets/:id, one function per `op`. Every change is one conditional
 // UPDATE ... RETURNING *; when no row matches, the ticket is read again and the answer comes from
-// what it is now (404, 409, or the unchanged ticket). Conversations are not written here: the
-// assignment copy of the spec is skipped because conversations.assigned_to is a uuid column in
-// production and the staff ids are integers.
+// what it is now (404, 409, or the unchanged ticket). The assignment is copied to the
+// conversation's existing columns (best-effort, `mirrorToConversation`); before migration 017a
+// that copy fails with 22P02 and is logged.
 
 import { supabaseAdmin } from '@/lib/whatsapp/supabase';
 import type { TicketPatchBody } from '../contracts';
@@ -11,7 +11,7 @@ import type { DeskContext, Ticket, TicketMutationResponse } from '../types';
 import { checkResolveRules } from './rules';
 import { resolveStaffName } from './staff';
 import {
-    classifyTicket, loadTicket, recordEvent, requireCategory, requireTicket, toView, TICKETS, updateTicket,
+    classifyTicket, loadTicket, mirrorToConversation, recordEvent, requireCategory, requireTicket, toView, TICKETS, updateTicket,
 } from './ticket-store';
 
 type Op<K extends TicketPatchBody['op']> = Extract<TicketPatchBody, { op: K }>;
@@ -53,6 +53,9 @@ async function assign(ctx: DeskContext, ticket: Ticket, body: Op<'assign'>): Pro
     const row = await patched(ticket.id, {
         assigned_to: body.assigned_to, assigned_name: name, assigned_at: body.assigned_to === null ? null : nowIso(),
     }, 'unresolved');
+    await mirrorToConversation(ticket.conversation_id, {
+        assigned_to: row.assigned_to, assigned_name: row.assigned_name, assigned_at: row.assigned_at,
+    }, 'assign');
     await recordEvent(ctx, ticket.id, 'assigned', {
         from: ticket.assigned_to, to: body.assigned_to, to_name: name, auto: false,
     }, { assigneeId: body.assigned_to });

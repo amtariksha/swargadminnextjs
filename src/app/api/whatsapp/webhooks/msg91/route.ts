@@ -3,6 +3,9 @@ import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { isPlaceholderName } from "@/lib/whatsapp/utils";
 import { maybeCreateWhatsAppLead } from "@/lib/lms/leads/whatsapp-intake";
 import { notifyStaffInbound } from "@/lib/whatsapp/staff-notify";
+import { createContactOrReselect, findContactByPhone, findOrCreateConversation } from "@/lib/whatsapp/conversation-lookup";
+import { noteClassifiedDirection, runJournaledWebhook } from "@/lib/whatsapp/webhook-journal";
+import { checkMsg91Secret } from "@/lib/whatsapp/webhook-auth";
 
 // Digits-only phone normalization + tolerant equality (exact digits OR the same
 // 10-digit national tail). MSG91 field formats drift — "+91…", "91…", bare
@@ -59,6 +62,8 @@ const normalizeTemplateEcho = (
 // never block or fail webhook processing. A cheap 7-day prune runs before each
 // insert (fine at this volume).
 const captureWebhookDebug = async (payload: unknown, classifiedDirection: string): Promise<void> => {
+    // The journal row carries the direction; this insert is the fallback when the journal is off or unavailable.
+    if (noteClassifiedDirection(classifiedDirection)) return;
     if (process.env.WA_WEBHOOK_DEBUG === "false") return;
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
     try {
@@ -78,12 +83,25 @@ const captureWebhookDebug = async (payload: unknown, classifiedDirection: string
 };
 
 // ─── POST /api/webhooks/msg91 — Receive inbound messages ──
+// Shared-secret check (report-only while msg91_webhook_secret is blank), inbound journal
+// (webhook_debug, migration 017c) and replay support; the handler itself is processMsg91.
+// A rejected call still gets 200 so MSG91 never auto-pauses the webhook.
 export async function POST(request: NextRequest) {
+    return runJournaledWebhook({
+        provider: "msg91",
+        request,
+        authenticate: (req) => checkMsg91Secret(req),
+        reject: () => NextResponse.json({ received: true, skipped: "auth_failed" }, { status: 200 }),
+        process: processMsg91,
+    });
+}
+
+// The handler as it was before P1d; POST wraps it with auth and the journal.
+async function processMsg91(request: NextRequest) {
     try {
         const body = await request.json();
 
-        // Log the full payload for debugging
-        console.log("[MSG91 Webhook] Received payload:", JSON.stringify(body));
+        console.log("[MSG91 Webhook] Received payload keys:", Object.keys(body).join(","));
 
         /*
          * MSG91 "On Inbound Request Received" payload fields:
@@ -472,11 +490,7 @@ export async function POST(request: NextRequest) {
 
         // ─── 1. Upsert Contact ─────────────────────────────
         // Single org — no org scoping (the column defaults to the single org).
-        let { data: contact } = await supabaseAdmin
-            .from("contacts")
-            .select("id, name")
-            .eq("phone", actualCustomerPhone)
-            .single();
+        let contact = await findContactByPhone(actualCustomerPhone);
 
         // Append-to-existing-only for outbound: a bulk outbound notification
         // (e.g. the swarg_credit_debit wallet template) to someone we've never
@@ -489,22 +503,15 @@ export async function POST(request: NextRequest) {
 
         if (!contact) {
             const contactDisplayName = senderName || actualCustomerPhone;
-            const { data: newContact, error: contactError } = await supabaseAdmin
-                .from("contacts")
-                .insert({
-                    name: contactDisplayName,
-                    phone: actualCustomerPhone,
-                })
-                .select("id, name")
-                .single();
+            const createdContact = await createContactOrReselect({ name: contactDisplayName, phone: actualCustomerPhone });
 
-            if (contactError) {
-                console.error("[MSG91 Webhook] Upsert contact error:", contactError);
+            if (!createdContact) {
+                console.error("[MSG91 Webhook] Upsert contact failed (see conversation-lookup log)");
                 // Ack 200: a processing failure on our side must not auto-pause the MSG91 webhook.
                 return NextResponse.json({ received: true, skipped: "contact_upsert_failed" }, { status: 200 });
             }
-            contact = newContact;
-            console.log(`[MSG91 Webhook] Created contact: ${contact!.id}`);
+            contact = createdContact.row;
+            if (createdContact.created) console.log(`[MSG91 Webhook] Created contact: ${contact.id}`);
         } else if (senderName && isPlaceholderName(contact.name) && !isPlaceholderName(senderName)) {
             // Update contact name if we have a better one from the webhook
             await supabaseAdmin
@@ -548,54 +555,45 @@ export async function POST(request: NextRequest) {
         // chatty customer produces one push, not ten.
         let conversationWasNew = false;
         let priorUnreadCount: number | null = null;
-        let { data: conversation } = await supabaseAdmin
-            .from("conversations")
-            .select("id")
-            .eq("contact_id", contact!.id)
-            .eq("integrated_number", actualBusinessPhone || "default")
-            // Oldest row wins. Duplicate (contact, number) rows exist in production;
-            // .single() returns null for 2+ rows, which used to spawn yet another
-            // conversation per inbound and drop outbound echoes.
-            .order("created_at", { ascending: true })
-            .limit(1)
-            .maybeSingle();
+        // Built before the lookup so one call finds or creates. Outbound passes no insert
+        // (append-to-existing-only, below).
+        const convInsert: Record<string, unknown> = {
+            contact_id: contact!.id,
+            integrated_number: actualBusinessPhone || "default",
+            status: "open",
+            last_message: messageBody || "[media]",
+            last_message_time: new Date().toISOString(),
+            last_incoming_timestamp: isExternalOutbound ? undefined : new Date().toISOString(),
+            unread_count: isExternalOutbound ? 0 : 1,
+        };
+        // Tag CTWA source on new conversations
+        if (ctwaClid) {
+            convInsert.ctwa_clid = ctwaClid;
+            convInsert.source = "ctwa";
+        }
+        // Oldest row wins (duplicate rows existed before migration 017b); an insert that loses a
+        // race (23505) re-reads the winner's row. See src/lib/whatsapp/conversation-lookup.ts.
+        const found = await findOrCreateConversation({
+            contactId: contact!.id,
+            integratedNumber: actualBusinessPhone || "default",
+            insert: isExternalOutbound ? null : convInsert,
+        });
 
         // Append-to-existing-only for outbound: don't open a new thread for an
         // outbound notification to a contact that has no conversation on this
         // number yet. Inbound falls through and creates the conversation.
-        if (!conversation && isExternalOutbound) {
+        if (!found && isExternalOutbound) {
             console.log("[MSG91 Webhook] Outbound with no existing conversation — not recording (append-to-existing-only).");
             return NextResponse.json({ received: true, skipped: "outbound_no_existing_conversation" }, { status: 200 });
         }
-
-        if (!conversation) {
-            const convInsert: Record<string, unknown> = {
-                contact_id: contact!.id,
-                integrated_number: actualBusinessPhone || "default",
-                status: "open",
-                last_message: messageBody || "[media]",
-                last_message_time: new Date().toISOString(),
-                last_incoming_timestamp: isExternalOutbound ? undefined : new Date().toISOString(),
-                unread_count: isExternalOutbound ? 0 : 1,
-            };
-            // Tag CTWA source on new conversations
-            if (ctwaClid) {
-                convInsert.ctwa_clid = ctwaClid;
-                convInsert.source = "ctwa";
-            }
-            const { data: newConv, error: convError } = await supabaseAdmin
-                .from("conversations")
-                .insert(convInsert)
-                .select("id")
-                .single();
-
-            if (convError) {
-                console.error("[MSG91 Webhook] Create conversation error:", convError);
-                return NextResponse.json({ received: true, skipped: "conversation_create_failed" }, { status: 200 });
-            }
-            conversation = newConv;
+        if (!found) {
+            console.error("[MSG91 Webhook] Create conversation failed (see conversation-lookup log)");
+            return NextResponse.json({ received: true, skipped: "conversation_create_failed" }, { status: 200 });
+        }
+        const conversation = found.row;
+        if (found.created) {
             conversationWasNew = true;
-            console.log(`[MSG91 Webhook] Created conversation: ${conversation!.id}`);
+            console.log(`[MSG91 Webhook] Created conversation: ${conversation.id}`);
         } else {
             // Update existing conversation. Only a CUSTOMER message re-opens it —
             // outbound sends (API templates, business-app, broadcasts) update the

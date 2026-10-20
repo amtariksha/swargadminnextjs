@@ -318,13 +318,15 @@ describe('POST resolve', () => {
 });
 
 describe('PATCH ticket', () => {
-    it('assign to the caller writes the ticket and never the conversation', async () => {
+    it('assign copies the assignee to the conversation; unassign clears it', async () => {
         seedTicket();
         const result = await patchTicket(TICKET, { op: 'assign', assigned_to: '7' }, ctxOf());
         expect(result.ticket).toMatchObject({ assigned_to: '7', assigned_name: 'Asha' });
-        expect(store.tables.conversations[0].assigned_to).toBeNull();
-        expect(store.tables.conversations[0]).not.toHaveProperty('assigned_name');
+        expect(store.tables.conversations[0]).toMatchObject({ assigned_to: '7', assigned_name: 'Asha' });
+        expect(typeof store.tables.conversations[0].assigned_at).toBe('string');
         expect(eventTypes()).toEqual(['assigned']);
+        await patchTicket(TICKET, { op: 'assign', assigned_to: null }, ctxOf());
+        expect(store.tables.conversations[0]).toMatchObject({ assigned_to: null, assigned_name: null, assigned_at: null });
     });
 
     it('assign refuses a user who holds only the customer role and a resolved ticket', async () => {
