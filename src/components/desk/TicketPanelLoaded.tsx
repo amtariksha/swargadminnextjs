@@ -47,6 +47,7 @@ export function TicketPanelLoaded({ detail, tab, onRefetch }: TicketPanelLoadedP
     const currentCategory = categories.bySlug.get(ticket.category_slug ?? '') ?? null;
     const close = () => setDialog({ kind: 'none' });
     const markRead = () => { setSeen(ticket.last_inbound_at); setRefused(false); };
+    const onSeen = () => { if (!refused && dialog.kind === 'none') setSeen(ticket.last_inbound_at); }; // R-3C1, D-4
     const openDialog = (kind: 'resolve' | 'wrap_up', draft: ResolveDraft) => {
         setDialogError(null);
         setDialog({ kind, draft, nonce: Date.now() });
@@ -123,7 +124,7 @@ export function TicketPanelLoaded({ detail, tab, onRefetch }: TicketPanelLoadedP
         <div className="flex min-h-0 flex-1 flex-col">
             <TicketHeader detail={detail} tab={tab} categories={categories} resolveBlock={resolveBlock} busy={busy} actions={actions} />
             <TicketBanners detail={detail} tab={tab} unseen={unseen} refused={refused} onMarkRead={markRead} />
-            <TicketCentreBody detail={detail} bySlug={categories.bySlug} />
+            <TicketCentreBody detail={detail} bySlug={categories.bySlug} seen={seen} onSeen={onSeen} />
             {dialog.kind === 'category' ? (
                 <CategoryPickerModal categories={categories.items} currentSlug={ticket.category_slug} onPick={actions.onClassify} onClose={close} />
             ) : null}
