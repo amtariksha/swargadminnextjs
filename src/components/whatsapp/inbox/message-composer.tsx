@@ -49,10 +49,14 @@ import { CatalogMessageDialog } from "./catalog-message-dialog";
 import { WaPaymentDialog } from "./wa-payment-dialog";
 import { PaymentLinkDialog } from "../payments/payment-link-dialog";
 import { getContactDisplayName } from "@/lib/whatsapp/utils";
-import type { Conversation } from "@/lib/whatsapp/types";
+import type { Conversation, Message } from "@/lib/whatsapp/types";
 
 interface MessageComposerProps {
     conversation: Conversation;
+    /** Desk: the conversation's stored number. Beats the store's activeNumber; the server still decides. */
+    sendFromNumber?: string;
+    /** Desk: called with the stored message after chat/send answered (text, file and note sends). */
+    onSent?: (message: Message) => void;
 }
 
 // Mirrors the server-side allow-list in /api/whatsapp/upload
@@ -68,7 +72,7 @@ const ALLOWED_DOCUMENT_TYPES = [
     "text/plain",
 ];
 
-export function MessageComposer({ conversation }: MessageComposerProps) {
+export function MessageComposer({ conversation, sendFromNumber, onSent }: MessageComposerProps) {
     const [text, setText] = useState("");
     const [isInternalNote, setIsInternalNote] = useState(false);
     const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
@@ -93,6 +97,7 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
     const sendMessage = useSendMessage();
     const { data: quickReplies } = useQuickReplies();
     const activeNumber = useAppStore((s) => s.activeNumber);
+    const fromNumber = sendFromNumber || activeNumber?.number || conversation.integratedNumber;
 
     const sessionExpired = isSessionExpired(conversation.lastIncomingTimestamp);
 
@@ -176,9 +181,9 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
                 contentType: "text",
                 text: text.trim(),
                 conversationId: conversation.id,
-                integratedNumber: activeNumber?.number || conversation.integratedNumber,
+                integratedNumber: fromNumber,
                 isInternalNote: true,
-            });
+            }, { onSuccess: (sent) => onSent?.(sent) });
             setText("");
             return;
         }
@@ -220,10 +225,10 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
                     contentType,
                     text: text.trim() || file.name,
                     conversationId: conversation.id,
-                    integratedNumber: activeNumber?.number || conversation.integratedNumber,
+                    integratedNumber: fromNumber,
                     mediaUrl: uploadBody.url,
                     fileName: file.name,
-                });
+                }, { onSuccess: (sent) => onSent?.(sent) });
                 setAttachedFile(null);
                 setText("");
             } catch (err) {
@@ -238,8 +243,8 @@ export function MessageComposer({ conversation }: MessageComposerProps) {
                 contentType: "text",
                 text: text.trim(),
                 conversationId: conversation.id,
-                integratedNumber: activeNumber?.number || conversation.integratedNumber,
-            });
+                integratedNumber: fromNumber,
+            }, { onSuccess: (sent) => onSent?.(sent) });
             setText("");
         }
     };
