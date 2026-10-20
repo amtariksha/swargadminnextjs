@@ -71,6 +71,8 @@ describe('providerMessageId', () => {
         ['P07', 'meta', { entry: [] }, null],
         ['P08', 'meta', {}, null],
         ['P09', 'msg91', { uuid: 'u/1 x' }, null],
+        ['P10', 'msg91', { uuid: ' u-1 ' }, null],
+        ['P11', 'msg91', { uuid: '', requestId: 'r-1' }, 'r-1'],
     ] as const)('%s', (_id, provider, payload, expected) => {
         expect(providerMessageId(provider as WebhookProvider, payload)).toBe(expected);
     });

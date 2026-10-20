@@ -74,7 +74,9 @@ function firstId(list: unknown): string | null {
 
 export function providerMessageId(provider: WebhookProvider, payload: unknown): string | null {
     if (!isObject(payload)) return null;
-    const msg91Id = String(payload.uuid ?? payload.requestId ?? "").trim();
+    // Same expression as the MSG91 route's id dedup (`body.uuid || body.requestId`, untrimmed), or a replay could store twice.
+    const rawId = payload.uuid || payload.requestId;
+    const msg91Id = rawId ? String(rawId) : "";
     if (provider === "msg91") return MSG91_DEDUP_ID.test(msg91Id) ? msg91Id : null;
     const value = metaValue(payload);
     return value === null ? null : (firstId(value.messages) ?? firstId(value.statuses));
