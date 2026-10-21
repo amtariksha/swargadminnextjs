@@ -8,6 +8,7 @@ import { ResolveModal } from '@/components/desk/ResolveModal';
 import { TicketBanners } from '@/components/desk/TicketBanners';
 import { TicketCentreBody } from '@/components/desk/TicketCentreBody';
 import { TicketHeader, type TicketHeaderActions } from '@/components/desk/TicketHeader';
+import { TicketWorkspaceLayout } from '@/components/desk/TicketWorkspaceLayout';
 import { describeDeskError, type ResolveOutcome } from '@/lib/desk/desk-query';
 import {
     buildResolveBody, buildWrapUpBody, classificationSourceFor, initialResolveDraft, presetStart,
@@ -121,7 +122,8 @@ export function TicketPanelLoaded({ detail, tab, onRefetch }: TicketPanelLoadedP
     const busy = patch.isPending || resolve.isPending;
 
     return (
-        <div className="flex min-h-0 flex-1 flex-col">
+        <TicketWorkspaceLayout detail={detail} tab={tab} categories={categories} seen={seen} onStartResolve={(draft) => openDialog('resolve', draft)}
+            onActionConflict={(fresh) => onResolved(savedDraft ?? initialResolveDraft(ticket, currentCategory), { kind: 'conflict', ticket: fresh })}>
             <TicketHeader detail={detail} tab={tab} categories={categories} resolveBlock={resolveBlock} busy={busy} actions={actions} />
             <TicketBanners detail={detail} tab={tab} unseen={unseen} refused={refused} onMarkRead={markRead} />
             <TicketCentreBody detail={detail} bySlug={categories.bySlug} seen={seen} onSeen={onSeen} />
@@ -143,6 +145,6 @@ export function TicketPanelLoaded({ detail, tab, onRefetch }: TicketPanelLoadedP
                     onClose={close}
                 />
             ) : null}
-        </div>
+        </TicketWorkspaceLayout>
     );
 }

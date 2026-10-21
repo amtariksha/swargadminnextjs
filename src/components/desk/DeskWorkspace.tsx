@@ -61,7 +61,6 @@ export function DeskWorkspace() {
                         ? <NoTicketSelected showAllTickets={me.manager} />
                         : <TicketPanel key={ticketNo} ticketNo={ticketNo} tab={tab} />}
                 </div>
-                {/* P3d: customer pane mounts here */}
             </div>
         </DeskWorkspaceFrame>
     );
