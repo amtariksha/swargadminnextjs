@@ -2,7 +2,7 @@
 
 // Shared chrome of every Desk action drawer (P4a, P4b, P4c). Portalled to <body>: the pane sits inside
 // `.glass` cards (backdrop-filter makes them a containing block for position:fixed) and must stay out
-// of `.whatsapp-shell`. No glass, transform or backdrop-filter on the drawer itself, so a Modal opened
+// of the inbox's themed wrapper. No glass, transform or backdrop-filter on the drawer itself, so a Modal opened
 // inside it (RefundModal) still covers the whole screen.
 
 import { useEffect, useSyncExternalStore, type ReactNode } from 'react';

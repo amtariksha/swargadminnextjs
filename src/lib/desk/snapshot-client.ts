@@ -2,7 +2,7 @@
 
 // The customer snapshot in the browser: one backend call per ticket open and one after each action
 // (rule R-B2). The browser calls the backend directly through wfetch (Bearer from localStorage['admin']);
-// never the axios helpers of lib/api.ts, whose interceptor navigates to /login.
+// never the axios helpers of lib/api.ts, whose interceptor navigates to the sign-in page.
 
 import { useEffect, useMemo, useRef } from 'react';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
