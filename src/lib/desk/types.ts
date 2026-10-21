@@ -759,3 +759,162 @@ export interface DeliveryCounts {
     by_product: Array<{ product_id: number; product_title: string | null; delivered_qty: number }>;
 }
 // Slice 2 · P1e
+
+// ── Backend customer snapshot — append to AD/src/lib/desk/types.ts ─────────
+// `data` of POST /api/support/customer-snapshot. Backend conventions apply:
+// timestamps are IST wall-clock 'YYYY-MM-DD HH:mm:ss' (type IstNaive), dates 'YYYY-MM-DD',
+// enum fields are the raw app_db integers of the enum card (section 6.4).
+export type IstNaive = string;
+
+export interface SnapshotCandidate {
+    user_id: number;
+    name: string | null;
+    /** Last four digits of the account's primary phone. */
+    phone_tail: string;
+    matched_on: 'phone' | 'alternate_phone' | 'address_phone';
+    apartment_name: string | null;
+    flat_no: string | null;
+    area: string | null;
+    is_staff: boolean;
+}
+
+export interface SnapshotSubscription {
+    order_id: number;
+    product_id: number;
+    product_title: string;
+    qty_text: string | null;
+    variant_id: number | null;
+    qty: number;
+    /** 1 one-time, 2 custom (weekly days), 3 daily, 4 alternate. */
+    subscription_type: 1 | 2 | 3 | 4;
+    /** Raw JSON string '[{"dayCode":0,"qty":1}, …]' (0 = Sunday) or null. */
+    selected_days_for_weekly: string | null;
+    /** 1 prepaid, 2 postpaid, 3 pay now, 4 pay later. */
+    order_type: number | null;
+    order_amount: number;
+    start_date: IstDate | null;
+    end_date: IstDate | null;
+    address_id: number | null;
+    /** 'upcoming' = start_date is after today; 'active' otherwise. */
+    state: 'active' | 'upcoming';
+    created_at: IstNaive | null;
+}
+
+export interface SnapshotDelivery {
+    delivery_id: number;
+    order_id: number;
+    delivery_date: IstDate;
+    /** delivery.status: 1 pending, 2 not delivered, 3 delivered. */
+    status: 1 | 2 | 3;
+    qty: number;
+    product_id: number;
+    product_title: string;
+    qty_text: string | null;
+    driver_user_id: number | null;
+    driver_name: string | null;
+    /** subscribed_order_delivery.mark_delivered_time_stamp. */
+    tap_time: IstNaive | null;
+    /** Median tap time ('HH:MM') of this customer's delivered rows in the 14-day window; null with fewer than 3. */
+    usual_time: string | null;
+    /** Minutes the tap was later than the "late" rule of owner decision 10; null when not late or unknown. */
+    late_by_min: number | null;
+    /** Metres between the tap position and the address position; null when either is missing. */
+    tap_distance_m: number | null;
+    /** 'driver' = tap time present; 'admin' = delivered ledger row without a tap time; null = no ledger row. */
+    marked_by: 'driver' | 'admin' | null;
+    /** 1 delivery_boy, 2 customer_care, 3 packaging, 4 driver. */
+    reason_category: 1 | 2 | 3 | 4 | null;
+    reason: string | null;
+    /** The wallet debit of this delivery (transactions.type = 2); null when none can be resolved. */
+    debit_txn_id: number | null;
+    debit_amount: number | null;
+    refunded: boolean;
+    refund_txn_id: number | null;
+    refund_amount: number | null;
+}
+
+export interface SnapshotDayOrder {
+    id: number;
+    order_no: number;
+    delivery_date: IstDate;
+    total_amount: number;
+    order_status: 'pending' | 'confirmed' | 'delivered' | 'cancelled';
+    payment_status: DaytimePaymentStatus;
+    payment_mode: string | null;
+    payment_short_url: string | null;
+    entry_type: string | null;
+    items_text: string;
+    delivery_status: 'pending' | 'claimed' | 'delivered' | null;
+    delivered_at: IstNaive | null;
+    created_at: IstNaive;
+}
+
+export interface SnapshotRecentAction {
+    kind: 'refund' | 'wallet_credit' | 'app_order' | 'day_order' | 'holiday';
+    /** Same (ref_type, ref_id) rule as the Action Contract, so AD can match desk_ticket_actions. */
+    ref_type: 'transaction' | 'order' | 'daytime_order' | 'holiday';
+    ref_id: string;
+    amount: number | null;
+    at: IstNaive;
+    summary: string;
+}
+
+export interface CustomerSnapshot {
+    /** The 10-digit backend form of the request phone. Always present, also when nothing matched. */
+    canonical_phone: string;
+    phone_variants: string[];
+    match: {
+        kind: 'exact' | 'alternate' | 'candidates' | 'staff' | 'none';
+        user_id: number | null;
+        candidates: SnapshotCandidate[];
+    };
+    /** null unless match.kind is 'exact' or 'alternate', or a valid user_id was requested. */
+    profile: {
+        user_id: number;
+        name: string | null;
+        phone: string | null;
+        email: string | null;
+        channel_tag: string | null;
+        is_b2b: boolean;
+        alternate_phones: string[];
+        created_at: IstNaive | null;
+    } | null;
+    wallet: { balance: number; low_balance: boolean; low_balance_threshold: number | null } | null;
+    address: {
+        address_id: number;
+        name: string | null;
+        s_phone: string | null;
+        flat_no: string | null;
+        apartment_name: string | null;
+        area: string | null;
+        landmark: string | null;
+        city: string | null;
+        pincode: string | null;
+        lat: number | null;
+        lng: number | null;
+    } | null;
+    driver: { user_id: number; name: string | null; phone: string | null } | null;
+    drop_point: { id: number; title: string } | null;
+    subscriptions: SnapshotSubscription[];
+    holidays: Array<{ id: number; date: IstDate }>;
+    last_order: {
+        channel: 'app' | 'day';
+        id: number;
+        created_at: IstNaive;
+        title: string;
+        amount: number | null;
+    } | null;
+    recent_deliveries: SnapshotDelivery[];
+    recent_day_orders: SnapshotDayOrder[];
+    recent_actions: SnapshotRecentAction[];
+    tomorrow: {
+        date: IstDate;
+        list_generated: boolean;
+        /** 'HH:MM' IST, app_settings setting_id 20. */
+        cutoff: string;
+        cutoff_passed: boolean;
+        rows: Array<{ delivery_id: number; order_id: number; product_title: string; qty: number; status: 1 | 2 | 3 }>;
+    };
+    generated_at: IstNaive;
+}
+// Slice 2 · P3d
