@@ -4,6 +4,7 @@ import { getRequestContext } from "@/lib/whatsapp/request";
 import { getAppSetting } from "@/lib/whatsapp/settings";
 import { reportInboxAccess } from "@/lib/desk/inbox-gate";
 import { storedSendNumber } from "@/lib/desk/send-number-io";
+import { DESK_INLINE_BUDGET_MS, deskOutboundHook, resolveInlineActor } from "@/lib/desk/inline-hooks";
 
 // ─── POST /api/chat/send ──────────────────────────────────
 export async function POST(request: NextRequest) {
@@ -416,6 +417,30 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+
+    // ─── Desk: who sent it, then the inline ticket hook (unit P1c) ──
+    // sent_by_* is always written (planner decision Q-6); the ticket side effects inside
+    // deskOutboundHook run only when desk_inline_hooks is on. The sender comes from the
+    // backend whoami, never from x-user-* headers or the body. Neither step can throw.
+    const deskActor = await resolveInlineActor(request.headers.get("authorization"));
+    await Promise.all([
+        deskActor
+            ? Promise.resolve(
+                supabaseAdmin
+                    .from("messages")
+                    .update({ sent_by_user_id: deskActor.id, sent_by_name: deskActor.name })
+                    .eq("id", message.id)
+                    .is("sent_by_user_id", null)
+                    .abortSignal(AbortSignal.timeout(DESK_INLINE_BUDGET_MS))
+            ).then(
+                ({ error }) => { if (error) console.warn(`[Chat Send] sent_by not written code=${error.code || "unknown"}`); },
+                () => console.warn("[Chat Send] sent_by not written code=thrown")
+            )
+            : Promise.resolve(),
+        conversationId
+            ? deskOutboundHook({ conversationId, messageId: message.id, actor: deskActor })
+            : Promise.resolve(),
+    ]);
 
     // ─── Update conversation's last_message ──────────────────
     if (conversationId) {
