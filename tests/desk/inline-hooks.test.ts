@@ -80,6 +80,8 @@ const openTicket = (fake: FakeDeskRepo, partial: Partial<Ticket> = {}): Ticket =
     addMessage(fake, { conversation_id: ticket.conversation_id, created_at: ticket.opened_at, ticket_id: ticket.id });
     return ticket;
 };
+/** The old-inbox PATCH has just stored status 'resolved' on C1. */
+const RESOLVED_C1: FakeSeed = { conversations: [{ id: 'C1', status: 'resolved' }, { id: 'C2' }] };
 const panelReply = (fake: FakeDeskRepo, partial = {}) => addMessage(fake, {
     conversation_id: 'C1', direction: 'outbound', source: 'webapp', status: 'sent', body: 'Sending a fresh pack today', created_at: ts(5), ...partial,
 });
@@ -379,7 +381,7 @@ describe('deskConversationPatchHook', () => {
     });
 
     it('PH-03 an old-inbox resolve closes the ticket as legacy_inbox', async () => {
-        const r = await rig();
+        const r = await rig(RESOLVED_C1);
         const ticket = openTicket(r.fake, { awaiting_reply_since: null, status: 'waiting_customer' });
         await deskConversationPatchHook({ conversationId: 'C1', status: 'resolved' }, r.deps);
         expect(ticket).toMatchObject({ status: 'resolved', resolved_via: 'legacy_inbox', resolution_code: 'closed_unclassified', first_resolved_code: 'closed_unclassified' });
@@ -387,39 +389,47 @@ describe('deskConversationPatchHook', () => {
     });
 
     it('PH-04 uses the category default code', async () => {
-        const r = await rig();
+        const r = await rig(RESOLVED_C1);
         const ticket = openTicket(r.fake, { category_slug: 'general_enquiry' });
         await deskConversationPatchHook({ conversationId: 'C1', status: 'resolved' }, r.deps);
         expect(ticket.resolution_code).toBe('answered');
     });
 
     it('PH-05 marks a resolve over a waiting customer', async () => {
-        const r = await rig();
+        const r = await rig(RESOLVED_C1);
         openTicket(r.fake);
         await deskConversationPatchHook({ conversationId: 'C1', status: 'resolved' }, r.deps);
         expect(eventsOf(r.fake, 'resolved')[0].data).toMatchObject({ over_unanswered: true });
     });
 
     it('PH-06 waits 120 s after the last customer message (the tick mirrors it later)', async () => {
-        const r = await rig();
+        const r = await rig(RESOLVED_C1);
         const ticket = openTicket(r.fake, { last_inbound_at: ts(30) });
         await deskConversationPatchHook({ conversationId: 'C1', status: 'resolved' }, r.deps);
         expect(ticket.status).toBe('open');
     });
 
     it('PH-07 leaves a manual ticket without a customer message to the panel', async () => {
-        const r = await rig();
+        const r = await rig(RESOLVED_C1);
         const ticket = addTicket(r.fake, { origin: 'manual', status: 'new', last_inbound_at: null, opened_at: minutesAgo(10) });
         await deskConversationPatchHook({ conversationId: 'C1', status: 'resolved' }, r.deps);
         expect(ticket.status).toBe('new');
     });
 
     it('PH-08 a customer message linked meanwhile keeps the ticket open', async () => {
-        const r = await rig();
+        const r = await rig(RESOLVED_C1);
         const ticket = openTicket(r.fake);
         r.fake.before('resolveSystem', () => { ticket.last_inbound_at = ts(1); });
         await deskConversationPatchHook({ conversationId: 'C1', status: 'resolved' }, r.deps);
         expect(ticket.status).toBe('open');
+    });
+
+    it('PH-14 a conversation reopened since the PATCH keeps the ticket open', async () => {
+        const r = await rig();
+        const ticket = openTicket(r.fake);
+        await deskConversationPatchHook({ conversationId: 'C1', status: 'resolved' }, r.deps);
+        expect(ticket.status).toBe('open');
+        expect(r.fake.calls.resolveSystem).toBe(0);
     });
 
     it('PH-09 copies an old-inbox assignment to the ticket', async () => {
@@ -453,7 +463,7 @@ describe('deskConversationPatchHook', () => {
     });
 
     it('PH-13 assign and resolve in one PATCH: assigned first, then resolved', async () => {
-        const r = await rig();
+        const r = await rig(RESOLVED_C1);
         const ticket = openTicket(r.fake);
         await deskConversationPatchHook({ conversationId: 'C1', status: 'resolved', assignedTo: '12', assignedName: 'Meena' }, r.deps);
         expect(ticket).toMatchObject({ status: 'resolved', assigned_to: '12' });

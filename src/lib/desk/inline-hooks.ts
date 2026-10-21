@@ -344,7 +344,7 @@ async function mirrorAssign(
     });
 }
 
-/** Tick step 4a for one conversation, now: same guards (U1 manual rule, 120 s quiet), same I6b mirror guard. */
+/** Tick step 4a for one conversation, now: same guards (resolved conversation, U1 manual rule, 120 s quiet), same I6b mirror guard. */
 async function mirrorResolve(ctx: EngineContext, conversationId: string): Promise<void> {
     const unresolved = await ctx.repo.getUnresolvedTicket(conversationId);
     if (unresolved.outcome !== 'ok' || unresolved.data === null) return;
@@ -353,6 +353,9 @@ async function mirrorResolve(ctx: EngineContext, conversationId: string): Promis
     const ticket = clock.data;
     if (ticket.origin === 'manual' && ticket.last_inbound_at === null) return;
     if (ticket.last_inbound_at !== null && ctx.now.getTime() - Date.parse(ticket.last_inbound_at) < MIRROR_QUIET_MS) return;
+    // Read last: a customer message since the PATCH reopens the conversation before its ticket link exists.
+    const stillResolved = await ctx.repo.listResolvedConversationIds([conversationId]);
+    if (stillResolved.outcome !== 'ok' || !stillResolved.data.includes(conversationId)) return;
     await resolveBySystem(ctx, {
         id: ticket.id, status: ticket.status, category_slug: unresolved.data.category_slug, awaiting_reply_since: ticket.awaiting_reply_since,
     }, 'legacy_inbox', { kind: 'mirror', readLastInboundAt: ticket.last_inbound_at });
