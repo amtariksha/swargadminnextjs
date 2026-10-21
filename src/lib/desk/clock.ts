@@ -19,11 +19,12 @@ export interface DeskMessageFacts {
     body: string | null;
     media_url?: string | null;
     created_at: string;              // the raw string PostgREST returned
+    sent_by_user_id?: string | null; // panel sender (chat/send); null for phone-app and API sends
 }
 
 /** The only column list the engine selects from public.messages. */
 export const DESK_MESSAGE_COLUMNS =
-    'id, conversation_id, direction, content_type, status, source, template_name, is_internal_note, body, media_url, created_at, ticket_id';
+    'id, conversation_id, direction, content_type, status, source, template_name, is_internal_note, body, media_url, created_at, ticket_id, sent_by_user_id';
 
 export const DESK_FAILED_STATUSES: readonly string[] = ['failed'];
 export const DESK_NON_REPLY_CONTENT_TYPES: readonly string[] = ['template'];

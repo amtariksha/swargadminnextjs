@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { isPlaceholderName } from "@/lib/whatsapp/utils";
 import { maybeCreateWhatsAppLead } from "@/lib/lms/leads/whatsapp-intake";
 import { notifyStaffInbound } from "@/lib/whatsapp/staff-notify";
+import { deskInboundHook } from "@/lib/desk/inline-hooks";
 import { createContactOrReselect, findContactByPhone, findOrCreateConversation } from "@/lib/whatsapp/conversation-lookup";
 import { runJournaledWebhook } from "@/lib/whatsapp/webhook-journal";
 import { checkMetaSignature } from "@/lib/whatsapp/webhook-auth";
@@ -313,6 +314,13 @@ async function processMeta(request: NextRequest) {
 
             if (isEchoMessage) {
                 console.log(`[Meta Webhook] Echo message saved as outbound/mobile_app for conversation ${conversationId}`);
+            }
+
+            // ─── Desk inline hook (unit P1c) ──────────────────────────────
+            // Awaited, capped at 1.5 s, never throws; a no-op unless the Desk engine and
+            // desk_inline_hooks are on. The tick repairs anything it does not finish.
+            if (!isEchoMessage && !msgInsertError) {
+                await deskInboundHook({ conversationId, messageId: null });
             }
 
             // ─── Staff push (first-new-message throttle) ─────────────

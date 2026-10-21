@@ -270,7 +270,7 @@ async function doReopen(
 
 async function doCreate(
     ctx: EngineContext, conv: ConversationContext, message: MessageRow, isAck: boolean,
-    decision: InboundDecision, log: EventLog,
+    decision: InboundDecision, log: EventLog, via: 'tick' | 'inline',
 ): Promise<Step> {
     const result = await classifyMessage(ctx, conv, message);
     if (result === null) return failStep(log, 'error', null);
@@ -284,7 +284,7 @@ async function doCreate(
         await emitEvent(ctx, log, {
             ticketId, type: 'created', from: null, to: 'new',
             data: {
-                origin: 'inbound', via: 'tick', message_id: message.id, queue: result.queue,
+                origin: 'inbound', via, message_id: message.id, queue: result.queue,
                 lag_secs: wholeSeconds(message.created_at, ctx.now.getTime()), previous_ticket_id: decision.previous_ticket_id,
             },
         });
@@ -308,7 +308,7 @@ function allowedForInternal(decision: InboundDecision, state: PassState): boolea
 }
 
 async function runPass(
-    ctx: EngineContext, conv: ConversationContext, message: MessageRow, isAck: boolean, log: EventLog,
+    ctx: EngineContext, conv: ConversationContext, message: MessageRow, isAck: boolean, log: EventLog, via: 'tick' | 'inline',
 ): Promise<Step> {
     const read = await readPassState(ctx, conv.conversation.id, message, isAck);
     if ('failed' in read) return failStep(log, read.failed, null);
@@ -325,18 +325,18 @@ async function runPass(
         case 'ack_attach':
             return state.latest ? doAckAttach(ctx, message, state.latest, log) : RETRY;
         case 'create':
-            return doCreate(ctx, conv, message, isAck, decision, log);
+            return doCreate(ctx, conv, message, isAck, decision, log, via);
     }
 }
 
 /** Turns one stored inbound message into exactly one ticket link, in at most three passes. */
-export async function attachInbound(ctx: EngineContext, conv: ConversationContext, message: MessageRow): Promise<AttachResult> {
+export async function attachInbound(ctx: EngineContext, conv: ConversationContext, message: MessageRow, via: 'tick' | 'inline' = 'tick'): Promise<AttachResult> {
     const log: EventLog = { errors: 0 };
     const isAck = isAckMessage(message);
     for (let pass = 0; pass < MAX_PASSES; pass += 1) {
         // The caller checked the time box before starting this message; only a retry pass is gated.
         if (pass > 0 && ctx.expired()) break;
-        const step = await runPass(ctx, conv, message, isAck, log);
+        const step = await runPass(ctx, conv, message, isAck, log, via);
         if (step.kind === 'done') return step.result;
     }
     return { outcome: 'gave_up', ticket_id: null, event_errors: log.errors };
@@ -378,11 +378,24 @@ async function emitDerivedEvents(
         await emitEvent(ctx, log, {
             ticketId: ticket.id, type: 'first_response', from: null, to: null,
             data: {
-                message_id: patch.first_response_message_id, source: clock.first_response_source, by: null,
+                message_id: patch.first_response_message_id, source: clock.first_response_source, by: patch.first_response_by ?? null,
                 secs_since_open: Math.round((Date.parse(clock.first_response_at) - Date.parse(ticket.opened_at)) / 1000),
             },
         });
     }
+}
+
+/**
+ * first_response_by is the panel sender of the first response (messages.sent_by_user_id; null for a
+ * phone-app reply). chat/send writes sent_by_* just after its insert, so a derive that picked the reply
+ * in between recorded null; a later derive fills the sender in. A recorded sender is never replaced.
+ */
+function withFirstResponseBy(
+    patch: DerivedPatch, ticket: TicketClockRow, firstId: string | null, messages: readonly MessageRow[],
+): DerivedPatch {
+    const sender = firstId === null ? null : messages.find((m) => m.id === firstId)?.sent_by_user_id ?? null;
+    if (patch.first_response_message_id !== undefined) return firstId === null ? patch : { ...patch, first_response_by: sender };
+    return ticket.first_response_by === null && sender !== null ? { ...patch, first_response_by: sender } : patch;
 }
 
 /** The only writer of derived ticket state in the tick. */
@@ -400,7 +413,8 @@ export async function deriveAndWrite(ctx: EngineContext, ticketId: string): Prom
     const openedMs = Date.parse(ticket.opened_at);
     const inbound = messages.filter((m) => m.direction === 'inbound' && Date.parse(m.created_at) >= openedMs);
     const clock = deriveTicketClock(messages, ticket);
-    const patch = buildDerivedPatch(ticket, clock, inbound.length > 0 && inbound.every(isAckMessage));
+    const built = buildDerivedPatch(ticket, clock, inbound.length > 0 && inbound.every(isAckMessage));
+    const patch = withFirstResponseBy(built, ticket, clock.first_response_message_id, messages);
     if (Object.keys(patch).length === 0) return done('unchanged', read.messages);
     const written = await ctx.repo.writeDerived({ id: ticket.id, status: ticket.status, last_inbound_at: ticket.last_inbound_at }, patch);
     if (written.outcome !== 'ok') return done(written.outcome === 'not_installed' ? 'not_installed' : 'error', read.messages);
