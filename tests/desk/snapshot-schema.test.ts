@@ -97,6 +97,12 @@ describe('parseSnapshotEnvelope', () => {
         expect(snapshotParseIssue(ok(raw))).toBe('data.recent_deliveries.0.status');
     });
 
+    it('S5b an unknown day-order status drops only that row', () => {
+        const odd = { ...RAW.recent_day_orders[0], id: 3102, delivery_status: 'not_delivered' };
+        const raw = { ...RAW, recent_day_orders: [odd, RAW.recent_day_orders[0]] };
+        expect(parseSnapshotEnvelope(ok(raw))?.recent_day_orders).toEqual(RAW.recent_day_orders);
+    });
+
     it('S6 names the first failing field, and reports null for a valid body', () => {
         const withoutTomorrow = Object.fromEntries(Object.entries(RAW).filter(([key]) => key !== 'tomorrow'));
         expect(snapshotParseIssue(ok(withoutTomorrow))).toBe('data.tomorrow');

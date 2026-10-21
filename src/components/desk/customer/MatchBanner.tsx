@@ -69,7 +69,7 @@ export function MatchBanner({ ticket, snapshot, viewingId, matchError, onPick, s
             {kind === 'candidates' ? candidates.map((candidate) => (
                 <CandidateRow key={candidate.user_id} candidate={candidate} viewing={viewingId === candidate.user_id} onPick={onPick} />
             )) : null}
-            {viewingId !== null && profile !== null ? (
+            {viewingId !== null && profile !== null && viewingId !== ticket.backend_user_id ? (
                 <p className="text-xs text-amber-300">Showing {profile.name ?? 'this account'}. This number is not linked to it.</p>
             ) : null}
             {linkedByHand ? <p className="text-xs text-amber-300">This ticket was linked by hand to account #{ticket.backend_user_id}.</p> : null}

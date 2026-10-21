@@ -36,7 +36,7 @@ export function RecentDayOrders({ ticket, orders, pending, onLink, slots }: Rece
                             {isLinkedDayOrder(ticket, order) ? (
                                 <span className="text-xs text-purple-300">Linked to this ticket</span>
                             ) : (
-                                <button type="button" disabled={pending} onClick={() => onLink(dayOrderLinkBody(order))} className={BUTTON}>
+                                <button type="button" disabled={pending || ticket.status === 'resolved'} onClick={() => onLink(dayOrderLinkBody(order))} className={BUTTON}>
                                     Link to ticket
                                 </button>
                             )}

@@ -139,7 +139,11 @@ export const customerSnapshotSchema: z.ZodType<CustomerSnapshot> = z.object({
         amount: num.nullable(),
     }).nullable(),
     recent_deliveries: z.array(delivery),
-    recent_day_orders: z.array(dayOrder),
+    // One unknown day-order status (the columns are free text) drops that row, never the whole pane.
+    recent_day_orders: z.array(z.unknown()).transform((rows) => rows.flatMap((row) => {
+        const parsed = dayOrder.safeParse(row);
+        return parsed.success ? [parsed.data] : [];
+    })),
     recent_actions: z.array(recentAction),
     tomorrow: z.object({
         date,

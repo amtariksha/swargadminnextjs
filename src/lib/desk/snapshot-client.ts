@@ -44,6 +44,7 @@ export async function fetchCustomerSnapshot(req: SnapshotRequest): Promise<Custo
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(req),
+            signal: AbortSignal.timeout(15_000),
         });
     } catch {
         throw new SnapshotError(0, 'network', 'Network error');

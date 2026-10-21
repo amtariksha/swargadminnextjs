@@ -53,7 +53,7 @@ export function RecentDeliveries({ ticket, deliveries, pending, onLink, slots }:
                             {isLinkedDelivery(ticket, row) ? (
                                 <span className="text-xs text-purple-300">Linked to this ticket</span>
                             ) : (
-                                <button type="button" disabled={pending} onClick={() => onLink(deliveryLinkBody(row))} className={BUTTON}>
+                                <button type="button" disabled={pending || ticket.status === 'resolved'} onClick={() => onLink(deliveryLinkBody(row))} className={BUTTON}>
                                     Link to ticket
                                 </button>
                             )}

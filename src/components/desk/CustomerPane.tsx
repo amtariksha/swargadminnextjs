@@ -100,7 +100,7 @@ export function CustomerPane({ detail, tab, categories, seen, onActionConflict, 
     const suggestionCategory = categories.bySlug.get(ticket.category_slug ?? ticket.suggested_category ?? '') ?? null;
     const suggestion = suggestDelivery(ticket, suggestionCategory, snapshot.recent_deliveries);
     const backstop = ticket.status === 'resolved' ? [] : unmatchedRecentActions(snapshot.recent_actions, detail.actions, ticket.opened_at);
-    const hasCustomer = snapshot.profile !== null;
+    const hasCustomer = snapshot.profile !== null && snapshot.match.kind !== 'staff';
 
     return (
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
