@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { isPlaceholderName } from "@/lib/whatsapp/utils";
 import { maybeCreateWhatsAppLead } from "@/lib/lms/leads/whatsapp-intake";
 import { notifyStaffInbound } from "@/lib/whatsapp/staff-notify";
+import { deskInboundHook } from "@/lib/desk/inline-hooks";
 import { createContactOrReselect, findContactByPhone, findOrCreateConversation } from "@/lib/whatsapp/conversation-lookup";
 import { noteClassifiedDirection, runJournaledWebhook } from "@/lib/whatsapp/webhook-journal";
 import { checkMsg91Secret } from "@/lib/whatsapp/webhook-auth";
@@ -781,6 +782,13 @@ async function processMsg91(request: NextRequest) {
         }
 
         console.log(`[MSG91 Webhook] Message saved for conversation ${conversation!.id}`);
+
+        // ─── Desk inline hook (unit P1c) ──────────────────────────────────────
+        // Awaited, capped at 1.5 s, never throws; a no-op unless the Desk engine and
+        // desk_inline_hooks are on. The tick repairs anything it does not finish.
+        if (!isExternalOutbound) {
+            await deskInboundHook({ conversationId: conversation!.id, messageId: null });
+        }
 
         // ─── Staff push (first-new-message throttle) ─────────────────────────
         // Only for a genuine INBOUND customer message that was actually inserted
