@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/whatsapp/supabase";
 import { renderTemplateBody } from "@/lib/whatsapp/utils";
 import { reportInboxAccess } from "@/lib/desk/inbox-gate";
+import { deskConversationPatchHook } from "@/lib/desk/inline-hooks";
 
 function mapMessage(row: Record<string, unknown>) {
     return {
@@ -141,6 +142,17 @@ export async function PATCH(
             { status: 500 }
         );
     }
+
+    // ─── Desk inline mirror (unit P1c): old-inbox resolve / assign → ticket ──
+    // Awaited, capped at 1.5 s, never throws; a no-op for a mark-as-read PATCH and
+    // unless desk_inline_hooks is on. Values come from the stored row, not the body.
+    await deskConversationPatchHook({
+        conversationId: id,
+        status: body.status === "resolved" ? "resolved" : undefined,
+        ...(body.assigned_to !== undefined
+            ? { assignedTo: data.assigned_to ? String(data.assigned_to) : null, assignedName: data.assigned_name ?? null }
+            : {}),
+    });
 
     const contact =
         data.contacts && typeof data.contacts === "object"
