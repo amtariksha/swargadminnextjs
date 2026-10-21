@@ -16,7 +16,7 @@ export const DESK_MESSAGE_PAGE = 1000;
 export const DESK_QUERY_TIMEOUT_MS = 4000;
 
 export const DESK_TICKET_CLOCK_COLUMNS =
-    'id, conversation_id, origin, status, opened_at, last_reopened_at, last_inbound_at, last_outbound_at, awaiting_reply_since, first_response_at, first_response_message_id, first_response_source, is_ack_only';
+    'id, conversation_id, origin, status, opened_at, last_reopened_at, last_inbound_at, last_outbound_at, awaiting_reply_since, first_response_at, first_response_message_id, first_response_source, first_response_by, is_ack_only';
 
 // ── Outcomes and the error classifier ──────────────────────────────────────
 
@@ -86,7 +86,7 @@ export type LatestResolvedRow = Pick<Ticket,
 export type TicketClockRow = Pick<Ticket,
     'id' | 'conversation_id' | 'origin' | 'status' | 'opened_at' | 'last_reopened_at' | 'last_inbound_at'
     | 'last_outbound_at' | 'awaiting_reply_since' | 'first_response_at' | 'first_response_message_id'
-    | 'first_response_source' | 'is_ack_only'>;
+    | 'first_response_source' | 'first_response_by' | 'is_ack_only'>;
 
 export type MirrorTicketRow = Pick<Ticket,
     'id' | 'conversation_id' | 'status' | 'last_inbound_at' | 'category_slug' | 'awaiting_reply_since' | 'origin'>;

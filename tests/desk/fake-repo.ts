@@ -277,7 +277,7 @@ export function createFakeDeskRepo(seed: FakeSeed = {}): FakeDeskRepo {
         )),
         getTicketClock: wrap('getTicketClock', 'desk', (id) => {
             const found = findTicket(id);
-            return ok(found ? pick<TicketClockRow>(found, ['id', 'conversation_id', 'origin', 'status', 'opened_at', 'last_reopened_at', 'last_inbound_at', 'last_outbound_at', 'awaiting_reply_since', 'first_response_at', 'first_response_message_id', 'first_response_source', 'is_ack_only']) : null);
+            return ok(found ? pick<TicketClockRow>(found, ['id', 'conversation_id', 'origin', 'status', 'opened_at', 'last_reopened_at', 'last_inbound_at', 'last_outbound_at', 'awaiting_reply_since', 'first_response_at', 'first_response_message_id', 'first_response_source', 'first_response_by', 'is_ack_only']) : null);
         }),
 
         insertTicket: wrap('insertTicket', 'desk', (row) => {

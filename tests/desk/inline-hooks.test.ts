@@ -363,6 +363,17 @@ describe('deskOutboundHook', () => {
         await deskOutboundHook({ conversationId: 'C1', messageId: note.id, actor: ACTOR }, r.deps);
         expect(ticket).toMatchObject({ first_response_at: null, assigned_to: null });
     });
+
+    it('OH-13 the tick derived the reply before sent_by_* landed: the hook still attributes it', async () => {
+        const r = await rig();
+        const ticket = openTicket(r.fake);
+        const reply = panelReply(r.fake);
+        await deriveAndWrite(r.ctx, ticket.id);
+        reply.sent_by_user_id = '7';
+        await deskOutboundHook({ conversationId: 'C1', messageId: reply.id, actor: ACTOR }, r.deps);
+        expect(ticket).toMatchObject({ first_response_message_id: reply.id, first_response_by: '7', assigned_to: '7' });
+        expect(eventsOf(r.fake, 'first_response')).toHaveLength(1);
+    });
 });
 
 describe('deskConversationPatchHook', () => {
@@ -550,5 +561,28 @@ describe('engine changes (P1c T2b)', () => {
         expect(ticket).toMatchObject({
             first_response_at: null, first_response_message_id: null, first_response_source: null, first_response_by: null,
         });
+    });
+
+    it('EN-06 a sender written after the derive picked the reply is filled in by the next derive', async () => {
+        const h = await setup();
+        const ticket = openTicket(h.fake);
+        const reply = panelReply(h.fake);
+        await deriveAndWrite(h.ctx, ticket.id);
+        expect(ticket.first_response_by).toBeNull();
+        reply.sent_by_user_id = '7';
+        expect((await deriveAndWrite(h.ctx, ticket.id)).outcome).toBe('updated');
+        expect(ticket).toMatchObject({ first_response_message_id: reply.id, first_response_by: '7' });
+        expect(eventsOf(h.fake, 'first_response')).toHaveLength(1);
+    });
+
+    it('EN-07 a settled first response is not rewritten, and a recorded sender is never replaced', async () => {
+        const h = await setup();
+        const ticket = openTicket(h.fake);
+        panelReply(h.fake, { sent_by_user_id: '7' });
+        await deriveAndWrite(h.ctx, ticket.id);
+        expect((await deriveAndWrite(h.ctx, ticket.id)).outcome).toBe('unchanged');
+        ticket.first_response_by = '9';
+        expect((await deriveAndWrite(h.ctx, ticket.id)).outcome).toBe('unchanged');
+        expect(ticket.first_response_by).toBe('9');
     });
 });

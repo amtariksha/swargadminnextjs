@@ -385,6 +385,19 @@ async function emitDerivedEvents(
     }
 }
 
+/**
+ * first_response_by is the panel sender of the first response (messages.sent_by_user_id; null for a
+ * phone-app reply). chat/send writes sent_by_* just after its insert, so a derive that picked the reply
+ * in between recorded null; a later derive fills the sender in. A recorded sender is never replaced.
+ */
+function withFirstResponseBy(
+    patch: DerivedPatch, ticket: TicketClockRow, firstId: string | null, messages: readonly MessageRow[],
+): DerivedPatch {
+    const sender = firstId === null ? null : messages.find((m) => m.id === firstId)?.sent_by_user_id ?? null;
+    if (patch.first_response_message_id !== undefined) return firstId === null ? patch : { ...patch, first_response_by: sender };
+    return ticket.first_response_by === null && sender !== null ? { ...patch, first_response_by: sender } : patch;
+}
+
 /** The only writer of derived ticket state in the tick. */
 export async function deriveAndWrite(ctx: EngineContext, ticketId: string): Promise<DeriveResult> {
     const log: EventLog = { errors: 0 };
@@ -401,10 +414,7 @@ export async function deriveAndWrite(ctx: EngineContext, ticketId: string): Prom
     const inbound = messages.filter((m) => m.direction === 'inbound' && Date.parse(m.created_at) >= openedMs);
     const clock = deriveTicketClock(messages, ticket);
     const built = buildDerivedPatch(ticket, clock, inbound.length > 0 && inbound.every(isAckMessage));
-    // A new first response carries its panel sender (messages.sent_by_user_id); a phone-app reply has none.
-    const patch: DerivedPatch = built.first_response_message_id
-        ? { ...built, first_response_by: messages.find((m) => m.id === built.first_response_message_id)?.sent_by_user_id ?? null }
-        : built;
+    const patch = withFirstResponseBy(built, ticket, clock.first_response_message_id, messages);
     if (Object.keys(patch).length === 0) return done('unchanged', read.messages);
     const written = await ctx.repo.writeDerived({ id: ticket.id, status: ticket.status, last_inbound_at: ticket.last_inbound_at }, patch);
     if (written.outcome !== 'ok') return done(written.outcome === 'not_installed' ? 'not_installed' : 'error', read.messages);
