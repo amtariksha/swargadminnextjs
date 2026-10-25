@@ -50,6 +50,19 @@ const orderSchema = z.object({
 
 type OrderFormData = z.infer<typeof orderSchema>;
 
+/** orders.order_type: 1 = Prepaid (wallet debited per delivery), 2 = Postpaid
+ *  (billed later — the truck network's shop-stop type), 3 = Pay Now (wallet
+ *  debited at creation).
+ *  - Subscriptions stay Prepaid even for a B2B shop: delivery generation skips
+ *    the wallet for shops and the truck never debits, and Prepaid is what
+ *    get_active_sub_order lists.
+ *  - A ONE-TIME order for a B2B shop is Postpaid: Pay Now would debit the
+ *    wallet at creation AND the truck delivery invoices it — a double charge. */
+const orderTypeFor = (isB2b: boolean, isSubscriptionProduct: boolean): 1 | 2 | 3 => {
+    if (isSubscriptionProduct) return 1;
+    return isB2b ? 2 : 3;
+};
+
 export default function CreateOrderPage() {
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -102,7 +115,9 @@ export default function CreateOrderPage() {
     // point) routes to the truck and is GST-invoiced — never assigned a
     // last-mile driver (the backend rejects it). Used to badge the customer and
     // hide the Delivery Partner picker below.
-    const { data: b2bStatus } = useQuery({
+    const {
+        data: b2bStatus, isFetching: b2bStatusLoading, isError: b2bStatusFailed,
+    } = useQuery({
         queryKey: ['customer-b2b-status', selectedUserId],
         queryFn: async () => {
             const r = await GET<{ is_b2b?: boolean | number }>(`/admin/customer_b2b_status/${selectedUserId}`);
@@ -149,20 +164,25 @@ export default function CreateOrderPage() {
     useEffect(() => {
         if (!selectedProduct) return;
         if (isSubscriptionProduct) {
-            // Subscription product: default to Daily, lock order_type to Prepaid
-            setValue('order_type', 1);
+            // Subscription product: default to Daily
             if (subscriptionType === 1) {
                 setValue('subscription_type', 3); // Default to Daily
             }
         } else {
-            // Non-subscription product: lock to One Time + Pay Now
+            // Non-subscription product: lock to One Time
             setValue('subscription_type', 1);
-            setValue('order_type', 3);
         }
         // Variations: clear any stale variant pick when the product
         // changes — the previous product's variants are no longer valid.
         setValue('variant_id', undefined);
     }, [selectedProduct?.id]);
+
+    // Order type follows the product AND the customer (see orderTypeFor): a
+    // one-time order for a B2B shop must never be Pay Now.
+    useEffect(() => {
+        if (!selectedProduct) return;
+        setValue('order_type', orderTypeFor(isB2bCustomer, isSubscriptionProduct));
+    }, [selectedProduct?.id, isSubscriptionProduct, isB2bCustomer]);
 
     // Variations: when variants land, auto-pick the default (or first
     // in-stock) variant so the operator sees coherent pricing without an
@@ -231,8 +251,21 @@ export default function CreateOrderPage() {
                 return;
             }
 
+            // Never guess B2B: getting it wrong debits a shop's wallet on top
+            // of its invoice. Wait for the check, and refuse if it failed.
+            if (b2bStatusLoading) {
+                toast.info('Checking whether this customer is a B2B shop — try again in a moment.');
+                return;
+            }
+            if (b2bStatusFailed) {
+                toast.error("Couldn't confirm whether this customer is a B2B shop. Reload and try again.");
+                return;
+            }
+            // Re-derived at submit so a stale form value can never slip through.
+            const orderType = orderTypeFor(isB2bCustomer, isSubscriptionProduct);
+
             // For Pay Now (type 3): check wallet balance first
-            if (data.order_type === 3) {
+            if (orderType === 3) {
                 const user = users.find((u) => u.id === data.user_id);
                 if (!user || (user.wallet_amount || 0) < orderAmount) {
                     toast.error('The user does not have sufficient wallet balance.');
@@ -242,7 +275,7 @@ export default function CreateOrderPage() {
 
             // For Pay Now: deduct wallet BEFORE creating order (matches React admin)
             let transactionId: number | null = null;
-            if (data.order_type === 3) {
+            if (orderType === 3) {
                 const txnResult = await addTxn.mutateAsync({
                     user_id: data.user_id,
                     amount: orderAmount,
@@ -293,6 +326,7 @@ export default function CreateOrderPage() {
 
             const orderData: Record<string, unknown> = {
                 ...data,
+                order_type: orderType,
                 end_date: endDate,
                 qty: isWeekly ? 1 : data.qty,
                 order_amount: orderAmount,
@@ -731,7 +765,12 @@ export default function CreateOrderPage() {
                             <span className="text-slate-400">{selectedProduct.title} x {qty}</span>
                             <span className="text-white font-semibold">₹{orderAmount.toFixed(2)}</span>
                         </div>
-                        {!isSubscriptionOrder && selectedUser && (
+                        {isB2bCustomer && (
+                            <div className="mt-2 p-2 rounded-lg text-xs bg-purple-900/30 border border-purple-700/30 text-purple-300">
+                                Billed by GST invoice on truck delivery. The wallet is not checked or debited.
+                            </div>
+                        )}
+                        {!isB2bCustomer && !isSubscriptionOrder && selectedUser && (
                             <div className={`mt-2 p-2 rounded-lg text-xs ${
                                 (selectedUser.wallet_amount || 0) >= orderAmount
                                     ? 'bg-emerald-900/30 border border-emerald-700/30 text-emerald-400'
