@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-    useTallySettings, useTallySyncRecords, useTallyImportRuns, TallySyncRecord, TallyImportRun,
+    useTallySettings, useTallySyncRecords, useTallyImportRuns, useTallyQueueCounts,
+    TallyConfig, TallySyncRecord, TallyImportRun,
 } from '@/hooks/useAccounting';
 import {
     SYNC_STATUS_BADGE, SYNC_ENTITY_TYPE_LABELS, TALLY_IMPORT_RUN_TYPE_LABELS,
@@ -12,21 +13,39 @@ import {
 import DataTable, { Column } from '@/components/DataTable';
 import TabPanel from '@/components/TabPanel';
 import Modal from '@/components/Modal';
-import { Power, RefreshCw, Building2, KeyRound, Server, Download, Camera } from 'lucide-react';
+import TallyLedgerMapping from '@/components/accounting/TallyLedgerMapping';
+import {
+    Power, RefreshCw, Building2, KeyRound, Server, Download, Camera, Wand2, AlertTriangle, SkipForward,
+} from 'lucide-react';
 import { PUT, POST } from '@/lib/api';
 import { toast } from 'sonner';
 
 const inputCls =
     'w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50';
 
+// Ledger names are mapped per ledger (Ledger mapping tab → ledger_account), not
+// here; the backend still accepts the legacy *_ledger fields but we no longer send them.
 const blankForm = {
-    bridge_url: '', port: '', company_name: '',
-    sales_ledger: '', round_off_ledger: '', cgst_ledger: '', sgst_ledger: '',
-    igst_ledger: '', b2c_consolidation_ledger: '', default_debtor_ledger: '',
+    bridge_url: '', company_name: '',
     tally_posting_enabled: 0,
     tally_import_enabled: 0,
+    auto_create_masters: 0,
     purchase_auto_post_confidence: '',
     bridge_credentials: '',
+};
+
+/** The dispatcher POSTs to bridge_url verbatim — a URL without an explicit port
+ *  goes to :80, never Tally's gateway (:9000). */
+const bridgeUrlProblem = (raw: string): string | null => {
+    const u = raw.trim();
+    if (!u) return null;
+    try {
+        const parsed = new URL(u);
+        if (!parsed.port) return `No port in the URL — this would connect on port ${parsed.protocol === 'https:' ? 443 : 80}. Tally's gateway is usually :9000, e.g. ${parsed.protocol}//${parsed.hostname}:9000`;
+        return null;
+    } catch {
+        return 'Enter a full URL including the port, e.g. http://100.64.0.5:9000';
+    }
 };
 
 export default function TallySettingsPage() {
@@ -38,7 +57,7 @@ export default function TallySettingsPage() {
             <div>
                 <h1 className="text-2xl font-bold text-white">Tally bridge</h1>
                 <p className="text-slate-400">
-                    Company &amp; ledger mappings, posting switch, and the voucher sync queue. Records always
+                    Bridge connection, posting switch, ledger mapping, and the voucher sync queue. Records always
                     enqueue — the dispatcher only posts when the switch is on.
                 </p>
             </div>
@@ -48,6 +67,7 @@ export default function TallySettingsPage() {
                 onChange={setActiveTab}
                 tabs={[
                     { label: 'Settings', content: <SettingsTab cfg={cfg} isLoading={isLoading} refetch={refetch} /> },
+                    { label: 'Ledger mapping', content: <TallyLedgerMapping /> },
                     { label: 'Sync queue', content: <SyncQueueTab /> },
                     { label: 'Import from Tally', content: <ImportTab /> },
                 ]}
@@ -66,45 +86,45 @@ function SettingsTab({
     const [form, setForm] = useState(blankForm);
     const [saving, setSaving] = useState(false);
     const hasCredentials = !!cfg?.has_credentials;
+    const { data: counts } = useTallyQueueCounts();
+    const urlProblem = bridgeUrlProblem(form.bridge_url);
 
     useEffect(() => {
         if (cfg) {
             setForm({
                 bridge_url: cfg.bridge_url || '',
-                port: cfg.port != null ? String(cfg.port) : '',
                 company_name: cfg.company_name || '',
-                sales_ledger: cfg.sales_ledger || '',
-                round_off_ledger: cfg.round_off_ledger || '',
-                cgst_ledger: cfg.cgst_ledger || '',
-                sgst_ledger: cfg.sgst_ledger || '',
-                igst_ledger: cfg.igst_ledger || '',
-                b2c_consolidation_ledger: cfg.b2c_consolidation_ledger || '',
-                default_debtor_ledger: cfg.default_debtor_ledger || '',
                 tally_posting_enabled: Number(cfg.tally_posting_enabled ?? 0),
                 tally_import_enabled: Number(cfg.tally_import_enabled ?? 0),
+                auto_create_masters: Number(cfg.auto_create_masters ?? 0),
                 purchase_auto_post_confidence: cfg.purchase_auto_post_confidence != null ? String(cfg.purchase_auto_post_confidence) : '',
                 bridge_credentials: '',
             });
         }
     }, [cfg]);
 
+    /** Turning posting ON pushes every queued voucher, oldest first — make the
+     *  operator see that number before it happens. */
+    const confirmGoLive = (): boolean => {
+        const turningOn = !Number(cfg?.tally_posting_enabled) && !!form.tally_posting_enabled;
+        if (!turningOn) return true;
+        const pending = counts?.pending ?? 0;
+        return window.confirm(pending > 0
+            ? `Turn on posting to Tally?\n\n${pending} voucher(s) are already queued and will post to Tally now, oldest first.\n\nIf those were booked by hand in Tally, press Cancel and use Sync queue → "Skip all pending" first, then turn posting on.`
+            : 'Turn on posting to Tally?\n\nNothing is queued — new vouchers will post as they are created.');
+    };
+
     const save = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!confirmGoLive()) return;
         setSaving(true);
         try {
             const body: Record<string, unknown> = {
-                bridge_url: form.bridge_url || null,
-                port: form.port !== '' ? Number(form.port) : null,
+                bridge_url: form.bridge_url.trim() || null,
                 company_name: form.company_name || null,
-                sales_ledger: form.sales_ledger || null,
-                round_off_ledger: form.round_off_ledger || null,
-                cgst_ledger: form.cgst_ledger || null,
-                sgst_ledger: form.sgst_ledger || null,
-                igst_ledger: form.igst_ledger || null,
-                b2c_consolidation_ledger: form.b2c_consolidation_ledger || null,
-                default_debtor_ledger: form.default_debtor_ledger || null,
                 tally_posting_enabled: form.tally_posting_enabled ? 1 : 0,
                 tally_import_enabled: form.tally_import_enabled ? 1 : 0,
+                auto_create_masters: form.auto_create_masters ? 1 : 0,
                 // Blank keeps the stored threshold (backend treats missing/blank as "no change").
                 purchase_auto_post_confidence: form.purchase_auto_post_confidence !== '' ? Number(form.purchase_auto_post_confidence) : null,
             };
@@ -123,30 +143,36 @@ function SettingsTab({
 
     const togglePosting = () => setForm((f) => ({ ...f, tally_posting_enabled: f.tally_posting_enabled ? 0 : 1 }));
     const toggleImport = () => setForm((f) => ({ ...f, tally_import_enabled: f.tally_import_enabled ? 0 : 1 }));
+    const toggleAutoCreate = () => setForm((f) => ({ ...f, auto_create_masters: f.auto_create_masters ? 0 : 1 }));
 
     if (isLoading) return <div className="text-slate-400 text-sm py-8 text-center">Loading…</div>;
 
     return (
         <form onSubmit={save} className="space-y-6">
             {/* Posting switch */}
-            <div className="glass rounded-2xl p-5 flex items-center justify-between">
-                <div>
-                    <div className="flex items-center gap-2 text-white font-semibold">
-                        <Power className="w-4 h-4 text-purple-400" /> Posting to Tally
+            <div className="glass rounded-2xl p-5 space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                    <div>
+                        <div className="flex items-center gap-2 text-white font-semibold">
+                            <Power className="w-4 h-4 text-purple-400" /> Posting to Tally
+                        </div>
+                        <p className="text-sm text-slate-400 mt-1">
+                            When off, vouchers queue as <span className="text-slate-300">pending</span> and nothing is sent.
+                            Before turning on: Ledger mapping shows <span className="text-slate-300">0 missing</span>, and any
+                            backlog already booked by hand is skipped in the Sync queue
+                            {counts && counts.pending > 0 && <> (<span className="text-amber-300">{counts.pending} queued now</span>)</>}.
+                        </p>
                     </div>
-                    <p className="text-sm text-slate-400 mt-1">
-                        When off, vouchers queue as <span className="text-slate-300">pending</span> and nothing is sent.
-                        Turn on once the Windows bridge host is verified.
-                    </p>
+                    <button type="button" onClick={togglePosting}
+                        className={`shrink-0 px-4 py-2 rounded-xl font-medium border transition-colors ${
+                            form.tally_posting_enabled
+                                ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                                : 'bg-slate-800/50 text-slate-400 border-slate-700/50'
+                        }`}>
+                        {form.tally_posting_enabled ? 'Enabled' : 'Disabled'}
+                    </button>
                 </div>
-                <button type="button" onClick={togglePosting}
-                    className={`px-4 py-2 rounded-xl font-medium border transition-colors ${
-                        form.tally_posting_enabled
-                            ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                            : 'bg-slate-800/50 text-slate-400 border-slate-700/50'
-                    }`}>
-                    {form.tally_posting_enabled ? 'Enabled' : 'Disabled'}
-                </button>
+                <DispatchHealth cfg={cfg} />
             </div>
 
             {/* Import switch */}
@@ -170,6 +196,28 @@ function SettingsTab({
                 </button>
             </div>
 
+            {/* Auto-create ledgers in Tally */}
+            <div className="glass rounded-2xl p-5 flex items-center justify-between gap-4">
+                <div>
+                    <div className="flex items-center gap-2 text-white font-semibold">
+                        <Wand2 className="w-4 h-4 text-purple-400" /> Auto-create missing ledgers in Tally
+                    </div>
+                    <p className="text-sm text-slate-400 mt-1">
+                        Only for a <span className="text-slate-300">fresh, empty</span> Tally company. On a company that already
+                        has its chart of accounts, leave this off — it creates duplicates of ledgers that exist under a
+                        slightly different name. Map them in the Ledger mapping tab instead.
+                    </p>
+                </div>
+                <button type="button" onClick={toggleAutoCreate}
+                    className={`shrink-0 px-4 py-2 rounded-xl font-medium border transition-colors ${
+                        form.auto_create_masters
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                            : 'bg-slate-800/50 text-slate-400 border-slate-700/50'
+                    }`}>
+                    {form.auto_create_masters ? 'On' : 'Off'}
+                </button>
+            </div>
+
             {/* OCR auto-post threshold */}
             <div className="glass rounded-2xl p-5 flex items-center justify-between gap-6">
                 <div>
@@ -190,17 +238,13 @@ function SettingsTab({
                 <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
                     <Server className="w-4 h-4 text-purple-400" /> Bridge connection
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Bridge URL</label>
-                        <input type="text" value={form.bridge_url} placeholder="http://127.0.0.1"
-                            onChange={(e) => setForm({ ...form, bridge_url: e.target.value })} className={inputCls} />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Port</label>
-                        <input type="number" value={form.port} placeholder="9000"
-                            onChange={(e) => setForm({ ...form, port: e.target.value })} className={inputCls} />
-                    </div>
+                <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Bridge URL (with port)</label>
+                    <input type="text" value={form.bridge_url} placeholder="http://100.64.0.5:9000"
+                        onChange={(e) => setForm({ ...form, bridge_url: e.target.value })} className={inputCls} />
+                    {urlProblem
+                        ? <p className="flex items-start gap-1.5 text-xs text-amber-300 mt-1"><AlertTriangle className="w-3.5 h-3.5 mt-px shrink-0" />{urlProblem}</p>
+                        : <p className="text-xs text-slate-500 mt-1">Tally&rsquo;s XML gateway on the Windows host, reached over a private tunnel or an IP-locked firewall — never public.</p>}
                 </div>
                 <div>
                     <label className="flex items-center gap-2 text-sm font-medium text-slate-300 mb-2">
@@ -208,30 +252,28 @@ function SettingsTab({
                         {hasCredentials && <span className="text-xs text-green-400">· stored</span>}
                     </label>
                     <input type="password" value={form.bridge_credentials} autoComplete="new-password"
-                        placeholder={hasCredentials ? 'Leave blank to keep stored credentials' : 'Enter credentials'}
+                        placeholder={hasCredentials ? 'Leave blank to keep stored credentials' : 'Leave blank when posting straight to Tally'}
                         onChange={(e) => setForm({ ...form, bridge_credentials: e.target.value })} className={inputCls} />
-                    <p className="text-xs text-slate-500 mt-1">Encrypted at rest — never returned by the API.</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                        Only needed if an authenticating proxy sits in front of Tally (sent as a Bearer token). Tally&rsquo;s own
+                        gateway has no login. Encrypted at rest — never returned by the API.
+                    </p>
                 </div>
             </div>
 
-            {/* Company + ledgers */}
-            <div className="glass rounded-2xl p-5 space-y-4">
+            {/* Company */}
+            <div className="glass rounded-2xl p-5 space-y-3">
                 <h2 className="flex items-center gap-2 text-lg font-semibold text-white">
-                    <Building2 className="w-4 h-4 text-purple-400" /> Company &amp; ledger mappings
+                    <Building2 className="w-4 h-4 text-purple-400" /> Company
                 </h2>
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Company name (in Tally)</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Company name (in Tally, for reference)</label>
                     <input type="text" value={form.company_name}
                         onChange={(e) => setForm({ ...form, company_name: e.target.value })} className={inputCls} />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <LedgerField label="Sales ledger" v={form.sales_ledger} on={(x) => setForm({ ...form, sales_ledger: x })} />
-                    <LedgerField label="Default debtor ledger" v={form.default_debtor_ledger} on={(x) => setForm({ ...form, default_debtor_ledger: x })} />
-                    <LedgerField label="CGST ledger" v={form.cgst_ledger} on={(x) => setForm({ ...form, cgst_ledger: x })} />
-                    <LedgerField label="SGST ledger" v={form.sgst_ledger} on={(x) => setForm({ ...form, sgst_ledger: x })} />
-                    <LedgerField label="IGST ledger" v={form.igst_ledger} on={(x) => setForm({ ...form, igst_ledger: x })} />
-                    <LedgerField label="Round-off ledger" v={form.round_off_ledger} on={(x) => setForm({ ...form, round_off_ledger: x })} />
-                    <LedgerField label="B2C consolidation ledger" v={form.b2c_consolidation_ledger} on={(x) => setForm({ ...form, b2c_consolidation_ledger: x })} />
+                    <p className="text-xs text-slate-500 mt-1">
+                        Vouchers go to whichever company is <span className="text-slate-300">open</span> in Tally — keep only this one open.
+                        Ledger names are set per ledger in the <span className="text-slate-300">Ledger mapping</span> tab.
+                    </p>
                 </div>
             </div>
 
@@ -245,31 +287,81 @@ function SettingsTab({
     );
 }
 
-function LedgerField({ label, v, on }: { label: string; v: string; on: (x: string) => void }) {
+const HEALTH_TONE: Record<string, { cls: string; label: string }> = {
+    ok: { cls: 'text-emerald-400', label: 'all vouchers posted' },
+    partial: { cls: 'text-amber-300', label: 'some vouchers failed — see Sync queue' },
+    unreachable: { cls: 'text-red-400', label: 'Tally unreachable — vouchers are waiting, no retries used' },
+    error: { cls: 'text-red-400', label: 'error' },
+};
+
+/** Last dispatcher outcome (tally_config.last_dispatch_*, migration 118). */
+function DispatchHealth({ cfg }: { cfg: TallyConfig | null | undefined }) {
+    if (!cfg?.last_dispatch_at) {
+        return <p className="text-xs text-slate-500">Dispatcher: no posting attempted yet.</p>;
+    }
+    const tone = HEALTH_TONE[cfg.last_dispatch_status || ''] || { cls: 'text-slate-400', label: cfg.last_dispatch_status || '' };
     return (
-        <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
-            <input type="text" value={v} onChange={(e) => on(e.target.value)} className={inputCls} />
-        </div>
+        <p className="text-xs text-slate-400">
+            Last dispatch {formatDateTime(cfg.last_dispatch_at)} — <span className={tone.cls}>{tone.label}</span>
+            {cfg.last_dispatch_error && (
+                <span className="block text-slate-500 truncate" title={cfg.last_dispatch_error}>{cfg.last_dispatch_error}</span>
+            )}
+        </p>
     );
 }
 
 function SyncQueueTab() {
+    const queryClient = useQueryClient();
     const [statusFilter, setStatusFilter] = useState('');
-    const { data, isLoading, refetch } = useTallySyncRecords(statusFilter ? { status: statusFilter } : {});
+    const { data, isLoading } = useTallySyncRecords(statusFilter ? { status: statusFilter } : {});
+    const { data: counts } = useTallyQueueCounts();
     const records = data?.data || [];
     const [retrying, setRetrying] = useState<number | null>(null);
+    const [bulk, setBulk] = useState<'skip' | 'retry' | null>(null);
+
+    // Prefix covers the list AND the pending/failed counts.
+    const refreshQueue = () => queryClient.invalidateQueries({ queryKey: ['accounting', 'tally-sync'] });
 
     const retry = async (id: number) => {
         setRetrying(id);
         try {
             await POST(`/accounting/tally/sync-records/${id}/retry`, {});
             toast.success('Re-queued for sync');
-            refetch();
+            refreshQueue();
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to retry');
         } finally {
             setRetrying(null);
+        }
+    };
+
+    const skipAllPending = async () => {
+        const n = counts?.pending ?? 0;
+        if (!window.confirm(
+            `Skip all ${n} queued voucher(s)?\n\nUse this once, right BEFORE turning posting on, for vouchers already booked by hand in Tally — they will never be sent.\n\nAny one of them can be re-queued later with its Retry button.`,
+        )) return;
+        setBulk('skip');
+        try {
+            const res = await POST<{ skipped: number }>('/accounting/tally/sync-records/skip-pending', {});
+            toast.success(`${res.data?.skipped ?? 0} queued voucher(s) skipped`);
+            refreshQueue();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to skip');
+        } finally {
+            setBulk(null);
+        }
+    };
+
+    const retryAllFailed = async () => {
+        setBulk('retry');
+        try {
+            const res = await POST<{ requeued: number }>('/accounting/tally/sync-records/retry-failed', {});
+            toast.success(`${res.data?.requeued ?? 0} failed voucher(s) re-queued`);
+            refreshQueue();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to retry');
+        } finally {
+            setBulk(null);
         }
     };
 
@@ -298,7 +390,7 @@ function SyncQueueTab() {
         {
             key: 'retry', header: '', width: '90px', sortable: false,
             render: (r) => (
-                (r.status === 'failed' || r.status === 'pending') ? (
+                (r.status === 'failed' || r.status === 'pending' || r.status === 'skipped') ? (
                     <button onClick={() => retry(r.id)} disabled={retrying === r.id}
                         className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700/50 disabled:opacity-50">
                         <RefreshCw className={`w-3 h-3 ${retrying === r.id ? 'animate-spin' : ''}`} /> Retry
@@ -312,6 +404,18 @@ function SyncQueueTab() {
 
     return (
         <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={skipAllPending} disabled={bulk !== null || !counts?.pending}
+                    className="flex items-center gap-2 px-3 py-2 text-sm rounded-xl border bg-amber-500/10 text-amber-300 border-amber-500/30 disabled:opacity-40">
+                    <SkipForward className="w-4 h-4" />
+                    {bulk === 'skip' ? 'Skipping…' : `Skip all pending (${counts?.pending ?? 0}) — go-live cutover`}
+                </button>
+                <button type="button" onClick={retryAllFailed} disabled={bulk !== null || !counts?.failed}
+                    className="flex items-center gap-2 px-3 py-2 text-sm rounded-xl border bg-slate-800/50 text-slate-300 border-slate-700/50 disabled:opacity-40">
+                    <RefreshCw className={`w-4 h-4 ${bulk === 'retry' ? 'animate-spin' : ''}`} />
+                    {bulk === 'retry' ? 'Re-queuing…' : `Retry all failed (${counts?.failed ?? 0})`}
+                </button>
+            </div>
             <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-400">Status:</span>
                 {STATUSES.map((s) => (
