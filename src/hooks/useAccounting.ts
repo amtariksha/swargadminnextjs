@@ -348,7 +348,64 @@ export interface TallyConfig {
     tally_posting_enabled: number;
     tally_import_enabled?: number;
     purchase_auto_post_confidence?: number | string | null;
+    /** 1 = dispatcher may create missing ledgers in Tally (fresh company only). Migration 118. */
+    auto_create_masters?: number;
+    last_dispatch_at?: string | null;
+    last_dispatch_status?: 'ok' | 'partial' | 'unreachable' | 'error' | null;
+    last_dispatch_error?: string | null;
     has_credentials: boolean;
+}
+
+/** One Swarg ledger and the Tally ledger it posts to. */
+export interface TallyLedgerMappingRow {
+    id: number;
+    name: string;
+    code: string | null;
+    /** 1=system 2=customer (B2B shop) 3=vendor 4=custom */
+    ledger_kind: number;
+    group_name: string;
+    tally_ledger_name: string | null;
+    /** Tally name differs from the Swarg name — an explicit mapping. */
+    is_mapped: boolean;
+    /** The dispatcher names this ledger on vouchers. */
+    posts_to_tally: boolean;
+    /** null = not checked; false = Tally has no ledger by that name. */
+    in_tally: boolean | null;
+}
+
+export interface TallyLedgerMapping {
+    ledgers: TallyLedgerMappingRow[];
+    tally_ledgers: { name: string; parent: string | null }[] | null;
+    tally_error: string | null;
+    summary: { posting_ledgers: number; checked: boolean; missing_in_tally: number | null };
+}
+
+/** Ledger mapping without contacting Tally. "Check against Tally" calls
+ *  fetchTallyLedgerMapping(true) on demand instead, so a page view never
+ *  hits the bridge. */
+export function useTallyLedgerMapping() {
+    return useQuery({
+        queryKey: ['accounting', 'tally-ledger-mapping'],
+        queryFn: () => fetchTallyLedgerMapping(false),
+    });
+}
+
+export async function fetchTallyLedgerMapping(check: boolean): Promise<TallyLedgerMapping> {
+    return (await GET<TallyLedgerMapping>('/accounting/tally/ledger-mapping', check ? { check: 1 } : {})).data;
+}
+
+/** Counts of queued + failed vouchers (limit 1 — only meta.total is used). */
+export function useTallyQueueCounts() {
+    return useQuery({
+        queryKey: ['accounting', 'tally-sync', 'counts'],
+        queryFn: async () => {
+            const [pending, failed] = await Promise.all([
+                getList<TallySyncRecord>('/accounting/tally/sync-records', { status: 'pending', limit: 1 }),
+                getList<TallySyncRecord>('/accounting/tally/sync-records', { status: 'failed', limit: 1 }),
+            ]);
+            return { pending: Number(pending.meta.total || 0), failed: Number(failed.meta.total || 0) };
+        },
+    });
 }
 
 export interface TallySyncRecord {
@@ -564,7 +621,7 @@ export function useStatementRows(importId: number | null, filters: Record<string
 
 export interface Period { fy?: string; from_date?: string; to_date?: string; }
 
-export interface ChartLedger { id: number; name: string; code: string | null; ledger_kind: number; balance: number | string; balance_type: 'Dr' | 'Cr'; }
+export interface ChartLedger { id: number; name: string; code: string | null; ledger_kind: number; tally_ledger_name?: string | null; balance: number | string; balance_type: 'Dr' | 'Cr'; }
 export interface ChartGroup { group_id: number; group_name: string; nature: number; affects_pl: number; ledgers: ChartLedger[]; subtotal: number | string; subtotal_type: 'Dr' | 'Cr'; }
 export interface ChartOfAccounts { groups: ChartGroup[]; total_debit: number | string; total_credit: number | string; }
 export function useChartOfAccounts() {
@@ -582,7 +639,7 @@ export function useAccountGroups() {
     });
 }
 
-export interface LedgerAccount { id: number; name: string; code: string | null; ledger_kind: number; account_group_id: number; group_name: string; nature: number; }
+export interface LedgerAccount { id: number; name: string; code: string | null; ledger_kind: number; account_group_id: number; group_name: string; nature: number; tally_ledger_name?: string | null; }
 export function useLedgerAccounts(params: Record<string, string> = {}) {
     return useQuery({
         queryKey: ['accounting', 'ledgers-list', params],

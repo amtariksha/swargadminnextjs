@@ -5,6 +5,7 @@ import { ChevronRight, ChevronDown } from 'lucide-react';
 import { useChartOfAccounts, useAccountGroups, type AccountGroup } from '@/hooks/useAccounting';
 import { formatINR, NATURE_LABELS } from '@/lib/accounting';
 import CoaActionBar from '@/components/accounting/CoaActionBar';
+import CoaLedgerRow from '@/components/accounting/CoaLedgerRow';
 
 const NATURE_BADGE: Record<number, string> = {
     1: 'bg-emerald-500/15 text-emerald-300',
@@ -85,7 +86,10 @@ export default function ChartOfAccountsPage() {
             <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Chart of Accounts</h1>
-                    <p className="text-slate-400">Account groups &amp; ledgers with live balances</p>
+                    <p className="text-slate-400">
+                        Account groups &amp; ledgers with live balances. Click a ledger&rsquo;s <span className="text-slate-300">Tally:</span> line
+                        to set the exact Tally ledger it posts to.
+                    </p>
                 </div>
                 <CoaActionBar groups={groups} selectedGroupId={selectedGroupId} />
             </div>
@@ -134,15 +138,7 @@ export default function ChartOfAccountsPage() {
                             </div>
                             <div className="divide-y divide-slate-700/40">
                                 {(selectedChart?.ledgers || []).map((l) => (
-                                    <div key={l.id} className="flex items-center justify-between py-1.5 text-sm">
-                                        <span className="text-slate-200">
-                                            {l.name}
-                                            {l.code && <span className="ml-2 text-xs text-slate-500">{l.code}</span>}
-                                        </span>
-                                        <span className="text-slate-300">
-                                            {formatINR(l.balance)} <span className="text-slate-500">{l.balance_type}</span>
-                                        </span>
-                                    </div>
+                                    <CoaLedgerRow key={`${l.id}:${l.tally_ledger_name}`} ledger={l} />
                                 ))}
                                 {(!selectedChart || selectedChart.ledgers.length === 0) && (
                                     <div className="py-3 text-xs text-slate-500">No ledgers in this group yet. Use “New Ledger”.</div>
@@ -166,15 +162,7 @@ export default function ChartOfAccountsPage() {
                                 </div>
                                 <div className="divide-y divide-slate-700/40">
                                     {g.ledgers.map((l) => (
-                                        <div key={l.id} className="flex items-center justify-between py-1.5 text-sm">
-                                            <span className="text-slate-200">
-                                                {l.name}
-                                                {l.code && <span className="ml-2 text-xs text-slate-500">{l.code}</span>}
-                                            </span>
-                                            <span className="text-slate-300">
-                                                {formatINR(l.balance)} <span className="text-slate-500">{l.balance_type}</span>
-                                            </span>
-                                        </div>
+                                        <CoaLedgerRow key={`${l.id}:${l.tally_ledger_name}`} ledger={l} />
                                     ))}
                                     {g.ledgers.length === 0 && <div className="py-1.5 text-xs text-slate-500">No ledgers</div>}
                                 </div>
