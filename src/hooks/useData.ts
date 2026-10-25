@@ -1752,6 +1752,26 @@ export interface RefundOrderContext {
     driver_candidates: RefundDriver[];
 }
 
+/** data of POST /refund (BE refundController.processRefund, HTTP 201). */
+export interface RefundResponseData {
+    transaction: {
+        id: number;
+        user_id: number | null;
+        order_id: number | null;
+        amount: number;
+        refund_for_transaction_id: number | null;
+        delivery_date: string | null;
+        refund_reason: string | null;
+        /** 0 / 1 (formatTransactionData). */
+        billed_to_driver: number;
+        billed_driver_id: number | null;
+    };
+    new_wallet_balance: number | null;
+    billed_to_driver: boolean;
+    billed_driver_id: number | null;
+    driver_deduction_amount: number | null;
+}
+
 export interface RefundReportReasonRow { reason: string; count: number; amount: number; }
 export interface RefundReportDriverRow { driver_id: number | null; driver_name: string; count: number; amount: number; }
 export interface RefundReportDateRow { date: string | null; count: number; amount: number; }
@@ -1925,7 +1945,7 @@ export function useProcessRefund() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (data: Record<string, unknown>) => {
-            return POST('/refund', data);
+            return POST<RefundResponseData>('/refund', data);
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['transactions'] });
