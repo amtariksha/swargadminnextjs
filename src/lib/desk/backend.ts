@@ -20,3 +20,14 @@ export function deskBackendGet(path: string, token: string): Promise<Response> {
         signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
     });
 }
+
+/** Plain JSON POST with the caller's bearer token. Same URL rule and 4-second limit as deskBackendGet. */
+export function deskBackendPost(path: string, token: string, body: unknown): Promise<Response> {
+    return fetch(deskBackendUrl(path), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        cache: 'no-store',
+        signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
+    });
+}
