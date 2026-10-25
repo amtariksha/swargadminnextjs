@@ -259,7 +259,7 @@ beforeEach(() => {
         conversations: [{ id: 'conv-1', status: 'open', unread_count: 2 }],
     };
     store.nextNo = 1000;
-    store.nextActionId = 1;
+    store.nextActionId = 1000;
     store.failTable = '';
     store.hideActionSelects = 0;
     backend.state.calls = [];
@@ -549,6 +549,32 @@ describe('wallet credit', () => {
         expect(eventTypes()).not.toContain('escalated');
     });
 
+    it('H43 replaying an earlier action is not flagged because of a later one', async () => {
+        backend.state.answers['/txn/77'] = txnAnswer(77, 501, 100, 1, `desk-${C1}`);
+        const first = await post(walletBody(100, { resolve: false }));
+        expect(first).toMatchObject({ flagged: null });
+        const later = '22222222-2222-4222-8222-222222222222';
+        (store.tables.desk_ticket_actions ??= []).push({
+            id: 5000, client_action_id: later, ticket_id: OTHER_TICKET, action_type: 'refund', ref_type: 'transaction',
+            ref_id: '9', amount: 10, created_at: '2026-10-20T07:00:00.000Z', data: { user_id: 501 },
+        });
+        ticketRow().status = 'open';
+        ticketRow().escalated_at = null;
+        const replay = await post(walletBody(100, { resolve: false }), ctxOf());
+        expect(replay.replayed).toBe(true);
+        expect(replay.flagged).toBeNull();
+        expect(eventTypes()).not.toContain('escalated');
+    });
+
+    it('H44 two concurrent replays escalate once', async () => {
+        (store.tables.desk_ticket_actions ??= []).push({
+            id: 50, client_action_id: C1, ticket_id: TICKET, action_type: 'wallet_credit', ref_type: 'transaction',
+            ref_id: '77', amount: 250, resolved_ticket: false, data: { user_id: 501 },
+        });
+        await Promise.all([post(walletBody()), post(walletBody())]);
+        expect(eventTypes().filter((type) => type === 'escalated')).toHaveLength(1);
+    });
+
     it('H26 a payment id of another action is a 400 without backend calls', async () => {
         const error = await catching(post(walletBody(250, {}, { payment_id: 'desk-22222222-2222-4222-8222-222222222222' })));
         expect(error.code).toBe('validation_failed');
@@ -663,6 +689,7 @@ describe('route and judges', () => {
         expect(judgeRefundTie({ ...ok, order_id: null }, { order_id: null }, now)).toBe('unavailable');
         expect(judgeRefundTie({ ...ok, created_at: '2026-10-19 10:00:00' }, { order_id: 812 }, now)).toBe('unavailable');
         expect(judgeRefundTie({ ...ok, created_at: '2026-10-20 12:30:00' }, { order_id: 812 }, now)).toBe('unavailable');
+        expect(judgeRefundTie({ ...ok, created_at: '2026-10-20T05:50:00Z' }, { order_id: 812 }, now)).toBe('pass');
         expect(judgeRefundTie({ ...ok, created_at: 'garbage' }, { order_id: 812 }, now)).toBe('unavailable');
     });
 

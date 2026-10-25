@@ -125,23 +125,36 @@ async function applyTicketColumns(
     return updated;
 }
 
-/** D-11: other refund / credit actions for the same customer inside REFUND_REPEAT_DAYS (any ticket). */
+/**
+ * D-11: earlier refund / credit actions (lower id) for the same customer inside REFUND_REPEAT_DAYS (any ticket).
+ * Only earlier ones count, so replaying action A is never flagged because of a later action B.
+ */
 async function countOtherMoneyActions(userId: number | null, actionId: number, nowMs: number): Promise<number> {
     if (userId === null) return 0;
     const { data, error } = await supabaseAdmin.from(ACTIONS).select('id')
         .eq('data->>user_id', String(userId)).in('action_type', ['refund', 'wallet_credit'])
         .gte('created_at', new Date(nowMs - REFUND_REPEAT_DAYS * MS_PER_DAY).toISOString())
-        .neq('id', actionId).limit(1);
+        .lt('id', actionId).limit(1);
     dbGuard(error, ACTIONS);
     return (data ?? []).length;
 }
 
+/** `onlyIfNew`: a replay must not escalate twice, so it needs escalated_at to still be null. */
 async function escalate(
-    ctx: DeskContext, ticket: Ticket, action: TicketAction, flag: NonNullable<BackstopFlag>, nowMs: number,
+    ctx: DeskContext, ticket: Ticket, action: TicketAction, flag: NonNullable<BackstopFlag>, nowMs: number, onlyIfNew = false,
 ): Promise<TicketActionResponse> {
-    const row = await updateTicket(ticket.id, { escalated_at: new Date(nowMs).toISOString(), escalation_reason: flag }, 'unresolved');
+    const patch = { escalated_at: new Date(nowMs).toISOString(), escalation_reason: flag };
+    const row = onlyIfNew ? await escalateOnce(ticket.id, patch) : await updateTicket(ticket.id, patch, 'unresolved');
     if (row !== null) await recordEvent(ctx, ticket.id, 'escalated', { escalation_reason: flag, note: null, action_id: action.id });
     return answer(ctx, row ?? ticket, action, 'recorded', flag);
+}
+
+async function escalateOnce(id: string, patch: Record<string, unknown>): Promise<Ticket | null> {
+    const { data, error } = await supabaseAdmin.from(TICKETS).update(patch).eq('id', id)
+        .neq('status', 'resolved').is('escalated_at', null).select('*');
+    dbGuard(error, TICKETS);
+    const rows = (data ?? []) as Ticket[];
+    return rows.length === 1 ? rows[0] : null;
 }
 
 async function holdByAction(
@@ -244,12 +257,14 @@ async function completeBackstopOnReplay(ctx: DeskContext, replay: TicketActionRe
     if (ticket.status === 'resolved' || ticket.escalated_at !== null) return replay;
     const storedUser = (action.data as { user_id?: unknown } | null)?.user_id;
     const userId = typeof storedUser === 'number' ? storedUser : ticket.backend_user_id;
+    const createdMs = Date.parse(action.created_at);
     const flag = backstopFlag({
         isManager: false, actionType: action.action_type, amount: action.amount,
-        creditMaxAgent: ctx.settings.credit_max_agent, otherMoneyActions: await countOtherMoneyActions(userId, action.id, nowMs),
+        creditMaxAgent: ctx.settings.credit_max_agent,
+        otherMoneyActions: await countOtherMoneyActions(userId, action.id, Number.isFinite(createdMs) ? createdMs : nowMs),
     });
     if (flag === null) return replay;
-    return { ...(await escalate(ctx, ticket, action, flag, nowMs)), replayed: true };
+    return { ...(await escalate(ctx, ticket, action, flag, nowMs, true)), replayed: true };
 }
 
 export async function recordTicketAction(id: string, body: TicketActionBody, ctx: DeskContext): Promise<TicketActionResponse> {

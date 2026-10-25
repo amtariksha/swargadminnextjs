@@ -34,7 +34,7 @@ export function ReplacementPromiseForm({ ctx, session, onClose }: Props) {
 
     const submit = () => {
         setError('');
-        if (Date.parse(followUpAt) <= Date.now()) { setError('Pick a follow-up time in the future.'); return; }
+        if (!(Date.parse(followUpAt) > Date.now())) { setError('Pick a follow-up time in the future.'); return; }
         action.mutate(replacementActionBody({
             clientActionId: session.clientActionId, seen: session.seen, ticketNo: ctx.ticket.ticket_no,
             promisedDate: date, note: note.trim(), productName: product.trim() || null, followUpAt,

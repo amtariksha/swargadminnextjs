@@ -37,6 +37,10 @@ const TIE_CLOCK_SKEW_MS = 300_000;
 
 /** The backend stores IST wall-clock text ('YYYY-MM-DD HH:mm:ss[.ffffff]'). null = not parseable. */
 function istTextToMs(text: string | null | undefined): number | null {
+    if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/.test(text ?? '')) {
+        const explicit = Date.parse((text as string).replace(' ', 'T'));
+        return Number.isFinite(explicit) ? explicit : null;
+    }
     const match = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/.exec(text ?? '');
     const ms = match ? Date.parse(`${match[1]}T${match[2]}+05:30`) : Number.NaN;
     return Number.isFinite(ms) ? ms : null;
