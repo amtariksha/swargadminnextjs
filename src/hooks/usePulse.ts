@@ -146,6 +146,41 @@ export function usePulseVendorVariance(days: number) {
     });
 }
 
+/** One B2B shop on the Shop Outstanding report (backend utils/shopOutstanding.js). */
+export interface ShopOutstandingRow {
+    s_no: number;
+    user_id: number;
+    name: string;
+    /** Owed at the END of as_of (negative = the shop is in credit). */
+    balance: number;
+    /** Part of balance that is the reconciled "balance brought forward". */
+    opening: number;
+    /** Swarg's own movements: balance without the opening. */
+    ledger_balance: number;
+    /** Date the opening entry is booked on, if the shop has one. */
+    opening_date: string | null;
+    /** A truck shop (kind='shop'); others are B2B-billing customers with dues. */
+    is_shop: boolean;
+}
+
+export interface ShopOutstanding {
+    as_of: string;
+    rows: ShopOutstandingRow[];
+    total: number;
+    count: number;
+}
+
+/** Shop Outstanding as of a date. null = the server default (last Sunday IST). */
+export function usePulseShopOutstanding(asOf: string | null) {
+    return useQuery({
+        queryKey: ['pulse', 'shop-outstanding', asOf ?? 'default'],
+        queryFn: async () =>
+            (await GET<ShopOutstanding>('/pulse/shop-outstanding', asOf ? { as_of: asOf } : undefined)).data,
+        // Ledger-backed, moves with every bill and payment — keep it fresh.
+        staleTime: 60 * 1000,
+    });
+}
+
 /** Per-product forecast for a date's weekday (default: tomorrow IST). */
 export function useDemandForecast(date?: string) {
     return useQuery({
