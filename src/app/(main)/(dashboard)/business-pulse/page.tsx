@@ -6,6 +6,7 @@ import { SubscriptionsSection } from '@/components/pulse/SubscriptionsSection';
 import { WastageSection } from '@/components/pulse/WastageSection';
 import { DriversSection } from '@/components/pulse/DriversSection';
 import { VendorVarianceSection } from '@/components/pulse/VendorVarianceSection';
+import { ShopOutstandingSection } from '@/components/pulse/ShopOutstandingSection';
 
 /**
  * Business Pulse (Phase 5) — CEO overview backed by the v_pulse_* views
@@ -21,7 +22,7 @@ export default function BusinessPulsePage() {
                 <div>
                     <h1 className="text-2xl font-bold text-white">Business Pulse</h1>
                     <p className="text-slate-400">
-                        Revenue, subscriptions, wastage, drivers and vendor pricing — refreshed on load.
+                        Revenue, shop outstanding, subscriptions, wastage, drivers and vendor pricing — refreshed on load.
                     </p>
                 </div>
                 <div className="flex gap-1">
@@ -37,6 +38,7 @@ export default function BusinessPulsePage() {
             </div>
 
             <RevenueSection months={months} />
+            <ShopOutstandingSection />
             <SubscriptionsSection months={months} />
             <WastageSection />
             <DriversSection />

@@ -67,6 +67,9 @@ export const LEDGER_ENTRY_TYPE_LABELS: Record<number, string> = {
     1: 'Invoice',
     2: 'Receipt',
     3: 'Adjustment',
+    4: 'Credit note',
+    5: 'Debit note',
+    6: 'Brought forward',
 };
 
 /** tally_sync_record.status (VARCHAR) */
