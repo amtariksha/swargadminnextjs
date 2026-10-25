@@ -37,7 +37,10 @@ class FakeQuery implements PromiseLike<{ data: unknown; error: { code?: string; 
     select(_columns?: string, options?: { count?: string }) { this.returning = true; this.wantCount = options?.count === 'exact'; return this; }
     insert(row: Row) { this.action = 'insert'; this.payload = row; return this; }
     update(patch: Row) { this.action = 'update'; this.payload = patch; return this; }
-    eq(column: string, value: unknown) { return this.where((row) => row[column] === value); }
+    eq(column: string, value: unknown) {
+        const [base, path] = column.split('->>');
+        return this.where((row) => (path === undefined ? row[column] : String((row[base] as Row | undefined)?.[path])) === value);
+    }
     neq(column: string, value: unknown) { return this.where((row) => row[column] !== undefined && row[column] !== null && row[column] !== value); }
     is(column: string, value: null) { return this.where((row) => (row[column] ?? null) === value); }
     lte(column: string, value: string) { return this.where((row) => row[column] != null && sameKind(row[column], value) <= 0); }
@@ -152,7 +155,8 @@ vi.mock('@/lib/desk/snapshot-server', () => ({ fetchSnapshotForTicket: snapshotM
 
 import { recordTicketAction } from '@/lib/desk/api/ticket-actions';
 import {
-    combineChecks, judgeCreditTxn, judgeDayOrder, judgeHolidayRows, judgePaymentLink, judgeRefundContext, judgeUserInSet,
+    combineChecks, judgeCreditTxn, judgeDayOrder, judgeHolidayRows, judgePaymentLink, judgeRefundContext, judgeRefundTie,
+    judgeUserInSet,
 } from '@/lib/desk/api/action-verify';
 import { DESK_WRAPPED } from '@/lib/desk/authz';
 import { ticketActionBody, type TicketActionBody } from '@/lib/desk/contracts';
@@ -181,8 +185,10 @@ const snap = (kind: string, user: number | null, candidates: number[], listGener
 
 const json = (body: unknown, status = 200) => () => Promise.resolve(new Response(JSON.stringify(body), { status }));
 const timeout = () => Promise.reject(new DOMException('timeout', 'TimeoutError'));
-const txnAnswer = (id: number, user: number, amount: number, type = 1, paymentId: string | null = null) =>
-    json({ response: 200, data: { id, user_id: user, amount, type, payment_id: paymentId } });
+const txnAnswer = (
+    id: number, user: number, amount: number, type = 1, paymentId: string | null = null,
+    orderId: number | null = null, createdAt: string | null = null,
+) => json({ response: 200, data: { id, user_id: user, amount, type, payment_id: paymentId, order_id: orderId, created_at: createdAt } });
 
 function seedTicket(over: Row = {}, id = TICKET): Row {
     const row: Row = {
@@ -258,8 +264,8 @@ beforeEach(() => {
     store.hideActionSelects = 0;
     backend.state.calls = [];
     backend.state.answers = {
-        '/txn/9101': txnAnswer(9101, 501, 32),
-        '/refund/order-context/8800': json({ response: 200, status: true, data: { is_debit: true, already_refunded: true } }),
+        '/txn/9101': txnAnswer(9101, 501, 32, 1, null, 812, '2026-10-20 11:20:00.123456'),
+        '/refund/order-context/8800': json({ response: 200, status: true, data: { is_debit: true, already_refunded: true, order_id: 812 } }),
     };
     snapshotMock.mockReset();
     snapshotMock.mockResolvedValue(snap('exact', 501, []));
@@ -313,7 +319,7 @@ describe('refund', () => {
     it('H05 the reference is already recorded on this ticket', async () => {
         (store.tables.desk_ticket_actions ??= []).push({
             id: 50, client_action_id: '22222222-2222-4222-8222-222222222222', ticket_id: TICKET, action_type: 'refund',
-            ref_type: 'transaction', ref_id: '9101', resolved_ticket: false,
+            ref_type: 'transaction', ref_id: '9101', amount: 32, resolved_ticket: false,
         });
         const res = await post(refundBody());
         expect(res.replayed).toBe(true);
@@ -389,7 +395,7 @@ describe('refund', () => {
         seedTicket({ ticket_no: 42, conversation_id: 'conv-2', backend_user_id: 501 }, OTHER_TICKET);
         (store.tables.desk_ticket_actions ??= []).push({
             id: 50, client_action_id: '22222222-2222-4222-8222-222222222222', ticket_id: OTHER_TICKET, action_type: 'refund',
-            ref_type: 'transaction', ref_id: '1', created_at: '2026-10-10T06:00:00.000Z',
+            ref_type: 'transaction', ref_id: '1', created_at: '2026-10-10T06:00:00.000Z', data: { user_id: 501 },
         });
         const res = await post(refundBody());
         expect(res).toMatchObject({ outcome: 'recorded', flagged: 'repeat_refund' });
@@ -397,11 +403,63 @@ describe('refund', () => {
         store.tables.desk_ticket_actions = [];
         (store.tables.desk_ticket_actions).push({
             id: 51, client_action_id: '33333333-3333-4333-8333-333333333333', ticket_id: OTHER_TICKET, action_type: 'refund',
-            ref_type: 'transaction', ref_id: '2', created_at: '2026-09-19T06:00:00.000Z',
+            ref_type: 'transaction', ref_id: '2', created_at: '2026-09-19T06:00:00.000Z', data: { user_id: 501 },
         });
         ticketRow().escalation_reason = null;
         const later = await post(refundBody({ client_action_id: '44444444-4444-4444-8444-444444444444' }));
         expect(later).toMatchObject({ outcome: 'resolved', flagged: null });
+    });
+
+    it('H18b counts by the action user even when the ticket has no customer yet', async () => {
+        ticketRow().backend_user_id = null;
+        seedTicket({ ticket_no: 42, conversation_id: 'conv-2', backend_user_id: null }, OTHER_TICKET);
+        (store.tables.desk_ticket_actions ??= []).push({
+            id: 50, client_action_id: '22222222-2222-4222-8222-222222222222', ticket_id: OTHER_TICKET, action_type: 'wallet_credit',
+            ref_type: 'transaction', ref_id: '1', created_at: '2026-10-10T06:00:00.000Z', data: { user_id: 501 },
+        });
+        expect(await post(refundBody())).toMatchObject({ outcome: 'recorded', flagged: 'repeat_refund' });
+    });
+
+    it('H18c a manager is never flagged by earlier actions', async () => {
+        (store.tables.desk_ticket_actions ??= []).push({
+            id: 50, client_action_id: '22222222-2222-4222-8222-222222222222', ticket_id: OTHER_TICKET, action_type: 'refund',
+            ref_type: 'transaction', ref_id: '1', created_at: '2026-10-10T06:00:00.000Z', data: { user_id: 501 },
+        });
+        expect(await post(refundBody(), ctxOf({ manager: true }))).toMatchObject({ outcome: 'resolved', flagged: null });
+    });
+
+    it('H38 a credit that is not tied to the debit stays unverified but is recorded', async () => {
+        backend.state.answers['/txn/9101'] = txnAnswer(9101, 501, 32, 1, null, 999, '2026-10-20 11:20:00');
+        const res = await post(refundBody());
+        expect(res.outcome).toBe('resolved');
+        expect(actions()[0].verified).toBe(false);
+    });
+
+    it('H39 an old credit on the right order is unverified too', async () => {
+        backend.state.answers['/txn/9101'] = txnAnswer(9101, 501, 32, 1, null, 812, '2026-10-12 11:20:00');
+        await post(refundBody());
+        expect(actions()[0].verified).toBe(false);
+    });
+
+    it('H40 the same reference with another amount is a conflict, not a replay', async () => {
+        await post(refundBody({ resolve: false }));
+        const error = await catching(post(refundBody({ resolve: false, amount: 40, client_action_id: '22222222-2222-4222-8222-222222222222' })));
+        expect(error.code).toBe('duplicate_reference');
+        expect(actions()).toHaveLength(1);
+    });
+
+    it('H41-H42 customer_linked only changes the ticket customer inside the snapshot set', async () => {
+        const link = (user: number) => ticketActionBody.parse({
+            ...base, resolve: false, action_type: 'customer_linked', ref_type: 'alternate_phone',
+            ref_id: `user:${user}:9845012345`, amount: null,
+            data: { user_id: user, phone: '9845012345', alternate_phone_id: null, already_linked: false },
+        });
+        snapshotMock.mockResolvedValue(snap('candidates', null, [601, 602]));
+        const outside = await post(link(777));
+        expect(outside.outcome).toBe('recorded');
+        expect(ticketRow().backend_user_id).toBe(501);
+        await post({ ...link(601), client_action_id: '22222222-2222-4222-8222-222222222222' } as TicketActionBody);
+        expect(ticketRow()).toMatchObject({ backend_user_id: 601, customer_match: 'manual' });
     });
 
     it('H20 an already resolved ticket is not reopened or escalated', async () => {
@@ -466,6 +524,29 @@ describe('wallet credit', () => {
         const res = await post(walletBody(), ctxOf({ manager: true }));
         expect(res).toMatchObject({ outcome: 'resolved', flagged: null });
         expect(ticketRow().resolution_code).toBe('credit_given');
+    });
+
+    it('H36 a replay of a half-finished over-limit credit still escalates', async () => {
+        (store.tables.desk_ticket_actions ??= []).push({
+            id: 50, client_action_id: C1, ticket_id: TICKET, action_type: 'wallet_credit', ref_type: 'transaction',
+            ref_id: '77', amount: 250, resolved_ticket: false, data: { user_id: 501, description: 'Desk credit', payment_id: `desk-${C1}` },
+        });
+        const res = await post(walletBody());
+        expect(res).toMatchObject({ outcome: 'recorded', flagged: 'credit_over_limit', replayed: true });
+        expect(ticketRow()).toMatchObject({ status: 'open', escalation_reason: 'credit_over_limit' });
+        expect(actions()).toHaveLength(1);
+        const again = await post(walletBody());
+        expect(again).toMatchObject({ flagged: 'credit_over_limit', replayed: true });
+        expect(eventTypes().filter((type) => type === 'escalated')).toHaveLength(1);
+    });
+
+    it('H37 a manager replay is left alone', async () => {
+        (store.tables.desk_ticket_actions ??= []).push({
+            id: 50, client_action_id: C1, ticket_id: TICKET, action_type: 'wallet_credit', ref_type: 'transaction',
+            ref_id: '77', amount: 250, resolved_ticket: false, data: { user_id: 501 },
+        });
+        expect(await post(walletBody(), ctxOf({ manager: true }))).toMatchObject({ outcome: 'recorded', flagged: null });
+        expect(eventTypes()).not.toContain('escalated');
     });
 
     it('H26 a payment id of another action is a 400 without backend calls', async () => {
@@ -572,6 +653,17 @@ describe('route and judges', () => {
             { params: Promise.resolve({ id: TICKET }) } as never);
         expect(response.status).toBe(401);
         expect(await response.json()).toMatchObject({ ok: false, error: { code: 'unauthorized' } });
+    });
+
+    it('J10 refund tie needs the same order and a recent credit', () => {
+        const now = Date.parse('2026-10-20T06:00:00.000Z');
+        const ok = { order_id: 812, created_at: '2026-10-20 11:20:00.5' };
+        expect(judgeRefundTie(ok, { order_id: 812 }, now)).toBe('pass');
+        expect(judgeRefundTie(ok, { order_id: 813 }, now)).toBe('unavailable');
+        expect(judgeRefundTie({ ...ok, order_id: null }, { order_id: null }, now)).toBe('unavailable');
+        expect(judgeRefundTie({ ...ok, created_at: '2026-10-19 10:00:00' }, { order_id: 812 }, now)).toBe('unavailable');
+        expect(judgeRefundTie({ ...ok, created_at: '2026-10-20 12:30:00' }, { order_id: 812 }, now)).toBe('unavailable');
+        expect(judgeRefundTie({ ...ok, created_at: 'garbage' }, { order_id: 812 }, now)).toBe('unavailable');
     });
 
     it('J01-J09 judges', () => {

@@ -47,6 +47,8 @@ export function WalletCreditForm({ ctx, session, onClose }: Props) {
     const [closeTicket, setCloseTicket] = useState(true);
     const [noLink, setNoLink] = useState<'none_found' | 'not_a_customer' | ''>('');
     const [error, setError] = useState('');
+    // Once /add_txn was called the credit may have landed even if the call failed: never call it again from this drawer.
+    const [creditAttempted, setCreditAttempted] = useState(false);
     const profile = ctx.snapshot.profile;
     const category = categories.bySlug.get(slug) ?? null;
     const amountNumber = Number(amount);
@@ -57,7 +59,7 @@ export function WalletCreditForm({ ctx, session, onClose }: Props) {
         manager: ctx.me.manager, creditMaxAgent: ctx.me.credit_max_agent, actionType: 'wallet_credit',
         amount: amountNumber, priorMoneyActions: ctx.detail.prior_money_actions.length,
     }) : null;
-    const canSubmit = stage.kind === 'edit' && profile !== null && amountValid && block === null
+    const canSubmit = stage.kind === 'edit' && !creditAttempted && profile !== null && amountValid && block === null
         && shownDescription.trim() !== '' && (!closeTicket || slug !== '') && (!needsNoLink || noLink !== '');
 
     const record = (body: TicketActionBody) => {
@@ -77,13 +79,14 @@ export function WalletCreditForm({ ctx, session, onClose }: Props) {
         setStage({ kind: 'crediting' });
         try {
             if (needsNoLink && noLink !== '') await patch.mutateAsync(noDeliveryLinkBody(noLink));
+            setCreditAttempted(true);
             const res = await addTxn.mutateAsync({
                 user_id: profile.user_id, amount: amountNumber, type: 1, description: shownDescription.trim(),
                 payment_id: walletPaymentId(session.clientActionId),
             });
             const out = res as unknown as { id?: number; duplicate_skipped?: boolean };
             if (out.duplicate_skipped || typeof out.id !== 'number' || out.id <= 0) {
-                setError('The backend did not credit the wallet (duplicate). Nothing was recorded.');
+                setError('The backend did not credit the wallet (duplicate). Nothing was recorded. Close this window before trying again.');
                 setStage({ kind: 'edit' });
                 return;
             }
@@ -93,8 +96,9 @@ export function WalletCreditForm({ ctx, session, onClose }: Props) {
                 classify: classifyPart(slug || null, ctx.ticket, ctx.detail.events),
             }));
         } catch (cause) {
-            setError(cause instanceof ApiError ? cause.userMessage
-                : describeDeskError(cause instanceof Error ? cause : new Error('Failed')).text);
+            const reason = cause instanceof ApiError ? cause.userMessage
+                : describeDeskError(cause instanceof Error ? cause : new Error('Failed')).text;
+            setError(`${reason} The credit may still have gone through: check the customer's wallet, then close this window before trying again.`);
             setStage({ kind: 'edit' });
         }
     };

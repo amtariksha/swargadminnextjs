@@ -12,7 +12,10 @@ import { DeskApiError } from '../api-error';
 import type { CustomerSnapshot } from '../types';
 
 export type Check = 'pass' | 'mismatch' | 'unavailable';
-export interface BackendTxn { id: number; user_id: number; amount: number; type: number; payment_id?: string | null }
+export interface BackendTxn {
+    id: number; user_id: number; amount: number; type: number; payment_id?: string | null;
+    order_id?: number | null; created_at?: string | null;
+}
 export interface BackendDayOrder {
     user_id: number | null; total_amount: number; order_status: string;
     payment_status: string | null; payment_link_id: string | null;
@@ -27,6 +30,32 @@ export function judgeCreditTxn(txn: BackendTxn, expect: { userId: number; amount
     const ok = txn.type === 1 && txn.user_id === expect.userId && amountsMatch(txn.amount, expect.amount)
         && (expect.paymentId === undefined || txn.payment_id === expect.paymentId);
     return ok ? 'pass' : 'mismatch';
+}
+
+const TIE_WINDOW_MS = 24 * 3_600_000;
+const TIE_CLOCK_SKEW_MS = 300_000;
+
+/** The backend stores IST wall-clock text ('YYYY-MM-DD HH:mm:ss[.ffffff]'). null = not parseable. */
+function istTextToMs(text: string | null | undefined): number | null {
+    const match = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/.exec(text ?? '');
+    const ms = match ? Date.parse(`${match[1]}T${match[2]}+05:30`) : Number.NaN;
+    return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * /txn has no refund_for_transaction_id, so tie the credit to the debit by order and recency: the refund row
+ * copies the debit's order_id and was created just now. Never 'mismatch' (a debit without an order cannot be
+ * tied): anything but a clear tie leaves the action unverified.
+ */
+export function judgeRefundTie(
+    txn: { order_id?: number | null; created_at?: string | null },
+    context: { order_id?: number | null },
+    nowMs: number,
+): Check {
+    const createdMs = istTextToMs(txn.created_at);
+    if (createdMs === null || !txn.order_id || !context.order_id || txn.order_id !== context.order_id) return 'unavailable';
+    const age = nowMs - createdMs;
+    return age <= TIE_WINDOW_MS && age >= -TIE_CLOCK_SKEW_MS ? 'pass' : 'unavailable';
 }
 
 export function judgeRefundContext(context: { is_debit: boolean; already_refunded: boolean }): Check {
@@ -63,8 +92,11 @@ export interface VerifyOutcome {
 const txnSchema = z.object({
     id: z.coerce.number(), user_id: z.coerce.number(), amount: z.coerce.number(), type: z.coerce.number(),
     payment_id: z.string().nullable().optional(),
+    order_id: z.coerce.number().nullable().optional(), created_at: z.string().nullable().optional(),
 });
-const refundContextSchema = z.object({ is_debit: z.boolean(), already_refunded: z.boolean() });
+const refundContextSchema = z.object({
+    is_debit: z.boolean(), already_refunded: z.boolean(), order_id: z.coerce.number().nullable().optional(),
+});
 const holidaysSchema = z.array(z.object({ date: z.string() }));
 const dayOrderSchema = z.object({
     user_id: z.coerce.number().nullable(), total_amount: z.coerce.number(), order_status: z.string(),
@@ -106,7 +138,7 @@ function conclude(named: readonly Named[], outcome: Omit<VerifyOutcome, 'verifie
 type Body<K extends TicketActionBody['action_type']> = Extract<TicketActionBody, { action_type: K }>;
 
 async function verifyTransaction(
-    body: Body<'refund'> | Body<'wallet_credit'>, token: string, snapshot: Promise<CustomerSnapshot | null>,
+    body: Body<'refund'> | Body<'wallet_credit'>, token: string, snapshot: Promise<CustomerSnapshot | null>, nowMs: number,
 ): Promise<VerifyOutcome> {
     const contextRead: Promise<Read<z.infer<typeof refundContextSchema>> | null> = body.action_type === 'refund'
         ? readBackend(`/refund/order-context/${body.data.debit_txn_id}`, token, refundContextSchema)
@@ -127,6 +159,8 @@ async function verifyTransaction(
             check: judged(context, judgeRefundContext),
             message: 'The original debit is not marked as refunded.',
         });
+        const tie: Check = txn.kind === 'ok' && context.kind === 'ok' ? judgeRefundTie(txn.data, context.data, nowMs) : 'unavailable';
+        named.push({ check: tie, message: 'The refund credit is not tied to that debit.' });
     }
     return conclude(named, {
         amount: txnCheck === 'pass' && txn.kind === 'ok' ? txn.data.amount : null,
@@ -186,14 +220,22 @@ async function verifyPaymentLink(body: Body<'payment_link_sent'>, token: string)
         { amount: null, confirmedUserId: null, paymentStatus: null });
 }
 
+/** customer_linked has no backend record to read: it only counts as the ticket's customer inside the snapshot set. */
+async function verifyCustomerLink(body: Body<'customer_linked'>, snapshot: Promise<CustomerSnapshot | null>): Promise<VerifyOutcome> {
+    const inSet = judgeUserInSet(body.data.user_id, snapshotUserIds(await snapshot)) === 'pass';
+    return { ...NONE, confirmedUserId: inSet ? body.data.user_id : null };
+}
+
 /** Throws DeskApiError('reference_mismatch', …) when a check ran and contradicts the request. */
 export async function verifyAction(
-    body: TicketActionBody, token: string, snapshot: Promise<CustomerSnapshot | null>,
+    body: TicketActionBody, token: string, snapshot: Promise<CustomerSnapshot | null>, nowMs: number = Date.now(),
 ): Promise<VerifyOutcome> {
     switch (body.action_type) {
         case 'refund':
         case 'wallet_credit':
-            return verifyTransaction(body, token, snapshot);
+            return verifyTransaction(body, token, snapshot, nowMs);
+        case 'customer_linked':
+            return verifyCustomerLink(body, snapshot);
         case 'holiday_added':
             return verifyHoliday(body, token, snapshot);
         case 'day_order_created':

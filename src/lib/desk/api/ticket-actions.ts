@@ -4,8 +4,8 @@
 
 import { supabaseAdmin } from '@/lib/whatsapp/supabase';
 import {
-    actionResolveCode, backstopFlag, canResolve, customerPatch, followUpProblem, isNoMoneyAction, needsTomorrowCheck,
-    planOutcome, replayResult, requestProblem, snapshotColumnsPatch, type BackstopFlag, type OutcomePlan,
+    actionResolveCode, amountsMatch, backstopFlag, canResolve, customerPatch, followUpProblem, isNoMoneyAction, needsTomorrowCheck,
+    planOutcome, replayResult, requestProblem, requestUserId, snapshotColumnsPatch, type BackstopFlag, type OutcomePlan,
 } from '../action-plan';
 import { DeskApiError, dbGuard } from '../api-error';
 import { REFUND_REPEAT_DAYS, UNIQUE_REF_ACTIONS } from '../constants';
@@ -23,8 +23,10 @@ import {
 const ACTIONS = 'desk_ticket_actions';
 const MS_PER_DAY = 86_400_000;
 const CONFLICT_MESSAGE = 'A new customer message arrived. Read it before resolving.';
+const MSG_DIFFERENT = 'This reference is already recorded with different details.';
 const SNAPSHOT_TYPES: readonly string[] = [
     'refund', 'wallet_credit', 'holiday_added', 'day_order_created', 'app_order_created', 'subscription_updated',
+    'customer_linked',
 ];
 
 type Outcome = TicketActionResponse['outcome'];
@@ -59,16 +61,25 @@ async function findByReference(body: TicketActionBody): Promise<TicketAction | n
     return (data as TicketAction | null) ?? null;
 }
 
+/** A replay must be the same action: another type or amount under the same id / reference is a conflict. */
+function sameAction(stored: TicketAction, body: TicketActionBody): boolean {
+    if (stored.action_type !== body.action_type) return false;
+    if (stored.amount === null || stored.amount === undefined || body.amount === null) return stored.amount == null && body.amount === null;
+    return amountsMatch(Number(stored.amount), body.amount);
+}
+
 /** Steps 5 and 6: a stored row for this client id or money reference. */
 async function findExisting(ctx: DeskContext, ticket: Ticket, body: TicketActionBody): Promise<TicketActionResponse | null> {
     const byClient = await findByClientId(body.client_action_id);
     if (byClient !== null) {
         if (byClient.ticket_id !== ticket.id) throw new DeskApiError('duplicate_reference', 'This action id belongs to another ticket.');
+        if (!sameAction(byClient, body)) throw new DeskApiError('duplicate_reference', MSG_DIFFERENT);
         return replayAnswer(ctx, ticket, byClient);
     }
     const byRef = await findByReference(body);
     if (byRef === null) return null;
     if (byRef.ticket_id !== ticket.id) throw new DeskApiError('duplicate_reference', 'This refund or credit is already recorded on another ticket.');
+    if (!sameAction(byRef, body)) throw new DeskApiError('duplicate_reference', MSG_DIFFERENT);
     return replayAnswer(ctx, ticket, byRef);
 }
 
@@ -106,8 +117,7 @@ async function insertAction(
 async function applyTicketColumns(
     ctx: DeskContext, ticket: Ticket, body: TicketActionBody, verification: VerifyOutcome,
 ): Promise<Ticket> {
-    const userId = body.action_type === 'customer_linked' ? body.data.user_id : verification.confirmedUserId;
-    const customer = customerPatch(ticket, userId);
+    const customer = customerPatch(ticket, verification.confirmedUserId);
     const patch = { ...snapshotColumnsPatch(body, ticket, verification), ...(customer ?? {}) };
     if (Object.keys(patch).length === 0) return ticket;
     const updated = (await updateTicket(ticket.id, patch, 'any')) ?? ticket;
@@ -115,18 +125,13 @@ async function applyTicketColumns(
     return updated;
 }
 
-/** D-11: other refund / credit actions for the customer inside REFUND_REPEAT_DAYS (any ticket). */
-async function countOtherMoneyActions(ticket: Ticket, action: TicketAction, nowMs: number): Promise<number> {
-    if (ticket.backend_user_id === null) return 0;
-    const { data: tickets, error: ticketError } = await supabaseAdmin
-        .from(TICKETS).select('id').eq('backend_user_id', ticket.backend_user_id).limit(200);
-    dbGuard(ticketError, TICKETS);
-    const ids = ((tickets ?? []) as Array<{ id: string }>).map((row) => row.id);
-    if (ids.length === 0) return 0;
+/** D-11: other refund / credit actions for the same customer inside REFUND_REPEAT_DAYS (any ticket). */
+async function countOtherMoneyActions(userId: number | null, actionId: number, nowMs: number): Promise<number> {
+    if (userId === null) return 0;
     const { data, error } = await supabaseAdmin.from(ACTIONS).select('id')
-        .in('ticket_id', ids).in('action_type', ['refund', 'wallet_credit'])
+        .eq('data->>user_id', String(userId)).in('action_type', ['refund', 'wallet_credit'])
         .gte('created_at', new Date(nowMs - REFUND_REPEAT_DAYS * MS_PER_DAY).toISOString())
-        .neq('id', action.id).limit(1);
+        .neq('id', actionId).limit(1);
     dbGuard(error, ACTIONS);
     return (data ?? []).length;
 }
@@ -218,23 +223,45 @@ async function prepare(id: string, body: TicketActionBody, ctx: DeskContext, now
     const snapshot: Promise<CustomerSnapshot | null> = needsSnapshot(body) && ticket.customer_phone
         ? fetchSnapshotForTicket(ctx.token, ticket.customer_phone)
         : Promise.resolve(null);
-    const verification = await verifyAction(body, ctx.token, snapshot);
+    const verification = await verifyAction(body, ctx.token, snapshot, nowMs);
     const listGenerated = needsTomorrowCheck(body) ? ((await snapshot)?.tomorrow.list_generated ?? null) : null;
     const plan = planOutcome({ body, ticketResolved: ticket.status === 'resolved', listGenerated, nowMs });
     const verdict = plan.kind === 'resolve' ? resolveVerdict(ticket, category, body) : null;
     return { ticket, existing: null, category, verification, plan, verdict } as const;
 }
 
+/**
+ * A replay of a money action whose first call died after the insert (steps 10-13 are separate writes)
+ * must still hit the approval backstop: re-check it, idempotently, when nothing escalated or resolved yet.
+ */
+async function completeBackstopOnReplay(ctx: DeskContext, replay: TicketActionResponse, nowMs: number): Promise<TicketActionResponse> {
+    const { action } = replay;
+    const isMoney = action.action_type === 'refund' || action.action_type === 'wallet_credit';
+    if (!isMoney || ctx.rights.manager || action.resolved_ticket || replay.outcome !== 'recorded' || replay.flagged !== null) {
+        return replay;
+    }
+    const ticket = await requireTicket(action.ticket_id);
+    if (ticket.status === 'resolved' || ticket.escalated_at !== null) return replay;
+    const storedUser = (action.data as { user_id?: unknown } | null)?.user_id;
+    const userId = typeof storedUser === 'number' ? storedUser : ticket.backend_user_id;
+    const flag = backstopFlag({
+        isManager: false, actionType: action.action_type, amount: action.amount,
+        creditMaxAgent: ctx.settings.credit_max_agent, otherMoneyActions: await countOtherMoneyActions(userId, action.id, nowMs),
+    });
+    if (flag === null) return replay;
+    return { ...(await escalate(ctx, ticket, action, flag, nowMs)), replayed: true };
+}
+
 export async function recordTicketAction(id: string, body: TicketActionBody, ctx: DeskContext): Promise<TicketActionResponse> {
     const nowMs = Date.now();
     const prepared = await prepare(id, body, ctx, nowMs);
-    if (prepared.existing !== null) return prepared.existing;
+    if (prepared.existing !== null) return completeBackstopOnReplay(ctx, prepared.existing, nowMs);
     const { category, verification, plan, verdict } = prepared;
     const inserted = await insertAction(ctx, prepared.ticket, body, verification);
     if (inserted === 'conflict') {
         const again = await findExisting(ctx, prepared.ticket, body);
         if (again === null) throw new DeskApiError('internal_error', 'Database error.');
-        return again;
+        return completeBackstopOnReplay(ctx, again, nowMs);
     }
     let ticket = await applyTicketColumns(ctx, prepared.ticket, body, verification);
     if (category !== null && category.slug !== prepared.ticket.category_slug) {
@@ -242,7 +269,8 @@ export async function recordTicketAction(id: string, body: TicketActionBody, ctx
     }
     if (prepared.ticket.status === 'resolved') return answer(ctx, ticket, inserted, 'recorded');
     const isMoney = body.action_type === 'refund' || body.action_type === 'wallet_credit';
-    const others = isMoney && !ctx.rights.manager ? await countOtherMoneyActions(ticket, inserted, nowMs) : 0;
+    const others = isMoney && !ctx.rights.manager
+        ? await countOtherMoneyActions(requestUserId(body) ?? ticket.backend_user_id, inserted.id, nowMs) : 0;
     const flag = backstopFlag({
         isManager: ctx.rights.manager, actionType: body.action_type, amount: inserted.amount,
         creditMaxAgent: ctx.settings.credit_max_agent, otherMoneyActions: others,

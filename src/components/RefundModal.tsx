@@ -66,6 +66,7 @@ export default function RefundModal({ transaction, onClose, onSuccess, defaultRe
 
     const [amount, setAmount] = useState(String(transaction.amount ?? ''));
     const [reasonSel, setReasonSel] = useState('');
+    const [reasonTouched, setReasonTouched] = useState(false);
     const [otherText, setOtherText] = useState('');
     const [deliveryDate, setDeliveryDate] = useState('');
     const [billDriver, setBillDriver] = useState(false);
@@ -93,7 +94,7 @@ export default function RefundModal({ transaction, onClose, onSuccess, defaultRe
     const alreadyRefunded = context?.already_refunded ?? false;
     const notDebit = context ? !context.is_debit : false;
     const presetReason = defaultReason !== undefined && reasons.some((r) => r.label === defaultReason) ? defaultReason : '';
-    const selectedReason = reasonSel !== '' ? reasonSel : presetReason;
+    const selectedReason = reasonTouched ? reasonSel : presetReason;
     const resolvedReason = selectedReason === OTHER ? otherText.trim() : selectedReason;
 
     const canSubmit =
@@ -167,7 +168,7 @@ export default function RefundModal({ transaction, onClose, onSuccess, defaultRe
                     <label className="block text-sm text-slate-300 mb-1">
                         Reason <span className="text-red-400">*</span>
                     </label>
-                    <select value={selectedReason} onChange={(e) => setReasonSel(e.target.value)} className={selectClassName}>
+                    <select value={selectedReason} onChange={(e) => { setReasonTouched(true); setReasonSel(e.target.value); }} className={selectClassName}>
                         <option value="">Select a reason...</option>
                         {reasons.map((r) => <option key={r.label} value={r.label}>{r.label}</option>)}
                         <option value={OTHER}>Other (free text)</option>
