@@ -351,8 +351,14 @@ export interface TallyConfig {
     /** 1 = dispatcher may create missing ledgers in Tally (fresh company only). Migration 118. */
     auto_create_masters?: number;
     last_dispatch_at?: string | null;
-    last_dispatch_status?: 'ok' | 'partial' | 'unreachable' | 'error' | null;
+    last_dispatch_status?: 'ok' | 'partial' | 'unreachable' | 'company_closed' | 'error' | null;
     last_dispatch_error?: string | null;
+    /** Cutover (migration 121): vouchers dated before it never post; null holds the queue. */
+    posting_from_date?: string | null;
+    /** A day's vouchers post from this hour IST the next morning; null = immediately. */
+    daily_post_hour?: number | null;
+    /** GST rate ("5") → Tally sales ledger. */
+    sales_ledger_by_rate?: Record<string, string>;
     has_credentials: boolean;
 }
 
@@ -373,8 +379,16 @@ export interface TallyLedgerMappingRow {
     in_tally: boolean | null;
 }
 
+/** A GST rate and the Tally sales ledger its sales post to (null = default sales ledger). */
+export interface TallyRateLedgerRow {
+    rate: string;
+    tally_ledger_name: string | null;
+    in_tally: boolean | null;
+}
+
 export interface TallyLedgerMapping {
     ledgers: TallyLedgerMappingRow[];
+    rate_ledgers?: TallyRateLedgerRow[];
     tally_ledgers: { name: string; parent: string | null }[] | null;
     tally_error: string | null;
     /** The Tally company that was read — the one posting would go to. */
@@ -428,6 +442,10 @@ export interface TallySyncRecord {
     last_error?: string | null;
     created_at?: string;
     updated_at?: string;
+    /** Date of the source document (migration 121). */
+    voucher_date?: string | null;
+    /** For a retail invoice folded into a B2C day voucher: that record's id. */
+    rollup_id?: number | null;
 }
 
 export function useTallySettings() {
