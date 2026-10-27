@@ -689,6 +689,41 @@ export interface StatementRow {
     matched_vendor_id?: number | null;
     matched_vendor_name?: string | null;
     matched_vendor_payment_id?: number | null;
+    /** The payee read from the narration — lines sharing it are "similar". */
+    payee_key?: string | null;
+    /** The learned rule behind a suggestion. */
+    matched_rule_id?: number | null;
+}
+
+/** A learned bank-statement rule (GET /accounting/bank/rules). direction 1 = money in, 2 = out, null = either. */
+export interface BankRule {
+    id: number; match_type: 'payee' | 'contains' | 'regex'; pattern: string; direction: number | null;
+    target_type: 'ledger' | 'vendor'; ledger_id: number | null; vendor_id: number | null;
+    ledger_name: string | null; vendor_name: string | null;
+    source: 'human' | 'learned'; hits: number; last_used_at: string | null; is_active: number; created_at: string;
+}
+export function useBankRules() {
+    return useQuery({
+        queryKey: ['accounting', 'bank-rules'],
+        queryFn: async () => (await GET<BankRule[]>('/accounting/bank/rules')).data || [],
+    });
+}
+export interface BankRuleProposal {
+    payee_key: string; direction: number; lines: number; sample: string | null;
+    target_type: 'ledger' | 'vendor'; target_id: number; target_name: string | null;
+}
+export interface BankRuleLearn { proposals: BankRuleProposal[]; conflicts: { payee_key: string; direction: number; lines: number; targets: string[] }[]; }
+/** POST /accounting/bank/rules/apply — assign every open line of one payee in an import; remember keeps a rule. */
+export interface BankRuleApplyBody {
+    import_id: number; payee_key: string; direction: number; ledger_id?: number; vendor_id?: number; remember: boolean;
+}
+export interface BankRuleApplyResult { lines: number; reconciled: number; failed: number; errors: unknown[]; rule_id: number | null; suggested_elsewhere: number; }
+
+/** GET /accounting/tally/debtor-balances — each B2B shop's balance in Tally (receivable positive). */
+export interface TallyDebtorBalances {
+    as_of: string; company: string | null; tally_error: string | null;
+    shops: { user_id: number; name: string; tally_ledger: string | null; tally_balance: number | null }[];
+    linked?: number; unlinked?: number;
 }
 
 export interface BankAccount {
@@ -725,17 +760,65 @@ export function useStatementRows(importId: number | null, filters: Record<string
 
 // ══ Phase 2/3 GL: chart of accounts, vouchers, reports, GST returns, Tally ═══
 
-export interface Period { fy?: string; from_date?: string; to_date?: string; }
+/** source 'tally' = Tally's books from the latest chart snapshot (what the admin shows by default); 'swarg' = Swarg's own GL. */
+export type BooksSource = 'tally' | 'swarg';
+export interface Period { fy?: string; from_date?: string; to_date?: string; source?: BooksSource; }
 
-export interface ChartLedger { id: number; name: string; code: string | null; ledger_kind: number; tally_ledger_name?: string | null; balance: number | string; balance_type: 'Dr' | 'Cr'; }
-export interface ChartGroup { group_id: number; group_name: string; nature: number; affects_pl: number; ledgers: ChartLedger[]; subtotal: number | string; subtotal_type: 'Dr' | 'Cr'; }
-export interface ChartOfAccounts { groups: ChartGroup[]; total_debit: number | string; total_credit: number | string; }
-export function useChartOfAccounts() {
+/** Which Tally chart snapshot a screen is showing. */
+export interface TallySnapshotMeta { run_id: number; as_of: string; fy: string; company: string | null; taken_at: string; }
+
+export interface ChartLedger { id: number; name: string; code: string | null; ledger_kind: number; tally_ledger_name?: string | null; is_active?: number; balance: number | string; balance_type: 'Dr' | 'Cr'; }
+export interface ChartGroup { group_id: number; group_name: string; parent_group_id?: number | null; nature: number; affects_pl: number; ledgers: ChartLedger[]; subtotal: number | string; subtotal_type: 'Dr' | 'Cr'; }
+export interface ChartOfAccounts { source?: 'swarg'; groups: ChartGroup[]; total_debit: number | string; total_credit: number | string; }
+/** Swarg's own ledgers (the "Swarg books" tab). */
+export function useChartOfAccounts(params: { include_inactive?: 1 } = {}) {
     return useQuery({
-        queryKey: ['accounting', 'chart'],
-        queryFn: async () => (await GET<ChartOfAccounts>('/accounting/gl/chart')).data,
+        queryKey: ['accounting', 'chart', params],
+        queryFn: async () => (await GET<ChartOfAccounts>('/accounting/gl/chart', params)).data,
     });
 }
+
+/**
+ * Tally's chart (GET /accounting/gl/chart?source=tally). Amounts are +debit
+ * signed (a credit balance is negative); show them as Dr / Cr.
+ */
+export interface TallyChartLedger {
+    name: string; parent: string | null; primary: string | null; nature: number | null; affectsPl: number;
+    opening: number; movement: number; closing: number; inactive: boolean;
+    /** Swarg ledgers that post to this Tally ledger. */
+    mapped_to: { id: number; name: string; code: string | null; ledger_kind: number }[];
+    isLedger?: true;
+}
+export interface TallyChartGroup {
+    name: string; parent: string | null; reserved: string | null; nature?: number | null; affectsPl?: number;
+    groups: TallyChartGroup[]; ledgers: TallyChartLedger[]; opening: number; movement: number; closing: number; ledgerCount: number;
+}
+/** A top-level node: a primary group, or a ledger under no group (Profit & Loss A/c). */
+export type TallyChartNode = TallyChartGroup | TallyChartLedger;
+export interface TallyChart {
+    source: 'tally';
+    snapshot: TallySnapshotMeta | null;
+    tree: TallyChartNode[];
+    summary: { groups: number; ledgers: number; inactive: number; unclassified: number } | null;
+    /** Swarg system / head ledgers posting to a name this Tally company doesn't have. */
+    stale_mappings: { id: number; name: string; tally_ledger_name: string }[];
+}
+export function useTallyChart(fy?: string) {
+    return useQuery({
+        queryKey: ['accounting', 'tally-chart', fy ?? null],
+        queryFn: async () => (await GET<TallyChart>('/accounting/gl/chart', { source: 'tally', ...(fy ? { fy } : {}) })).data,
+    });
+}
+export const isTallyLedgerNode = (n: TallyChartNode): n is TallyChartLedger => 'mapped_to' in n;
+
+export interface ChartSnapshotResult { runId: number; company: string; asOf: string; fy: string; ledgers: number; groups: number; }
+/** Refresh: snapshot Tally now (read-only). company = e.g. the CA's restored company. */
+export async function refreshTallyChart(body: { as_on?: string; company?: string } = {}): Promise<{ data: ChartSnapshotResult; message?: string }> {
+    return POST<ChartSnapshotResult>('/accounting/tally/chart-snapshot', body);
+}
+
+/** Rebuild books: POST /accounting/gl/backfill — fills missing Swarg vouchers in a range. */
+export interface BackfillResult { invoices: number; receipts: number; purchases: number; vendorPayments: number; correctionRepairs?: number; errors: number; }
 
 export interface AccountGroup { id: number; name: string; parent_group_id: number | null; nature: number; affects_pl: number; is_system: number; }
 export function useAccountGroups() {
@@ -754,14 +837,20 @@ export function useLedgerAccounts(params: Record<string, string> = {}) {
 }
 
 export interface TbLedger {
-    ledgerId: number; ledgerName: string; groupName: string; nature: number; affectsPl: number;
+    /** null for a Tally ledger (source=tally). */
+    ledgerId: number | null; ledgerName: string; groupName: string; nature: number; affectsPl: number;
     opening: number; debit: number; credit: number; closing: number; closingDebit: number; closingCredit: number;
 }
-export interface TrialBalance { fy: string; from: string; to: string; ledgers: TbLedger[]; totals: Record<string, number>; balanced: boolean; }
+export interface TrialBalance {
+    fy: string; from: string; to: string; ledgers: TbLedger[]; totals: Record<string, number>; balanced: boolean;
+    source?: BooksSource; snapshot?: TallySnapshotMeta; unclassified?: string[];
+}
 export function useTrialBalance(p: Period) {
     return useQuery({
         queryKey: ['accounting', 'tb', p],
         queryFn: async () => (await GET<TrialBalance>('/accounting/reports/trial-balance', p as Record<string, string>)).data,
+        // "No Tally snapshot yet" won't fix itself by retrying — the screen offers Refresh.
+        retry: (count, err) => !(err instanceof Error && /snapshot/i.test(err.message)) && count < 2,
     });
 }
 
@@ -785,19 +874,29 @@ export interface BalanceSheetSide { ledgerName: string; groupName: string; amoun
 export interface BalanceSheet {
     as_on: string; assets: BalanceSheetSide[]; liabilities: BalanceSheetSide[]; equity: BalanceSheetSide[];
     totalAssets: number; totalLiabilities: number; totalEquity: number; netProfit: number; liabilitiesSide: number; balanced: boolean;
+    source?: BooksSource; snapshot?: TallySnapshotMeta; unclassified?: string[];
 }
-export function useBalanceSheet(asOn?: string) {
+/** source 'tally' ignores asOn: Tally's figures are as of the snapshot. */
+export function useBalanceSheet(asOn?: string, source: BooksSource = 'swarg', fy?: string) {
     return useQuery({
-        queryKey: ['accounting', 'bs', asOn],
-        queryFn: async () => (await GET<BalanceSheet>('/accounting/reports/balance-sheet', asOn ? { as_on: asOn } : {})).data,
+        queryKey: ['accounting', 'bs', asOn, source, fy ?? null],
+        queryFn: async () => (await GET<BalanceSheet>('/accounting/reports/balance-sheet', {
+            ...(asOn ? { as_on: asOn } : {}), ...(source === 'tally' ? { source, ...(fy ? { fy } : {}) } : {}),
+        })).data,
+        retry: (count, err) => !(err instanceof Error && /snapshot/i.test(err.message)) && count < 2,
     });
 }
 
-export interface ProfitAndLoss { fy: string; from: string; to: string; income: BalanceSheetSide[]; expense: BalanceSheetSide[]; totalIncome: number; totalExpense: number; netProfit: number; }
+export interface ProfitAndLoss {
+    fy: string; from: string; to: string; income: BalanceSheetSide[]; expense: BalanceSheetSide[]; totalIncome: number; totalExpense: number; netProfit: number;
+    source?: BooksSource; snapshot?: TallySnapshotMeta; unclassified?: string[];
+}
 export function usePnl(p: Period) {
     return useQuery({
         queryKey: ['accounting', 'pnl', p],
         queryFn: async () => (await GET<ProfitAndLoss>('/accounting/reports/pnl', p as Record<string, string>)).data,
+        // "No Tally snapshot yet" won't fix itself by retrying — the screen offers Refresh.
+        retry: (count, err) => !(err instanceof Error && /snapshot/i.test(err.message)) && count < 2,
     });
 }
 
@@ -842,7 +941,15 @@ export function useGstReturns() {
 }
 
 export interface ReconRow { ledgerName: string; swarg: number; tally: number; diff: number; }
-export interface Reconciliation { as_on: string; has_tally_snapshot: boolean; rows: ReconRow[]; mismatches: ReconRow[]; matched: boolean; }
+/** A node of Reconcile's Tally tree: groups carry rolled-up tally / swarg / diff; ledgers carry their own. */
+export interface ReconTreeNode {
+    name: string; parent: string | null; tally: number; swarg: number; diff: number;
+    groups?: ReconTreeNode[]; ledgers?: ReconTreeNode[]; ledgerCount?: number; isLedger?: true; inactive?: boolean;
+}
+export interface Reconciliation {
+    as_on: string | null; has_tally_snapshot: boolean; rows: ReconRow[]; mismatches: ReconRow[]; matched: boolean;
+    snapshot?: TallySnapshotMeta; tree?: ReconTreeNode[]; swarg_only?: { ledgerName: string; closing: number }[];
+}
 export function useTallyReconcile(asOn?: string) {
     return useQuery({
         queryKey: ['accounting', 'reconcile', asOn],
