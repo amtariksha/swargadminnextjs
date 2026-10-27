@@ -19,6 +19,9 @@ interface DryRunRow {
     batchEndDate: string | null;
     userId: number | null;
     productId: number | null;
+    /** The size this price is for (null for a product without sizes). */
+    variantId: number | null;
+    size: string | null;
     tier: 'shop' | 'common' | null;
     action: RowAction;
     reason: string | null;
@@ -37,6 +40,7 @@ interface ConfirmResult {
     applied: number;
     shop_prices: number;
     common_prices: number;
+    size_prices?: number;
     skipped: number;
     errors: { rowNumber: number; reason: string }[];
 }
@@ -119,7 +123,9 @@ export default function BulkB2bPriceImportModal({ isOpen, onClose, onDone }: {
     const handleExport = async () => {
         setExporting(true);
         try {
-            const res = await apiClient.get('/accounting/b2b-prices/export', { responseType: 'blob' });
+            // ?all=1 lists every live product and size, priced or not — every size needs
+            // its own B2B price, so the blank rows are exactly what is left to fill in.
+            const res = await apiClient.get('/accounting/b2b-prices/export?all=1', { responseType: 'blob' });
             const url = URL.createObjectURL(res.data as Blob);
             const a = document.createElement('a');
             a.href = url;
@@ -139,7 +145,13 @@ export default function BulkB2bPriceImportModal({ isOpen, onClose, onDone }: {
                 <div className="text-sm text-slate-400 space-y-1">
                     <p>
                         Columns: <span className="text-slate-300">Shop, Product, Price</span> (required) plus optional
-                        <span className="text-slate-300"> Shop ID, Product ID, MRP, From, To</span>.
+                        <span className="text-slate-300"> Shop ID, Product ID, Variant ID, Size, MRP, From, To</span>.
+                    </p>
+                    <p>
+                        Products that come in sizes are priced <span className="text-slate-300">per size</span>: give a
+                        <span className="text-slate-300"> Size</span> (e.g. 10pc, 250g, 1kg) or
+                        <span className="text-slate-300"> Variant ID</span> on each row. A size left without a B2B price
+                        bills at its retail price.
                     </p>
                     <p>
                         Leave <span className="text-slate-300">Shop</span> blank to set the
@@ -187,6 +199,7 @@ export default function BulkB2bPriceImportModal({ isOpen, onClose, onDone }: {
                                         <th className="px-3 py-2">Row</th>
                                         <th className="px-3 py-2">Shop</th>
                                         <th className="px-3 py-2">Product</th>
+                                        <th className="px-3 py-2">Size</th>
                                         <th className="px-3 py-2">Now</th>
                                         <th className="px-3 py-2">New</th>
                                         <th className="px-3 py-2">Action</th>
@@ -201,7 +214,13 @@ export default function BulkB2bPriceImportModal({ isOpen, onClose, onDone }: {
                                                     ? <span className="text-cyan-300">All shops</span>
                                                     : (r.shopName || '—')}
                                             </td>
-                                            <td className="px-3 py-1.5">{r.productName || '—'}</td>
+                                            <td className="px-3 py-1.5">
+                                                {r.productName || '—'}
+                                                {r.action === 'error' && r.reason && (
+                                                    <div className="text-xs text-red-300 mt-0.5">{r.reason}</div>
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-1.5 text-slate-400">{r.size || '—'}</td>
                                             <td className="px-3 py-1.5 text-slate-500">
                                                 {r.currentPrice != null ? formatINR(r.currentPrice) : '—'}
                                             </td>
@@ -244,7 +263,7 @@ export default function BulkB2bPriceImportModal({ isOpen, onClose, onDone }: {
                         <p className="flex items-center gap-1.5">
                             <FileSpreadsheet className="w-4 h-4" />
                             Applied {confirmed.applied} price(s) — {confirmed.shop_prices} shop-specific,
-                            {' '}{confirmed.common_prices} common.
+                            {' '}{confirmed.common_prices} common, {confirmed.size_prices ?? 0} per size.
                         </p>
                         {confirmed.errors?.length > 0 && (
                             <p className="mt-1 text-amber-200">
