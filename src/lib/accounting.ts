@@ -79,11 +79,14 @@ export const SYNC_STATUS_BADGE: Record<string, string> = {
     confirmed: 'bg-green-500/20 text-green-400',
     failed: 'bg-red-500/20 text-red-400',
     skipped: 'bg-slate-600/30 text-slate-400',
+    merged: 'bg-purple-500/15 text-purple-300',
 };
 
 export const SYNC_ENTITY_TYPE_LABELS: Record<number, string> = {
     1: 'Sales',
     2: 'Receipt',
+    3: 'Purchase',
+    4: 'B2C day',
 };
 
 /** tally_import_run.run_type */

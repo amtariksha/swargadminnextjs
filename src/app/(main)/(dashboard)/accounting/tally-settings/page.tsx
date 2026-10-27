@@ -15,7 +15,7 @@ import TabPanel from '@/components/TabPanel';
 import Modal from '@/components/Modal';
 import TallyLedgerMapping from '@/components/accounting/TallyLedgerMapping';
 import {
-    Power, RefreshCw, Building2, KeyRound, Server, Download, Camera, Wand2, AlertTriangle, SkipForward, Send,
+    Power, RefreshCw, Building2, KeyRound, Server, Download, Camera, Wand2, AlertTriangle, Send, CalendarClock,
 } from 'lucide-react';
 import { PUT, POST } from '@/lib/api';
 import { toast } from 'sonner';
@@ -32,7 +32,19 @@ const blankForm = {
     auto_create_masters: 0,
     purchase_auto_post_confidence: '',
     bridge_credentials: '',
+    posting_from_date: '',
+    /** '' = post as soon as created; otherwise the hour (IST) next morning. */
+    daily_post_hour: '1',
 };
+
+const POST_HOUR_OPTIONS = [
+    { value: '0', label: 'Each night at midnight' },
+    { value: '1', label: 'Each night at 1 AM (recommended)' },
+    { value: '2', label: 'Each night at 2 AM' },
+    { value: '4', label: 'Each night at 4 AM' },
+    { value: '6', label: 'Each morning at 6 AM' },
+    { value: '', label: 'As soon as created' },
+];
 
 /** The dispatcher POSTs to bridge_url verbatim — a URL without an explicit port
  *  goes to :80, never Tally's gateway (:9000). */
@@ -99,19 +111,26 @@ function SettingsTab({
                 auto_create_masters: Number(cfg.auto_create_masters ?? 0),
                 purchase_auto_post_confidence: cfg.purchase_auto_post_confidence != null ? String(cfg.purchase_auto_post_confidence) : '',
                 bridge_credentials: '',
+                posting_from_date: cfg.posting_from_date ? String(cfg.posting_from_date).slice(0, 10) : '',
+                // Absent (pre-migration 121) → the default 1 AM; null → as soon as created.
+                daily_post_hour: cfg.daily_post_hour === undefined ? '1' : cfg.daily_post_hour === null ? '' : String(cfg.daily_post_hour),
             });
         }
     }, [cfg]);
 
-    /** Turning posting ON pushes every queued voucher, oldest first — make the
-     *  operator see that number before it happens. */
+    /** Turning posting ON sends everything dated from the cutover — make the
+     *  operator see the date and the company before it happens. */
     const confirmGoLive = (): boolean => {
         const turningOn = !Number(cfg?.tally_posting_enabled) && !!form.tally_posting_enabled;
         if (!turningOn) return true;
-        const pending = counts?.pending ?? 0;
-        return window.confirm(pending > 0
-            ? `Turn on posting to Tally?\n\n${pending} voucher(s) are already queued and will post to Tally now, oldest first.\n\nIf those were booked by hand in Tally, press Cancel and use Sync queue → "Skip all pending" first, then turn posting on.`
-            : 'Turn on posting to Tally?\n\nNothing is queued — new vouchers will post as they are created.');
+        if (!form.posting_from_date) {
+            toast.error('Set "Post vouchers dated on or after" before turning posting on');
+            return false;
+        }
+        const target = form.company_name.trim() || 'the open Tally company';
+        return window.confirm(
+            `Turn on posting to "${target}"?\n\nEvery voucher dated ${form.posting_from_date} or later is sent, oldest first; anything dated earlier is left to the accountant.`
+            + (form.daily_post_hour === '' ? '' : '\n\nToday\'s vouchers wait for tonight\'s run.'));
     };
 
     const save = async (e: React.FormEvent) => {
@@ -127,6 +146,8 @@ function SettingsTab({
                 auto_create_masters: form.auto_create_masters ? 1 : 0,
                 // Blank keeps the stored threshold (backend treats missing/blank as "no change").
                 purchase_auto_post_confidence: form.purchase_auto_post_confidence !== '' ? Number(form.purchase_auto_post_confidence) : null,
+                posting_from_date: form.posting_from_date || null,
+                daily_post_hour: form.daily_post_hour === '' ? null : Number(form.daily_post_hour),
             };
             // Only send credentials when the operator typed new ones — never wipe stored creds with a blank.
             if (form.bridge_credentials.trim()) body.bridge_credentials = form.bridge_credentials.trim();
@@ -158,8 +179,8 @@ function SettingsTab({
                         </div>
                         <p className="text-sm text-slate-400 mt-1">
                             When off, vouchers queue as <span className="text-slate-300">pending</span> and nothing is sent.
-                            Before turning on: Ledger mapping shows <span className="text-slate-300">0 missing</span>, and any
-                            backlog already booked by hand is skipped in the Sync queue
+                            Before turning on: Ledger mapping shows <span className="text-slate-300">0 missing</span> and the
+                            cutover date below is set
                             {counts && counts.pending > 0 && <> (<span className="text-amber-300">{counts.pending} queued now</span>)</>}.
                         </p>
                     </div>
@@ -173,6 +194,35 @@ function SettingsTab({
                     </button>
                 </div>
                 <DispatchHealth cfg={cfg} />
+            </div>
+
+            {/* Daily posting: cutover + nightly run */}
+            <div className="glass rounded-2xl p-5 space-y-4">
+                <div className="flex items-center gap-2 text-white font-semibold">
+                    <CalendarClock className="w-4 h-4 text-purple-400" /> Daily posting
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Post vouchers dated on or after</label>
+                        <input type="date" value={form.posting_from_date}
+                            onChange={(e) => setForm({ ...form, posting_from_date: e.target.value })} className={inputCls} />
+                        <p className="text-xs text-slate-500 mt-1">
+                            The cutover. Anything dated earlier is the accountant&rsquo;s to enter and never posts. Testing on the copy
+                            company: the day after Tally&rsquo;s last entry (e.g. 1 Oct). Going live: the cutover agreed with the accountant.
+                        </p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">When to post</label>
+                        <select value={form.daily_post_hour}
+                            onChange={(e) => setForm({ ...form, daily_post_hour: e.target.value })} className={inputCls}>
+                            {POST_HOUR_OPTIONS.map((o) => <option key={o.label} value={o.value}>{o.label}</option>)}
+                        </select>
+                        <p className="text-xs text-slate-500 mt-1">
+                            A day&rsquo;s sales, receipts and purchases post the next morning, after same-day cancellations and
+                            corrections have settled. Retail (B2C) sales always go as one voucher per day.
+                        </p>
+                    </div>
+                </div>
             </div>
 
             {/* Import switch */}
@@ -321,8 +371,9 @@ function SyncQueueTab() {
     const { data: cfg } = useTallySettings();
     const records = data?.data || [];
     const [retrying, setRetrying] = useState<number | null>(null);
-    const [bulk, setBulk] = useState<'skip' | 'retry' | 'resend' | null>(null);
+    const [bulk, setBulk] = useState<'retry' | 'send' | null>(null);
     const company = cfg?.company_name?.trim() || '';
+    const cutover = cfg?.posting_from_date ? String(cfg.posting_from_date).slice(0, 10) : '';
 
     // Prefix covers the list AND the pending/failed counts.
     const refreshQueue = () => queryClient.invalidateQueries({ queryKey: ['accounting', 'tally-sync'] });
@@ -340,23 +391,6 @@ function SyncQueueTab() {
         }
     };
 
-    const skipAllPending = async () => {
-        const n = counts?.pending ?? 0;
-        if (!window.confirm(
-            `Skip all ${n} queued voucher(s)?\n\nUse this once, right BEFORE turning posting on, for vouchers already booked by hand in Tally — they will never be sent.\n\nAny one of them can be re-queued later with its Retry button.`,
-        )) return;
-        setBulk('skip');
-        try {
-            const res = await POST<{ skipped: number }>('/accounting/tally/sync-records/skip-pending', {});
-            toast.success(`${res.data?.skipped ?? 0} queued voucher(s) skipped`);
-            refreshQueue();
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to skip');
-        } finally {
-            setBulk(null);
-        }
-    };
-
     const retryAllFailed = async () => {
         setBulk('retry');
         try {
@@ -370,26 +404,20 @@ function SyncQueueTab() {
         }
     };
 
-    // The test-copy → live switch: what the test run posted goes again to the
-    // company now named. The backend leaves alone anything already posted to it.
-    const resendConfirmed = async () => {
-        const from = window.prompt(
-            `Re-send confirmed vouchers to "${company}"\n\nUse this once, after switching Company name from the test copy to the live books: vouchers the test run posted are queued again for "${company}". Ones already posted to "${company}" are left alone.\n\nGo-live cutover date (YYYY-MM-DD): only vouchers created on or after it are re-sent — older ones you re-posted while testing are already in the live books by hand.`,
-            '',
-        );
-        if (from === null) return;
-        const cutover = from.trim();
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(cutover)) {
-            toast.error('Enter the cutover date as YYYY-MM-DD');
-            return;
-        }
-        setBulk('resend');
+    // The test-copy → live switch (and pulling the cutover earlier): everything
+    // dated from the cutover goes to the company now named. The backend leaves
+    // alone anything already posted there, so a second press can't duplicate.
+    const sendFromCutover = async () => {
+        if (!window.confirm(
+            `Send every voucher dated ${cutover} or later to "${company}"?\n\nUse this after switching Company name from the test copy to the live books (or after moving the cutover earlier). Vouchers already in "${company}" are not sent again.\n\nThey post on the next run while posting is on.`,
+        )) return;
+        setBulk('send');
         try {
-            const res = await POST<{ requeued: number }>('/accounting/tally/sync-records/resend-confirmed', { created_from: cutover });
+            const res = await POST<{ requeued: number }>('/accounting/tally/sync-records/send-from-cutover', {});
             toast.success(`${res.data?.requeued ?? 0} voucher(s) queued for ${company}`);
             refreshQueue();
         } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to re-send');
+            toast.error(err instanceof Error ? err.message : 'Failed to queue');
         } finally {
             setBulk(null);
         }
@@ -399,8 +427,13 @@ function SyncQueueTab() {
         { key: 'id', header: 'ID', width: '70px' },
         {
             key: 'entity_type', header: 'Voucher', width: '100px',
-            render: (r) => <span className="text-xs text-slate-300">{r.voucher_type || SYNC_ENTITY_TYPE_LABELS[Number(r.entity_type)] || '—'}</span>,
+            render: (r) => (
+                <span className="text-xs text-slate-300">
+                    {Number(r.entity_type) === 4 ? 'B2C day' : r.voucher_type || SYNC_ENTITY_TYPE_LABELS[Number(r.entity_type)] || '—'}
+                </span>
+            ),
         },
+        { key: 'voucher_date', header: 'Dated', width: '110px', render: (r) => <span className="text-xs text-slate-400">{formatDate(r.voucher_date)}</span> },
         { key: 'idempotency_key', header: 'Key', render: (r) => <span className="text-xs text-slate-400 font-mono">{r.idempotency_key}</span> },
         {
             key: 'status', header: 'Status', width: '110px',
@@ -414,7 +447,12 @@ function SyncQueueTab() {
         { key: 'tally_voucher_id', header: 'Tally ID', width: '110px', render: (r) => r.tally_voucher_id || <span className="text-slate-600">—</span> },
         {
             key: 'last_error', header: 'Last error',
-            render: (r) => r.last_error ? <span className="text-xs text-red-400 truncate block max-w-xs" title={r.last_error}>{r.last_error}</span> : <span className="text-slate-600">—</span>,
+            render: (r) => {
+                if (r.status === 'merged') return <span className="text-xs text-purple-300">in B2C day #{r.rollup_id}</span>;
+                return r.last_error
+                    ? <span className={`text-xs truncate block max-w-xs ${r.status === 'skipped' ? 'text-slate-400' : 'text-red-400'}`} title={r.last_error}>{r.last_error}</span>
+                    : <span className="text-slate-600">—</span>;
+            },
         },
         { key: 'updated_at', header: 'Updated', width: '160px', render: (r) => <span className="text-xs text-slate-400">{formatDateTime(r.updated_at)}</span> },
         {
@@ -430,26 +468,21 @@ function SyncQueueTab() {
         },
     ];
 
-    const STATUSES = ['', 'pending', 'sent', 'confirmed', 'failed', 'skipped'];
+    const STATUSES = ['', 'pending', 'confirmed', 'failed', 'skipped', 'merged'];
 
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-                <button type="button" onClick={skipAllPending} disabled={bulk !== null || !counts?.pending}
-                    className="flex items-center gap-2 px-3 py-2 text-sm rounded-xl border bg-amber-500/10 text-amber-300 border-amber-500/30 disabled:opacity-40">
-                    <SkipForward className="w-4 h-4" />
-                    {bulk === 'skip' ? 'Skipping…' : `Skip all pending (${counts?.pending ?? 0}) — go-live cutover`}
-                </button>
                 <button type="button" onClick={retryAllFailed} disabled={bulk !== null || !counts?.failed}
                     className="flex items-center gap-2 px-3 py-2 text-sm rounded-xl border bg-slate-800/50 text-slate-300 border-slate-700/50 disabled:opacity-40">
                     <RefreshCw className={`w-4 h-4 ${bulk === 'retry' ? 'animate-spin' : ''}`} />
                     {bulk === 'retry' ? 'Re-queuing…' : `Retry all failed (${counts?.failed ?? 0})`}
                 </button>
-                <button type="button" onClick={resendConfirmed} disabled={bulk !== null || !counts?.confirmed || !company}
-                    title={company ? undefined : 'Set Company name in Settings first'}
+                <button type="button" onClick={sendFromCutover} disabled={bulk !== null || !company || !cutover}
+                    title={company && cutover ? undefined : 'Set Company name and the cutover date in Settings first'}
                     className="flex items-center gap-2 px-3 py-2 text-sm rounded-xl border bg-slate-800/50 text-slate-300 border-slate-700/50 disabled:opacity-40">
                     <Send className="w-4 h-4" />
-                    {bulk === 'resend' ? 'Queuing…' : `Re-send confirmed to ${company || 'company'} (${counts?.confirmed ?? 0}) — test → live switch`}
+                    {bulk === 'send' ? 'Queuing…' : `Send to ${company || 'company'} from ${cutover ? formatDate(cutover) : 'cutover'} — test → live switch`}
                 </button>
             </div>
             <div className="flex items-center gap-2">

@@ -9,6 +9,7 @@ import {
     useTallyLedgerMapping, fetchTallyLedgerMapping,
     TallyLedgerMapping as MappingResult, TallyLedgerMappingRow,
 } from '@/hooks/useAccounting';
+import TallyRateLedgers from '@/components/accounting/TallyRateLedgers';
 
 const inputCls =
     'w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50';
@@ -56,7 +57,12 @@ export default function TallyLedgerMapping() {
     }, [data, query, postingOnly]);
 
     const postingRows = (data?.ledgers || []).filter((r) => r.posts_to_tally);
-    const missing = checked ? postingRows.filter((r) => inTally(r) === false).length : null;
+    const rateRows = data?.rate_ledgers || [];
+    const mappedRates = rateRows.filter((r) => r.tally_ledger_name);
+    const missing = checked
+        ? postingRows.filter((r) => inTally(r) === false).length
+            + mappedRates.filter((r) => !tallyNames.has((r.tally_ledger_name || '').toLowerCase())).length
+        : null;
 
     const runCheck = async () => {
         setChecking(true);
@@ -98,7 +104,7 @@ export default function TallyLedgerMapping() {
                         {checking ? 'Reading Tally…' : 'Check against Tally'}
                     </button>
                 </div>
-                <MappingSummary checked={checked} missing={missing} total={postingRows.length}
+                <MappingSummary checked={checked} missing={missing} total={postingRows.length + mappedRates.length}
                     tallyCount={check?.tally_ledgers?.length ?? 0} error={check?.tally_error ?? null}
                     company={check?.tally_company ?? null} />
             </div>
@@ -121,6 +127,12 @@ export default function TallyLedgerMapping() {
                         <option key={l.name} value={l.name}>{l.parent || ''}</option>
                     ))}
                 </datalist>
+            )}
+
+            {rateRows.length > 0 && (
+                // Keyed by the saved map so the inputs reset after a save.
+                <TallyRateLedgers key={JSON.stringify(rateRows.map((r) => [r.rate, r.tally_ledger_name]))}
+                    rows={rateRows} tallyNames={checked ? tallyNames : null} datalistId={DATALIST_ID} onSaved={onSaved} />
             )}
 
             {SECTIONS.map((s) => {
