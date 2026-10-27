@@ -18,10 +18,11 @@ const DATALIST_ID = 'tally-ledger-options';
 
 /** Section order + labels, keyed by ledger_kind. */
 const SECTIONS: { kind: number; title: string; hint: string }[] = [
-    { kind: 1, title: 'System ledgers', hint: 'Sales, GST, round-off, cash, bank and the B2C debtor control account.' },
+    { kind: 1, title: 'System ledgers', hint: 'Sales, GST, round-off, cash, bank, Razorpay commission and the B2C debtor control account.' },
     { kind: 2, title: 'B2B shops', hint: "Each shop's invoices and receipts post to its own Tally ledger." },
-    { kind: 3, title: 'Vendors', hint: 'Purchase bills post to the vendor’s creditor ledger.' },
-    { kind: 4, title: 'Account heads & custom', hint: 'Expense heads used on purchase bills.' },
+    { kind: 3, title: 'Vendors', hint: 'Purchase bills and payments post to the vendor’s creditor ledger.' },
+    { kind: 4, title: 'Account heads, bank accounts & custom', hint: 'Expense heads on purchase bills, and the bank accounts payments and receipts go through.' },
+    { kind: 5, title: 'Staff reimbursements', hint: 'What staff paid from their own pocket and were paid back.' },
 ];
 
 /**

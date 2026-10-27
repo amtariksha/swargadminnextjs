@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
-    useStatements, useStatementRows, useInvoices, useBankAccounts,
+    useStatements, useStatementRows, useBankAccounts,
     StatementImport, StatementRow,
 } from '@/hooks/useAccounting';
 import {
@@ -13,7 +13,8 @@ import {
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import LedgerPicker, { LedgerPickerValue } from '@/components/accounting/LedgerPicker';
-import { Upload, CheckCircle2, X, Link2, Loader2, Search, BookText, Plus, Banknote } from 'lucide-react';
+import BankRowMatchModal from '@/components/accounting/BankRowMatchModal';
+import { Upload, CheckCircle2, X, Link2, Loader2, BookText, Plus, Banknote, Store } from 'lucide-react';
 import { POST } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -22,8 +23,15 @@ type ReconcileItem = {
     action: 'confirm' | 'manual' | 'ignore';
     invoice_id?: number;
     ledger_id?: number;
+    vendor_id?: number;
     to_suspense?: boolean;
 };
+
+type ReconcileResult = { row_id: number; error?: unknown; created?: boolean };
+
+/** A suggestion that Confirm can act on: an invoice for a credit, a vendor for a debit. */
+const hasSuggestion = (r: StatementRow) =>
+    !!r.matched_invoice_id || (r.direction === DIRECTION.DEBIT && !!r.matched_vendor_id);
 
 export default function BankReconciliationPage() {
     const { data: stmtData, isLoading: loadingStatements, refetch: refetchStatements } = useStatements();
@@ -78,7 +86,10 @@ export default function BankReconciliationPage() {
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-bold text-white">Bank reconciliation</h1>
-                <p className="text-slate-400">Upload a statement → AI parses &amp; suggests matches → review and confirm. Nothing posts unreviewed.</p>
+                <p className="text-slate-400">
+                    Upload a statement → money in is matched to invoices, money out to vendors → review and confirm.
+                    Nothing posts unreviewed.
+                </p>
             </div>
 
             {/* Upload */}
@@ -145,8 +156,13 @@ function RowsReview({ importId, onReconciled }: { importId: number; onReconciled
         if (items.length === 0) return;
         setBusy(true);
         try {
-            const res = await POST<{ reconciled: number }>('/accounting/bank/reconcile', { items });
-            toast.success(`${res.data?.reconciled ?? items.length} row(s) reconciled`);
+            const res = await POST<{ reconciled: number; results?: ReconcileResult[] }>('/accounting/bank/reconcile', { items });
+            const failed = (res.data?.results || []).filter((r) => r.error);
+            if (failed.length) {
+                toast.error(`${failed.length} row(s) not reconciled: ${String(failed[0].error)}`);
+            } else {
+                toast.success(`${res.data?.reconciled ?? items.length} row(s) reconciled`);
+            }
             refetch();
             onReconciled();
         } catch (err) {
@@ -158,7 +174,7 @@ function RowsReview({ importId, onReconciled }: { importId: number; onReconciled
 
     const confirmAllSuggested = () =>
         reconcile(groups.suggested
-            .filter((r) => r.matched_invoice_id)
+            .filter(hasSuggestion)
             .map((r) => ({ row_id: r.id, action: 'confirm' as const })));
 
     const baseColumns: Column<StatementRow>[] = [
@@ -185,6 +201,19 @@ function RowsReview({ importId, onReconciled }: { importId: number; onReconciled
                         <div className="text-slate-600">{r.match_reasons.join(', ')}</div>
                     )}
                 </div>
+            ) : r.matched_vendor_id ? (
+                <div className="text-xs">
+                    <div className="text-fuchsia-300 flex items-center gap-1">
+                        <Store className="w-3 h-3" /> {r.match_status === 1 ? 'Pays' : 'Paid'} {r.matched_vendor_name}
+                    </div>
+                    {r.match_status === 1 && (
+                        <div className="text-slate-500">
+                            {r.match_score != null ? `${Math.round(Number(r.match_score))}% score` : ''}
+                            {r.match_reasons && r.match_reasons.length > 0 ? ` · ${r.match_reasons.join(', ')}` : ''}
+                        </div>
+                    )}
+                    {r.matched_voucher_number && <div className="text-slate-500">{r.matched_voucher_number}</div>}
+                </div>
             ) : r.matched_ledger_id ? (
                 <div className="text-xs">
                     <div className="text-amber-300 flex items-center gap-1"><BookText className="w-3 h-3" /> {r.matched_ledger_name}</div>
@@ -198,7 +227,7 @@ function RowsReview({ importId, onReconciled }: { importId: number; onReconciled
         key: 'actions', header: '', width: '290px', sortable: false,
         render: (r) => (
             <div className="flex items-center gap-2">
-                {showConfirm && r.matched_invoice_id && (
+                {showConfirm && hasSuggestion(r) && (
                     <button onClick={() => reconcile([{ row_id: r.id, action: 'confirm' }])} disabled={busy}
                         className="flex items-center gap-1 px-2 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 disabled:opacity-50">
                         <CheckCircle2 className="w-3 h-3" /> Confirm
@@ -251,7 +280,7 @@ function RowsReview({ importId, onReconciled }: { importId: number; onReconciled
                         </button>
                     ))}
                 </div>
-                {tab === 0 && groups.suggested.some((r) => r.matched_invoice_id) && (
+                {tab === 0 && groups.suggested.some(hasSuggestion) && (
                     <button onClick={confirmAllSuggested} disabled={busy}
                         className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium text-sm disabled:opacity-50">
                         <CheckCircle2 className="w-4 h-4" /> Confirm all suggested
@@ -271,7 +300,7 @@ function RowsReview({ importId, onReconciled }: { importId: number; onReconciled
                 searchPlaceholder="Filter rows..." emptyMessage="Nothing here" exportable={false} />
 
             {manualRow && (
-                <ManualMatchModal
+                <BankRowMatchModal
                     row={manualRow}
                     onClose={() => setManualRow(null)}
                     onSubmit={(partial) => {
@@ -281,102 +310,6 @@ function RowsReview({ importId, onReconciled }: { importId: number; onReconciled
                 />
             )}
         </div>
-    );
-}
-
-// ── Manual match: pick an issued invoice for a row ───────────────────────────
-
-function ManualMatchModal({
-    row, onClose, onSubmit,
-}: {
-    row: StatementRow;
-    onClose: () => void;
-    onSubmit: (partial: { invoice_id?: number; ledger_id?: number }) => void;
-}) {
-    // Credit rows can match an invoice OR a ledger; debit (money-out) rows can
-    // only go to a ledger (expense/vendor), so default them to the ledger tab.
-    const isCredit = row.direction === DIRECTION.CREDIT;
-    const [mode, setMode] = useState<'invoice' | 'ledger'>(isCredit ? 'invoice' : 'ledger');
-    const [search, setSearch] = useState('');
-    const [applied, setApplied] = useState('');
-    const [ledger, setLedger] = useState<LedgerPickerValue | null>(null);
-    const { data, isLoading } = useInvoices(applied ? { status: 'issued', q: applied } : { status: 'issued' });
-    const invoices = data?.data || [];
-
-    return (
-        <Modal isOpen onClose={onClose} title="Reconcile bank row" size="lg">
-            <div className="space-y-4">
-                <div className="bg-slate-800/40 rounded-xl px-4 py-3 text-sm">
-                    <div className="text-slate-400">Bank row</div>
-                    <div className="text-white">{row.narration || '—'}</div>
-                    <div className={isCredit ? 'text-green-400' : 'text-slate-300'}>
-                        {isCredit ? '+' : '−'}{formatINR(row.amount)} · {formatDate(row.txn_date)}
-                    </div>
-                </div>
-
-                <div className="flex gap-1 p-1 bg-slate-900/50 rounded-xl border border-slate-800/50 w-fit">
-                    {isCredit && (
-                        <button onClick={() => setMode('invoice')}
-                            className={`px-4 py-1.5 text-sm rounded-lg ${mode === 'invoice' ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30' : 'text-slate-400'}`}>
-                            Match invoice
-                        </button>
-                    )}
-                    <button onClick={() => setMode('ledger')}
-                        className={`px-4 py-1.5 text-sm rounded-lg ${mode === 'ledger' ? 'bg-purple-600/20 text-purple-300 border border-purple-500/30' : 'text-slate-400'}`}>
-                        Assign to ledger
-                    </button>
-                </div>
-
-                {mode === 'invoice' ? (
-                    <>
-                        <form onSubmit={(e) => { e.preventDefault(); setApplied(search.trim()); }} className="flex gap-2">
-                            <div className="relative flex-1">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input value={search} onChange={(e) => setSearch(e.target.value)}
-                                    placeholder="Search invoice # / customer…"
-                                    className="w-full pl-10 pr-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50" />
-                            </div>
-                            <button type="submit" className="px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl text-sm hover:bg-slate-700/50">
-                                Search
-                            </button>
-                        </form>
-
-                        <div className="max-h-72 overflow-y-auto space-y-2">
-                            {isLoading ? (
-                                <div className="text-slate-400 text-sm py-6 text-center">Loading…</div>
-                            ) : invoices.length === 0 ? (
-                                <div className="text-slate-500 text-sm py-6 text-center">No issued invoices found.</div>
-                            ) : (
-                                invoices.map((inv) => (
-                                    <button key={inv.id} onClick={() => onSubmit({ invoice_id: inv.id })}
-                                        className="w-full flex items-center justify-between gap-3 bg-slate-800/40 hover:bg-slate-700/50 rounded-xl px-4 py-3 text-left">
-                                        <div>
-                                            <div className="text-sm text-white">{inv.invoice_number}</div>
-                                            <div className="text-xs text-slate-400">{inv.customer_name || '—'} · {formatDate(inv.invoice_date)}</div>
-                                        </div>
-                                        <div className="text-sm font-medium text-white">{formatINR(inv.total_amount)}</div>
-                                    </button>
-                                ))
-                            )}
-                        </div>
-                    </>
-                ) : (
-                    <div className="space-y-3">
-                        <p className="text-xs text-slate-400">
-                            Posts a voucher {isCredit ? '(Dr Bank / Cr ledger)' : '(Dr ledger / Cr Bank)'} against the chosen ledger.
-                            Pick an income/expense/vendor ledger, or use the Suspense quick-action to park it.
-                        </p>
-                        <LedgerPicker value={ledger?.id ?? null} onChange={setLedger} placeholder="Select a ledger…" />
-                        <div className="flex justify-end">
-                            <button onClick={() => ledger && onSubmit({ ledger_id: ledger.id })} disabled={!ledger}
-                                className="flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium text-sm disabled:opacity-50">
-                                <CheckCircle2 className="w-4 h-4" /> Assign &amp; post
-                            </button>
-                        </div>
-                    </div>
-                )}
-            </div>
-        </Modal>
     );
 }
 

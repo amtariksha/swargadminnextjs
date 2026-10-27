@@ -15,6 +15,7 @@ import TabPanel from '@/components/TabPanel';
 import Modal from '@/components/Modal';
 import TallyLedgerMapping from '@/components/accounting/TallyLedgerMapping';
 import TallyMastersImport from '@/components/accounting/TallyMastersImport';
+import RazorpaySettlementSync from '@/components/accounting/RazorpaySettlementSync';
 import {
     Power, RefreshCw, Building2, KeyRound, Server, Download, Camera, Wand2, AlertTriangle, Send, CalendarClock,
 } from 'lucide-react';
@@ -487,6 +488,7 @@ function SyncQueueTab() {
                     {bulk === 'send' ? 'Queuing…' : `Send to ${company || 'company'} from ${cutover ? formatDate(cutover) : 'cutover'} — test → live switch`}
                 </button>
             </div>
+            <RazorpaySettlementSync defaultFrom={cutover || undefined} />
             <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-400">Status:</span>
                 {STATUSES.map((s) => (

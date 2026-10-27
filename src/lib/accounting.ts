@@ -87,6 +87,8 @@ export const SYNC_ENTITY_TYPE_LABELS: Record<number, string> = {
     2: 'Receipt',
     3: 'Purchase',
     4: 'B2C day',
+    5: 'Voucher',
+    6: 'Reversal',
 };
 
 /** tally_import_run.run_type */

@@ -685,6 +685,10 @@ export interface StatementRow {
     matched_ledger_name?: string | null;
     matched_voucher_id?: number | null;
     matched_voucher_number?: string | null;
+    /** Debit line: the vendor suggested on upload (match_status 1) or paid (2/3). */
+    matched_vendor_id?: number | null;
+    matched_vendor_name?: string | null;
+    matched_vendor_payment_id?: number | null;
 }
 
 export interface BankAccount {
@@ -921,4 +925,49 @@ export function useResolveDeviation() {
             qc.invalidateQueries({ queryKey: ['accounting', 'shops'] });
         },
     });
+}
+
+// ── Payments: cash/bank ledgers, staff, reimbursements, Razorpay settlements ──
+
+export interface MoneyLedger { id: number; name: string; code?: string | null; group_name: string }
+export interface StaffMember { id: number; name: string | null; phone?: string | null }
+
+/** Ledgers money can be paid from (cash / bank). */
+export function useMoneyLedgers() {
+    return useQuery({
+        queryKey: ['accounting', 'money-ledgers'],
+        queryFn: async () => (await GET<MoneyLedger[]>('/accounting/money-ledgers')).data || [],
+    });
+}
+
+/** Staff members — who can pay from their own pocket and be reimbursed. */
+export function useStaffMembers() {
+    return useQuery({
+        queryKey: ['accounting', 'staff'],
+        queryFn: async () => (await GET<StaffMember[]>('/accounting/reimbursements/staff')).data || [],
+    });
+}
+
+export interface StaffReimbursement {
+    user_id: number; name: string | null; ledger_id: number; tally_ledger_name: string | null;
+    claimed: number; reimbursed: number; owed: number;
+}
+
+export interface ReimbursementMovement {
+    voucher_id: number; voucher_number: string | null; date: string; narration: string | null;
+    user_id: number; name: string | null; claimed: number; reimbursed: number;
+}
+
+export interface Reimbursements { staff: StaffReimbursement[]; movements: ReimbursementMovement[]; total_owed: number }
+
+export function useReimbursements() {
+    return useQuery({
+        queryKey: ['accounting', 'reimbursements'],
+        queryFn: async () => (await GET<Reimbursements>('/accounting/reimbursements')).data,
+    });
+}
+
+export interface SettlementSyncResult {
+    fetched: number; posted: number; revised: number; unchanged: number;
+    skipped: number; failed: number; without_recon: number;
 }

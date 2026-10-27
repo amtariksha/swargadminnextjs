@@ -250,6 +250,7 @@ const navItems: NavItem[] = [
                     { name: 'Invoices', href: '/accounting/invoices', icon: <FileText className="w-4 h-4" /> },
                     { name: 'Shops Billing', href: '/accounting/shops', icon: <Banknote className="w-4 h-4" /> },
                     { name: 'Purchases / Bills', href: '/accounting/purchases', icon: <Receipt className="w-4 h-4" /> },
+                    { name: 'Reimbursements', href: '/accounting/reimbursements', icon: <Banknote className="w-4 h-4" /> },
                     { name: 'Customers', href: '/accounting/customers', icon: <Users className="w-4 h-4" /> },
                     { name: 'HSN & Rates', href: '/accounting/hsn', icon: <Tags className="w-4 h-4" /> },
                     { name: 'B2C Consolidation', href: '/accounting/b2c-consolidation', icon: <CalendarDays className="w-4 h-4" /> },
