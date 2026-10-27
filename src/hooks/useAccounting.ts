@@ -410,6 +410,83 @@ export async function fetchTallyLedgerMapping(check: boolean): Promise<TallyLedg
     return (await GET<TallyLedgerMapping>('/accounting/tally/ledger-mapping', check ? { check: 1 } : {})).data;
 }
 
+/** How a Tally party was matched to a Swarg record ('similar' = fuzzy name). */
+export type TallyMatchBy = 'gstin' | 'name' | 'phone' | 'similar';
+
+/** A Tally ledger as the master import shows it. closing: Tally sign (debit negative). */
+export interface TallyMasterParty {
+    name: string;
+    parent: string | null;
+    gstin?: string | null;
+    phone?: string | null;
+    closing: number | null;
+}
+
+export interface TallyMasterVendorRow {
+    tally: TallyMasterParty;
+    status: 'linked' | 'match' | 'new';
+    vendor_id: number | null;
+    vendor_name: string | null;
+    match_by: TallyMatchBy | null;
+    score: number | null;
+}
+
+export interface TallyMasterHeadRow {
+    tally: TallyMasterParty;
+    /** The Swarg head group it goes under (Purchase Accounts / Direct / Indirect Expenses). */
+    group: string;
+    status: 'linked' | 'new';
+    ledger_id: number | null;
+}
+
+export interface TallyMasterShopRow {
+    user_id: number;
+    name: string;
+    also_known_as: string[];
+    gstin: string | null;
+    status: 'linked' | 'match' | 'none';
+    tally_name: string | null;
+    match_by: TallyMatchBy | null;
+    score: number | null;
+}
+
+/** GET /accounting/tally/masters — a review plan; nothing is written anywhere. */
+export interface TallyMastersPlan {
+    company: string | null;
+    tally_error: string | null;
+    /** false = this Tally release returned names only (no GSTIN / phone / balance). */
+    detailed?: boolean;
+    counts?: { ledgers: number; groups: number; creditors: number; debtors: number; heads: number };
+    vendors?: TallyMasterVendorRow[];
+    heads?: TallyMasterHeadRow[];
+    shops?: TallyMasterShopRow[];
+    debtors?: TallyMasterParty[];
+    vendor_options?: { id: number; name: string; is_active: number }[];
+}
+
+export interface TallyMastersImportBody {
+    vendors: { tally_name: string; vendor_id: number | null }[];
+    heads: { tally_name: string; ledger_id: null }[];
+    shops: { user_id: number; tally_name: string }[];
+}
+
+export interface TallyMastersImportResult {
+    company: string;
+    summary: {
+        vendors_created: number; vendors_linked: number;
+        heads_created: number; heads_linked: number;
+        shops_linked: number; unchanged: number;
+    };
+}
+
+export async function fetchTallyMasters(): Promise<TallyMastersPlan> {
+    return (await GET<TallyMastersPlan>('/accounting/tally/masters')).data;
+}
+
+export async function importTallyMasters(body: TallyMastersImportBody): Promise<TallyMastersImportResult> {
+    return (await POST<TallyMastersImportResult>('/accounting/tally/masters/import', { ...body })).data;
+}
+
 /** Counts of queued + failed vouchers (limit 1 — only meta.total is used). */
 export function useTallyQueueCounts() {
     return useQuery({
