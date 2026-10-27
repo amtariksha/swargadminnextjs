@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useVendorPayments, useVendors, VendorPayment } from '@/hooks/useInventory';
+import { useMoneyLedgers, useStaffMembers } from '@/hooks/useAccounting';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -13,13 +14,31 @@ import { formatApiDate } from '@/lib/dateUtils';
 const inputCls =
   'w-full px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50';
 
-const PAYMENT_MODES = ['cash', 'bank', 'upi', 'other'];
+// 'employee' = a staff member paid from their own pocket; Accounting → Reimbursements pays them back.
+const PAYMENT_MODES: { value: string; label: string }[] = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'bank', label: 'Bank' },
+  { value: 'upi', label: 'UPI' },
+  { value: 'other', label: 'Other' },
+  { value: 'employee', label: 'Paid by staff (to reimburse)' },
+];
 const today = () => new Date().toISOString().slice(0, 10);
-const blankForm = { vendor_id: '', payment_date: today(), amount: '', payment_mode: 'cash', reference_no: '', notes: '' };
+const blankForm = {
+  vendor_id: '', payment_date: today(), amount: '', payment_mode: 'cash', reference_no: '', notes: '',
+  bank_ledger_id: '', paid_by_user_id: '',
+};
+
+/** Where the money came from, for the table. */
+const paidFrom = (p: VendorPayment) => {
+  if (p.paid_by_name) return <span className="text-amber-300">Staff: {p.paid_by_name}</span>;
+  return p.bank_ledger_name || <span className="text-slate-600">—</span>;
+};
 
 export default function VendorPaymentsPage() {
   const { data: payments = [], isLoading, refetch } = useVendorPayments();
   const { data: vendors = [] } = useVendors();
+  const { data: moneyLedgers = [] } = useMoneyLedgers();
+  const { data: staff = [] } = useStaffMembers();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteItem, setDeleteItem] = useState<VendorPayment | null>(null);
   const [form, setForm] = useState(blankForm);
@@ -30,12 +49,16 @@ export default function VendorPaymentsPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.vendor_id || !form.amount) return;
+    const byStaff = form.payment_mode === 'employee';
+    if (byStaff && !form.paid_by_user_id) { toast.error('Pick the staff member who paid'); return; }
     setIsSubmitting(true);
     try {
       await POST('/inventory/payments', {
         vendor_id: Number(form.vendor_id), payment_date: form.payment_date,
         amount: parseFloat(form.amount), payment_mode: form.payment_mode,
         reference_no: form.reference_no || null, notes: form.notes || null,
+        paid_by_user_id: byStaff ? Number(form.paid_by_user_id) : null,
+        bank_ledger_id: !byStaff && form.bank_ledger_id ? Number(form.bank_ledger_id) : null,
       });
       toast.success('Payment recorded');
       setIsModalOpen(false);
@@ -71,8 +94,9 @@ export default function VendorPaymentsPage() {
     },
     {
       key: 'payment_mode', header: 'Mode', width: '100px',
-      render: (item) => <span className="capitalize">{item.payment_mode}</span>,
+      render: (item) => <span className="capitalize">{item.payment_mode === 'employee' ? 'staff' : item.payment_mode}</span>,
     },
+    { key: 'bank_ledger_name', header: 'Paid from', width: '170px', render: paidFrom },
     { key: 'reference_no', header: 'Reference', width: '140px' },
     {
       key: 'del', header: '', width: '70px', sortable: false,
@@ -127,7 +151,7 @@ export default function VendorPaymentsPage() {
               <label className="block text-sm font-medium text-slate-300 mb-2">Payment Mode</label>
               <select value={form.payment_mode}
                 onChange={(e) => setForm({ ...form, payment_mode: e.target.value })} className={inputCls}>
-                {PAYMENT_MODES.map((m) => <option key={m} value={m} className="capitalize">{m}</option>)}
+                {PAYMENT_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
             </div>
             <div>
@@ -136,6 +160,28 @@ export default function VendorPaymentsPage() {
                 onChange={(e) => setForm({ ...form, reference_no: e.target.value })} className={inputCls} />
             </div>
           </div>
+          {form.payment_mode === 'employee' ? (
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Paid by *</label>
+              <select value={form.paid_by_user_id} required
+                onChange={(e) => setForm({ ...form, paid_by_user_id: e.target.value })} className={inputCls}>
+                <option value="">Staff member who paid</option>
+                {staff.map((u) => <option key={u.id} value={u.id}>{u.name || `#${u.id}`}{u.phone ? ` · ${u.phone}` : ''}</option>)}
+              </select>
+              <p className="text-xs text-slate-500 mt-1">
+                Owed back to them — pay it under Accounting → Reimbursements.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">Paid from</label>
+              <select value={form.bank_ledger_id}
+                onChange={(e) => setForm({ ...form, bank_ledger_id: e.target.value })} className={inputCls}>
+                <option value="">Default {form.payment_mode === 'cash' ? 'Cash' : 'Bank'} ledger</option>
+                {moneyLedgers.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
             <textarea value={form.notes} rows={2}
@@ -155,7 +201,7 @@ export default function VendorPaymentsPage() {
       <ConfirmDialog
         isOpen={!!deleteItem}
         title="Delete Payment"
-        message="Delete this payment? Vendor outstanding will go back up by this amount."
+        message="Delete this payment? Vendor outstanding goes back up by this amount; if it already reached Tally, a reversing entry is posted there."
         onConfirm={handleDelete}
         onCancel={() => setDeleteItem(null)}
         variant="danger"

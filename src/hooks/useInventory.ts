@@ -86,6 +86,12 @@ export interface VendorPayment {
   reference_no?: string | null;
   notes?: string | null;
   vendor_name?: string;
+  /** The bank / cash ledger it left (null = by mode). */
+  bank_ledger_id?: number | null;
+  bank_ledger_name?: string | null;
+  /** A staff member paid from their own pocket (payment_mode 'employee'). */
+  paid_by_user_id?: number | null;
+  paid_by_name?: string | null;
   created_at?: string;
 }
 
