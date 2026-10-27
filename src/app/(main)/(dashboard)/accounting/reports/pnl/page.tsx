@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { usePnl, type BalanceSheetSide } from '@/hooks/useAccounting';
-import { formatINR, fyOptions, currentFy } from '@/lib/accounting';
+import { usePnl, type BalanceSheetSide, type BooksSource } from '@/hooks/useAccounting';
+import { formatINR, formatDate, fyOptions, currentFy } from '@/lib/accounting';
+import { BooksSourceBar, TallySnapshotEmpty, isSnapshotMissing } from '@/components/accounting/BooksSourceBar';
 
 function Side({ title, rows, extra, total }: { title: string; rows: BalanceSheetSide[]; extra?: { label: string; amount: number }; total: number }) {
     return (
@@ -32,15 +33,18 @@ function Side({ title, rows, extra, total }: { title: string; rows: BalanceSheet
 
 export default function ProfitAndLossPage() {
     const [fy, setFy] = useState(currentFy());
-    const { data, isLoading } = usePnl({ fy });
+    const [source, setSource] = useState<BooksSource>('tally');
+    const { data, isLoading, error } = usePnl({ fy, source });
+    const tally = source === 'tally';
     const profit = (data?.netProfit ?? 0) >= 0;
+    const range = data ? (tally ? `${formatDate(data.from)} → ${formatDate(data.to)} (Tally, FY to date)` : `${data.from} → ${data.to}`) : 'Current financial year';
 
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-white">Profit &amp; Loss</h1>
-                    <p className="text-slate-400">{data ? `${data.from} → ${data.to}` : 'Current financial year'}</p>
+                    <p className="text-slate-400">{range}</p>
                 </div>
                 <select value={fy} onChange={(e) => setFy(e.target.value)}
                     className="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-white text-sm">
@@ -48,8 +52,14 @@ export default function ProfitAndLossPage() {
                 </select>
             </div>
 
+            <BooksSourceBar source={source} onSourceChange={setSource} snapshot={data?.snapshot} unclassified={data?.unclassified} />
+
             {isLoading ? (
                 <div className="text-slate-400">Loading…</div>
+            ) : tally && isSnapshotMissing(error) ? (
+                <TallySnapshotEmpty message={error.message} fy={fy} />
+            ) : tally && error ? (
+                <div className="glass rounded-2xl p-6 text-rose-300 text-sm">{error.message}</div>
             ) : data ? (
                 <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
