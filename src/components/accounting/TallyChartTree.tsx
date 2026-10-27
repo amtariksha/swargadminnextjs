@@ -91,7 +91,8 @@ function GroupRow({ group, depth, isOpen, onToggle }: GroupRowProps) {
     );
 }
 
-function RefreshBar() {
+/** Refresh reads Tally now; a typed company (e.g. the CA's) is read AND then shown, blank goes back to Swarg's company. */
+function RefreshBar({ onViewCompany }: { onViewCompany: (company: string) => void }) {
     const qc = useQueryClient();
     const { data: cfg } = useTallySettings();
     const [company, setCompany] = useState('');
@@ -101,6 +102,7 @@ function RefreshBar() {
         setBusy(true);
         try {
             const res = await refreshTallyChart(company.trim() ? { company: company.trim() } : {});
+            onViewCompany(company.trim());
             toast.success(res.message || `Tally snapshot taken — ${res.data.ledgers} ledgers`);
             await Promise.all(REFRESH_KEYS.map((k) => qc.invalidateQueries({ queryKey: ['accounting', k] })));
         } catch (e) {
@@ -126,7 +128,8 @@ function RefreshBar() {
 }
 
 export default function TallyChartTree() {
-    const { data, isLoading, error } = useTallyChart();
+    const [viewCompany, setViewCompany] = useState('');
+    const { data, isLoading, error } = useTallyChart(undefined, viewCompany || undefined);
     const [hideInactive, setHideInactive] = useState(true);
     const [search, setSearch] = useState('');
     // Groups whose open state differs from the default (primary open, sub-groups closed).
@@ -157,7 +160,7 @@ export default function TallyChartTree() {
                             <span className="text-slate-500"> · taken {formatDateTime(snap.taken_at)}</span></>
                     ) : 'Tally'}
                 </div>
-                <RefreshBar />
+                <RefreshBar onViewCompany={setViewCompany} />
             </div>
 
             {stale.length > 0 && (

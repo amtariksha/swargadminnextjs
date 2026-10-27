@@ -803,10 +803,13 @@ export interface TallyChart {
     /** Swarg system / head ledgers posting to a name this Tally company doesn't have. */
     stale_mappings: { id: number; name: string; tally_ledger_name: string }[];
 }
-export function useTallyChart(fy?: string) {
+/** company: view another Tally company's snapshot (e.g. the CA's); default = the company Swarg posts to. */
+export function useTallyChart(fy?: string, company?: string) {
     return useQuery({
-        queryKey: ['accounting', 'tally-chart', fy ?? null],
-        queryFn: async () => (await GET<TallyChart>('/accounting/gl/chart', { source: 'tally', ...(fy ? { fy } : {}) })).data,
+        queryKey: ['accounting', 'tally-chart', fy ?? null, company ?? null],
+        queryFn: async () => (await GET<TallyChart>('/accounting/gl/chart', {
+            source: 'tally', ...(fy ? { fy } : {}), ...(company ? { company } : {}),
+        })).data,
     });
 }
 export const isTallyLedgerNode = (n: TallyChartNode): n is TallyChartLedger => 'mapped_to' in n;
