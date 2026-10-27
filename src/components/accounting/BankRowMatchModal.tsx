@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Search } from 'lucide-react';
 import Modal from '@/components/Modal';
 import LedgerPicker, { LedgerPickerValue } from '@/components/accounting/LedgerPicker';
 import { useInvoices, StatementRow } from '@/hooks/useAccounting';
 import { useVendors } from '@/hooks/useInventory';
 import { DIRECTION, formatDate, formatINR } from '@/lib/accounting';
+import { applyPayeeGroup, isUsablePayee } from '@/components/accounting/BankPayeeGroups';
 
 export interface BankRowMatch { invoice_id?: number; ledger_id?: number; vendor_id?: number }
 
@@ -24,10 +26,32 @@ const submitCls =
  * reimbursement ledger.
  */
 export default function BankRowMatchModal({
-    row, onClose, onSubmit,
-}: { row: StatementRow; onClose: () => void; onSubmit: (match: BankRowMatch) => void }) {
+    row, onClose, onSubmit, similarCount = 0, onApplied,
+}: {
+    row: StatementRow; onClose: () => void; onSubmit: (match: BankRowMatch) => void;
+    /** Other open lines in this import with the same payee + direction. */
+    similarCount?: number;
+    /** Called after the whole payee group was assigned via /bank/rules/apply. */
+    onApplied?: () => void;
+}) {
+    const queryClient = useQueryClient();
     const isCredit = row.direction === DIRECTION.CREDIT;
     const [mode, setMode] = useState<Mode>(isCredit ? 'invoice' : 'vendor');
+    // /rules/apply skips invoice-matched lines, so such a row must go through the single-row path.
+    const payee = isUsablePayee(row.payee_key) && !row.matched_invoice_id ? String(row.payee_key).trim() : null;
+    const [applyToGroup, setApplyToGroup] = useState(!!payee && similarCount > 0);
+    const [busy, setBusy] = useState(false);
+
+    const submitTarget = async (target: { ledger_id: number } | { vendor_id: number }) => {
+        if (!payee || !applyToGroup) { onSubmit(target); return; }
+        setBusy(true);
+        const ok = await applyPayeeGroup(
+            { import_id: row.import_id, payee_key: payee, direction: row.direction, remember: true, ...target },
+            queryClient,
+        );
+        setBusy(false);
+        if (ok) (onApplied ?? onClose)();
+    };
 
     return (
         <Modal isOpen onClose={onClose} title="Reconcile bank row" size="lg">
@@ -48,8 +72,16 @@ export default function BankRowMatchModal({
                 </div>
 
                 {mode === 'invoice' && <InvoicePick onPick={(id) => onSubmit({ invoice_id: id })} />}
-                {mode === 'vendor' && <VendorPick suggested={row.matched_vendor_id ?? null} onPick={(id) => onSubmit({ vendor_id: id })} />}
-                {mode === 'ledger' && <LedgerPick isCredit={isCredit} onPick={(id) => onSubmit({ ledger_id: id })} />}
+                {mode !== 'invoice' && payee && (
+                    <label className="flex items-center gap-2 text-xs text-slate-300 bg-slate-800/40 rounded-xl px-3 py-2">
+                        <input type="checkbox" checked={applyToGroup} onChange={(e) => setApplyToGroup(e.target.checked)} />
+                        {similarCount > 0
+                            ? `Also assign the other ${similarCount} similar line${similarCount === 1 ? '' : 's'} in this statement and remember`
+                            : `Remember “${payee}” for next time`}
+                    </label>
+                )}
+                {mode === 'vendor' && <VendorPick suggested={row.matched_vendor_id ?? null} busy={busy} onPick={(id) => submitTarget({ vendor_id: id })} />}
+                {mode === 'ledger' && <LedgerPick isCredit={isCredit} busy={busy} onPick={(id) => submitTarget({ ledger_id: id })} />}
             </div>
         </Modal>
     );
@@ -92,7 +124,7 @@ function InvoicePick({ onPick }: { onPick: (invoiceId: number) => void }) {
     );
 }
 
-function VendorPick({ suggested, onPick }: { suggested: number | null; onPick: (vendorId: number) => void }) {
+function VendorPick({ suggested, busy, onPick }: { suggested: number | null; busy: boolean; onPick: (vendorId: number) => void }) {
     const { data: vendors = [] } = useVendors();
     const [vendorId, setVendorId] = useState<string>(suggested != null ? String(suggested) : '');
     return (
@@ -107,7 +139,7 @@ function VendorPick({ suggested, onPick }: { suggested: number | null; onPick: (
                 {vendors.filter((v) => v.is_active !== 0).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
             </select>
             <div className="flex justify-end">
-                <button onClick={() => vendorId && onPick(Number(vendorId))} disabled={!vendorId} className={submitCls}>
+                <button onClick={() => vendorId && onPick(Number(vendorId))} disabled={!vendorId || busy} className={submitCls}>
                     <CheckCircle2 className="w-4 h-4" /> Record payment
                 </button>
             </div>
@@ -115,7 +147,7 @@ function VendorPick({ suggested, onPick }: { suggested: number | null; onPick: (
     );
 }
 
-function LedgerPick({ isCredit, onPick }: { isCredit: boolean; onPick: (ledgerId: number) => void }) {
+function LedgerPick({ isCredit, busy, onPick }: { isCredit: boolean; busy: boolean; onPick: (ledgerId: number) => void }) {
     const [ledger, setLedger] = useState<LedgerPickerValue | null>(null);
     return (
         <div className="space-y-3">
@@ -125,7 +157,7 @@ function LedgerPick({ isCredit, onPick }: { isCredit: boolean; onPick: (ledgerId
             </p>
             <LedgerPicker value={ledger?.id ?? null} onChange={setLedger} placeholder="Select a ledger…" />
             <div className="flex justify-end">
-                <button onClick={() => ledger && onPick(ledger.id)} disabled={!ledger} className={submitCls}>
+                <button onClick={() => ledger && onPick(ledger.id)} disabled={!ledger || busy} className={submitCls}>
                     <CheckCircle2 className="w-4 h-4" /> Assign &amp; post
                 </button>
             </div>
