@@ -14,6 +14,7 @@ import DataTable, { Column } from '@/components/DataTable';
 import TabPanel from '@/components/TabPanel';
 import Modal from '@/components/Modal';
 import TallyLedgerMapping from '@/components/accounting/TallyLedgerMapping';
+import TallyMastersImport from '@/components/accounting/TallyMastersImport';
 import {
     Power, RefreshCw, Building2, KeyRound, Server, Download, Camera, Wand2, AlertTriangle, Send, CalendarClock,
 } from 'lucide-react';
@@ -79,6 +80,7 @@ export default function TallySettingsPage() {
                 onChange={setActiveTab}
                 tabs={[
                     { label: 'Settings', content: <SettingsTab cfg={cfg} isLoading={isLoading} refetch={refetch} /> },
+                    { label: 'Masters from Tally', content: <TallyMastersImport /> },
                     { label: 'Ledger mapping', content: <TallyLedgerMapping /> },
                     { label: 'Sync queue', content: <SyncQueueTab /> },
                     { label: 'Import from Tally', content: <ImportTab /> },
