@@ -120,6 +120,10 @@ const navItems: NavItem[] = [
             // Customers = the /users page. App vs Day-order customers is the
             // on-page filter dropdown (classified via has_app/day_orders).
             { name: 'Customers', href: '/users', icon: <Users className="w-4 h-4" /> },
+            // GST customer profiles (B2B shops + B2C), moved here from Accounting.
+            // Still gated by `accounting`: leaves are permission-checked by their
+            // href segment, never by the group they sit in.
+            { name: 'B2B / B2C', href: '/accounting/customers', icon: <Store className="w-4 h-4" /> },
             { name: 'Drivers', href: '/drivers', icon: <Truck className="w-4 h-4" /> },
             { name: 'Admin Users', href: '/admin-users', icon: <UserPlus className="w-4 h-4" /> },
             { name: 'Roles & Permissions', href: '/roles', icon: <ShieldCheck className="w-4 h-4" /> },
@@ -251,7 +255,6 @@ const navItems: NavItem[] = [
                     { name: 'Shops Billing', href: '/accounting/shops', icon: <Banknote className="w-4 h-4" /> },
                     { name: 'Purchases / Bills', href: '/accounting/purchases', icon: <Receipt className="w-4 h-4" /> },
                     { name: 'Reimbursements', href: '/accounting/reimbursements', icon: <Banknote className="w-4 h-4" /> },
-                    { name: 'Customers', href: '/accounting/customers', icon: <Users className="w-4 h-4" /> },
                     { name: 'HSN & Rates', href: '/accounting/hsn', icon: <Tags className="w-4 h-4" /> },
                     { name: 'B2C Consolidation', href: '/accounting/b2c-consolidation', icon: <CalendarDays className="w-4 h-4" /> },
                 ],

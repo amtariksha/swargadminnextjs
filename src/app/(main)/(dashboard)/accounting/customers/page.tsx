@@ -151,7 +151,7 @@ export default function AccountingCustomersPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-white">Customers</h1>
+                <h1 className="text-2xl font-bold text-white">B2B / B2C</h1>
                 <p className="text-slate-400">GST profiles — grouped B2B / B2C; GSTIN, place of supply, credit terms</p>
             </div>
 
