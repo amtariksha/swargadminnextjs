@@ -6,16 +6,17 @@
  * canonical /inventory/vendors create, which auto-makes a Sundry Creditors
  * ledger), and New Customer (→ the customers page, where users get a GST
  * profile). All mutations invalidate the accounting queries so the tree + chart
- * refresh immediately.
+ * refresh immediately. "Rebuild books" backfills missing Swarg vouchers.
  */
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { BookText, FolderTree, Banknote, Receipt, Truck, Users } from 'lucide-react';
+import { BookText, FolderTree, Banknote, Receipt, Truck, Users, RefreshCcw } from 'lucide-react';
 import { POST } from '@/lib/api';
 import Modal from '@/components/Modal';
 import { inputClassName } from '@/components/FormField';
+import RebuildBooksModal from '@/components/accounting/RebuildBooksModal';
 import type { AccountGroup } from '@/hooks/useAccounting';
 
 type Action = 'ledger' | 'group' | 'supplier';
@@ -40,6 +41,7 @@ export default function CoaActionBar({ groups, selectedGroupId }: Props) {
     const [title, setTitle] = useState('');
     const [lockGroup, setLockGroup] = useState(false);
     const [busy, setBusy] = useState(false);
+    const [rebuildOpen, setRebuildOpen] = useState(false);
 
     // Shared form state.
     const [name, setName] = useState('');
@@ -146,7 +148,10 @@ export default function CoaActionBar({ groups, selectedGroupId }: Props) {
                 <button onClick={() => openLedger('Duties & Taxes', 'New Tax Ledger')} className={btn}><Receipt className="w-4 h-4" /> New Tax Ledger</button>
                 <button onClick={openSupplier} className={btn}><Truck className="w-4 h-4" /> New Supplier</button>
                 <Link href="/accounting/customers" className={btn}><Users className="w-4 h-4" /> New Customer</Link>
+                <button onClick={() => setRebuildOpen(true)} className={btn}><RefreshCcw className="w-4 h-4" /> Rebuild books</button>
             </div>
+
+            <RebuildBooksModal isOpen={rebuildOpen} onClose={() => setRebuildOpen(false)} />
 
             <Modal isOpen={action !== null} onClose={close} title={title} size="md">
                 <div className="space-y-3">

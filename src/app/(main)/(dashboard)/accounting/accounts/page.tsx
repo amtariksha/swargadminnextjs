@@ -2,10 +2,15 @@
 
 import { useMemo, useState } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
-import { useChartOfAccounts, useAccountGroups, type AccountGroup } from '@/hooks/useAccounting';
-import { formatINR, NATURE_LABELS } from '@/lib/accounting';
+import {
+    useChartOfAccounts, useAccountGroups, useTallyChart,
+    type AccountGroup, type ChartGroup, type ChartLedger,
+} from '@/hooks/useAccounting';
+import { formatINR, currentFy, NATURE_LABELS } from '@/lib/accounting';
+import TabPanel from '@/components/TabPanel';
 import CoaActionBar from '@/components/accounting/CoaActionBar';
 import CoaLedgerRow from '@/components/accounting/CoaLedgerRow';
+import TallyChartTree from '@/components/accounting/TallyChartTree';
 
 const NATURE_BADGE: Record<number, string> = {
     1: 'bg-emerald-500/15 text-emerald-300',
@@ -19,8 +24,117 @@ interface GroupNode extends AccountGroup {
     children: GroupNode[];
 }
 
+/** A chart group (or an ancestor with no ledgers of its own) nested under its parent. */
+interface ChartNode {
+    id: number;
+    name: string;
+    nature: number;
+    chart: ChartGroup | null;
+    children: ChartNode[];
+    /** Own + descendants' closing, +debit signed. */
+    total: number;
+}
+
+const signed = (amount: number | string, type: 'Dr' | 'Cr') => (Number(amount) || 0) * (type === 'Cr' ? -1 : 1);
+
+// Nests the chart's groups under their parents (parent_group_id), keeping the
+// chart's order and pulling in ancestor groups that have no ledgers themselves.
+function buildChartTree(chartGroups: ChartGroup[], allGroups: AccountGroup[]): ChartNode[] {
+    const meta = new Map(allGroups.map((g) => [g.id, g]));
+    const nodes = new Map<number, ChartNode>();
+    const roots: ChartNode[] = [];
+    const nodeFor = (id: number, chart: ChartGroup | null, seen: Set<number>): ChartNode => {
+        const existing = nodes.get(id);
+        if (existing) {
+            if (chart && !existing.chart) existing.chart = chart;
+            return existing;
+        }
+        const m = meta.get(id);
+        const node: ChartNode = { id, name: chart?.group_name ?? m?.name ?? `Group ${id}`, nature: chart?.nature ?? m?.nature ?? 0, chart, children: [], total: 0 };
+        nodes.set(id, node);
+        const parentId = chart?.parent_group_id ?? m?.parent_group_id ?? null;
+        seen.add(id);
+        if (parentId != null && !seen.has(parentId) && (meta.has(parentId) || chartGroups.some((g) => g.group_id === parentId))) {
+            nodeFor(parentId, chartGroups.find((g) => g.group_id === parentId) ?? null, seen).children.push(node);
+        } else {
+            roots.push(node);
+        }
+        return node;
+    };
+    chartGroups.forEach((g) => nodeFor(g.group_id, g, new Set()));
+    const roll = (n: ChartNode): number => {
+        n.total = (n.chart ? signed(n.chart.subtotal, n.chart.subtotal_type) : 0) + n.children.reduce((s, c) => s + roll(c), 0);
+        return n.total;
+    };
+    roots.forEach(roll);
+    return roots;
+}
+
+const ledgerRow = (l: ChartLedger) => (
+    <div key={`${l.id}:${l.tally_ledger_name}`} className={l.is_active === 0 ? 'opacity-50' : undefined} title={l.is_active === 0 ? 'Inactive' : undefined}>
+        <CoaLedgerRow ledger={l} />
+    </div>
+);
+
+function ChartGroupSection({ node, depth, onSelect }: { node: ChartNode; depth: number; onSelect: (id: number) => void }) {
+    const ledgers = node.chart?.ledgers || [];
+    const body = (
+        <>
+            <div className="flex items-center justify-between mb-2">
+                <button onClick={() => onSelect(node.id)} className="flex items-center gap-2 text-left">
+                    <span className={`font-semibold hover:text-purple-300 ${depth === 0 ? 'text-white' : 'text-slate-200 text-sm'}`}>{node.name}</span>
+                    {depth === 0 && (
+                        <span className={`text-xs px-2 py-0.5 rounded-lg ${NATURE_BADGE[node.nature] || 'bg-slate-700/50 text-slate-300'}`}>
+                            {NATURE_LABELS[node.nature] || '—'}
+                        </span>
+                    )}
+                </button>
+                <span className={`font-semibold text-white ${depth === 0 ? 'text-sm' : 'text-xs'}`}>
+                    {formatINR(Math.abs(node.total))} <span className="text-slate-500">{node.total < 0 ? 'Cr' : 'Dr'}</span>
+                </span>
+            </div>
+            {ledgers.length > 0 && <div className="divide-y divide-slate-700/40">{ledgers.map(ledgerRow)}</div>}
+            {ledgers.length === 0 && node.children.length === 0 && <div className="py-1.5 text-xs text-slate-500">No ledgers</div>}
+            {node.children.length > 0 && (
+                <div className="mt-2 space-y-3">
+                    {node.children.map((c) => <ChartGroupSection key={c.id} node={c} depth={depth + 1} onSelect={onSelect} />)}
+                </div>
+            )}
+        </>
+    );
+    return depth === 0
+        ? <div className="glass rounded-2xl p-4">{body}</div>
+        : <div className="pl-3 border-l border-slate-700/50">{body}</div>;
+}
+
 export default function ChartOfAccountsPage() {
-    const { data, isLoading } = useChartOfAccounts();
+    const [tab, setTab] = useState(0);
+    const { data: tallyChart } = useTallyChart();
+    const fy = tallyChart?.snapshot?.fy || currentFy();
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <h1 className="text-2xl font-bold text-white">Chart of Accounts</h1>
+                <p className="text-slate-400">
+                    Tally&rsquo;s List of Accounts from the latest snapshot, and Swarg&rsquo;s own ledgers with the Tally ledger each posts to.
+                </p>
+            </div>
+            <TabPanel
+                activeTab={tab}
+                onChange={setTab}
+                tabs={[
+                    { label: `Tally · FY ${fy}`, content: <TallyChartTree /> },
+                    { label: 'Swarg books', content: <SwargBooks /> },
+                ]}
+            />
+        </div>
+    );
+}
+
+function SwargBooks() {
+    const [showInactive, setShowInactive] = useState(false);
+    const { data, isLoading } = useChartOfAccounts(showInactive ? { include_inactive: 1 } : {});
     const { data: groups = [] } = useAccountGroups();
     const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
     const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
@@ -51,6 +165,7 @@ export default function ChartOfAccountsPage() {
     );
     const selectedChart = selectedGroupId != null ? chartByGroupId.get(selectedGroupId) : null;
     const selectedGroup = selectedGroupId != null ? groups.find((g) => g.id === selectedGroupId) : null;
+    const chartTree = useMemo(() => buildChartTree(data?.groups || [], groups), [data, groups]);
 
     const toggleCollapse = (id: number) =>
         setCollapsed((prev) => {
@@ -82,14 +197,17 @@ export default function ChartOfAccountsPage() {
     );
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-4">
             <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div>
-                    <h1 className="text-2xl font-bold text-white">Chart of Accounts</h1>
-                    <p className="text-slate-400">
+                <div className="space-y-1.5">
+                    <p className="text-sm text-slate-400">
                         Account groups &amp; ledgers with live balances. Click a ledger&rsquo;s <span className="text-slate-300">Tally:</span> line
                         to set the exact Tally ledger it posts to.
                     </p>
+                    <label className="flex items-center gap-2 text-sm text-slate-300">
+                        <input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} className="accent-purple-500" />
+                        Show inactive
+                    </label>
                 </div>
                 <CoaActionBar groups={groups} selectedGroupId={selectedGroupId} />
             </div>
@@ -137,37 +255,15 @@ export default function ChartOfAccountsPage() {
                                 )}
                             </div>
                             <div className="divide-y divide-slate-700/40">
-                                {(selectedChart?.ledgers || []).map((l) => (
-                                    <CoaLedgerRow key={`${l.id}:${l.tally_ledger_name}`} ledger={l} />
-                                ))}
+                                {(selectedChart?.ledgers || []).map(ledgerRow)}
                                 {(!selectedChart || selectedChart.ledgers.length === 0) && (
                                     <div className="py-3 text-xs text-slate-500">No ledgers in this group yet. Use “New Ledger”.</div>
                                 )}
                             </div>
                         </div>
-                    ) : data?.groups?.length ? (
-                        // No group selected → full chart (every group with activity).
-                        data.groups.map((g) => (
-                            <div key={g.group_id} className="glass rounded-2xl p-4">
-                                <div className="flex items-center justify-between mb-3">
-                                    <button onClick={() => setSelectedGroupId(g.group_id)} className="flex items-center gap-2 text-left">
-                                        <span className="text-white font-semibold hover:text-purple-300">{g.group_name}</span>
-                                        <span className={`text-xs px-2 py-0.5 rounded-lg ${NATURE_BADGE[g.nature] || 'bg-slate-700/50 text-slate-300'}`}>
-                                            {NATURE_LABELS[g.nature] || '—'}
-                                        </span>
-                                    </button>
-                                    <span className="text-sm font-semibold text-white">
-                                        {formatINR(g.subtotal)} <span className="text-slate-500">{g.subtotal_type}</span>
-                                    </span>
-                                </div>
-                                <div className="divide-y divide-slate-700/40">
-                                    {g.ledgers.map((l) => (
-                                        <CoaLedgerRow key={`${l.id}:${l.tally_ledger_name}`} ledger={l} />
-                                    ))}
-                                    {g.ledgers.length === 0 && <div className="py-1.5 text-xs text-slate-500">No ledgers</div>}
-                                </div>
-                            </div>
-                        ))
+                    ) : chartTree.length ? (
+                        // No group selected → full chart, sub-groups nested under their parent.
+                        chartTree.map((n) => <ChartGroupSection key={n.id} node={n} depth={0} onSelect={setSelectedGroupId} />)
                     ) : (
                         <div className="glass rounded-2xl p-8 text-center text-slate-400">
                             No accounts yet. Issue an invoice or post a voucher to populate the ledger.

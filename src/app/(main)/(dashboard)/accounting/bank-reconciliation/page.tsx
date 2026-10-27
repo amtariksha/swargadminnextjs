@@ -14,7 +14,9 @@ import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import LedgerPicker, { LedgerPickerValue } from '@/components/accounting/LedgerPicker';
 import BankRowMatchModal from '@/components/accounting/BankRowMatchModal';
-import { Upload, CheckCircle2, X, Link2, Loader2, BookText, Plus, Banknote, Store } from 'lucide-react';
+import BankPayeeGroups from '@/components/accounting/BankPayeeGroups';
+import BankRulesModal from '@/components/accounting/BankRulesModal';
+import { Upload, CheckCircle2, X, Link2, Loader2, BookText, Plus, Banknote, Store, Wand2, ListChecks, List, Rows3 } from 'lucide-react';
 import { POST } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -29,9 +31,15 @@ type ReconcileItem = {
 
 type ReconcileResult = { row_id: number; error?: unknown; created?: boolean };
 
-/** A suggestion that Confirm can act on: an invoice for a credit, a vendor for a debit. */
+/** A suggestion that Confirm can act on: an invoice for a credit, a vendor for a debit, or a rule's ledger. */
 const hasSuggestion = (r: StatementRow) =>
-    !!r.matched_invoice_id || (r.direction === DIRECTION.DEBIT && !!r.matched_vendor_id);
+    !!r.matched_invoice_id
+    || (r.direction === DIRECTION.DEBIT && !!r.matched_vendor_id)
+    || (r.match_status === 1 && !!r.matched_ledger_id);
+
+const sameOpenPayee = (a: StatementRow, b: StatementRow) =>
+    a.id !== b.id && [0, 1].includes(b.match_status) && !b.matched_invoice_id && b.direction === a.direction
+    && String(b.payee_key || '').trim().toLowerCase() === String(a.payee_key || '').trim().toLowerCase();
 
 export default function BankReconciliationPage() {
     const { data: stmtData, isLoading: loadingStatements, refetch: refetchStatements } = useStatements();
@@ -119,7 +127,7 @@ export default function BankReconciliationPage() {
                         {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
                         {uploading ? 'Uploading…' : 'Upload statement'}
                     </button>
-                    <span className="text-xs text-slate-500">CSV / Excel / PDF — parsed into normalized rows, balance-validated before matching.</span>
+                    <span className="text-xs text-slate-500">PDF / Excel (.xls, .xlsx) / CSV — PDFs are read and checked against the running balance</span>
                 </div>
             </div>
 
@@ -145,6 +153,8 @@ function RowsReview({ importId, onReconciled }: { importId: number; onReconciled
     const { data: rows = [], isLoading, refetch } = useStatementRows(importId);
     const [busy, setBusy] = useState(false);
     const [manualRow, setManualRow] = useState<StatementRow | null>(null);
+    const [flatList, setFlatList] = useState(false);
+    const [showRules, setShowRules] = useState(false);
 
     const groups = useMemo(() => ({
         suggested: rows.filter((r) => r.match_status === 1),
@@ -172,6 +182,21 @@ function RowsReview({ importId, onReconciled }: { importId: number; onReconciled
         }
     };
 
+    const afterChange = () => { refetch(); onReconciled(); };
+
+    const reapplyRules = async () => {
+        setBusy(true);
+        try {
+            const res = await POST<{ suggested: number }>(`/accounting/bank/statements/${importId}/apply-rules`);
+            toast.success(`${res.data?.suggested ?? 0} line(s) suggested`);
+            afterChange();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Re-apply failed');
+        } finally {
+            setBusy(false);
+        }
+    };
+
     const confirmAllSuggested = () =>
         reconcile(groups.suggested
             .filter(hasSuggestion)
@@ -193,7 +218,9 @@ function RowsReview({ importId, onReconciled }: { importId: number; onReconciled
     const matchInfoColumn: Column<StatementRow> = {
         key: 'matched', header: 'Match / counter-ledger',
         render: (r) => (
-            r.matched_invoice_id ? (
+            r.match_status === 1 && r.matched_rule_id && (r.matched_ledger_id || r.matched_vendor_id) ? (
+                <RuleSuggestion row={r} />
+            ) : r.matched_invoice_id ? (
                 <div className="text-xs">
                     <div className="text-cyan-300">{r.matched_invoice_number} · {formatINR(r.matched_invoice_total)}</div>
                     <div className="text-slate-500">{r.matched_customer_name}{r.match_score != null ? ` · ${Math.round(Number(r.match_score))}% score` : ''}</div>
@@ -223,31 +250,33 @@ function RowsReview({ importId, onReconciled }: { importId: number; onReconciled
         ),
     };
 
+    const rowActions = (r: StatementRow, showConfirm: boolean) => (
+        <div className="flex items-center gap-2">
+            {showConfirm && hasSuggestion(r) && (
+                <button onClick={() => reconcile([{ row_id: r.id, action: 'confirm' }])} disabled={busy}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 disabled:opacity-50">
+                    <CheckCircle2 className="w-3 h-3" /> Confirm
+                </button>
+            )}
+            <button onClick={() => setManualRow(r)} disabled={busy}
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700/50 disabled:opacity-50">
+                <Link2 className="w-3 h-3" /> Match
+            </button>
+            <button onClick={() => reconcile([{ row_id: r.id, action: 'confirm', to_suspense: true }])} disabled={busy}
+                title="Post Dr/Cr against the Bank Suspense ledger"
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-lg hover:bg-amber-500/25 disabled:opacity-50">
+                <BookText className="w-3 h-3" /> Suspense
+            </button>
+            <button onClick={() => reconcile([{ row_id: r.id, action: 'ignore' }])} disabled={busy}
+                className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-800/50 border border-slate-700/50 text-slate-400 rounded-lg hover:bg-slate-700/50 disabled:opacity-50">
+                <X className="w-3 h-3" /> Ignore
+            </button>
+        </div>
+    );
+
     const actionColumn = (showConfirm: boolean): Column<StatementRow> => ({
         key: 'actions', header: '', width: '290px', sortable: false,
-        render: (r) => (
-            <div className="flex items-center gap-2">
-                {showConfirm && hasSuggestion(r) && (
-                    <button onClick={() => reconcile([{ row_id: r.id, action: 'confirm' }])} disabled={busy}
-                        className="flex items-center gap-1 px-2 py-1 text-xs bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg hover:bg-green-500/30 disabled:opacity-50">
-                        <CheckCircle2 className="w-3 h-3" /> Confirm
-                    </button>
-                )}
-                <button onClick={() => setManualRow(r)} disabled={busy}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-lg hover:bg-slate-700/50 disabled:opacity-50">
-                    <Link2 className="w-3 h-3" /> Match
-                </button>
-                <button onClick={() => reconcile([{ row_id: r.id, action: 'confirm', to_suspense: true }])} disabled={busy}
-                    title="Post Dr/Cr against the Bank Suspense ledger"
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-lg hover:bg-amber-500/25 disabled:opacity-50">
-                    <BookText className="w-3 h-3" /> Suspense
-                </button>
-                <button onClick={() => reconcile([{ row_id: r.id, action: 'ignore' }])} disabled={busy}
-                    className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-800/50 border border-slate-700/50 text-slate-400 rounded-lg hover:bg-slate-700/50 disabled:opacity-50">
-                    <X className="w-3 h-3" /> Ignore
-                </button>
-            </div>
-        ),
+        render: (r) => rowActions(r, showConfirm),
     });
 
     const doneStatusColumn: Column<StatementRow> = {
@@ -268,7 +297,7 @@ function RowsReview({ importId, onReconciled }: { importId: number; onReconciled
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex gap-1 p-1 bg-slate-900/50 rounded-xl border border-slate-800/50">
                     {tabsDef.map((t, i) => (
                         <button key={i} onClick={() => setTab(i)}
@@ -280,34 +309,74 @@ function RowsReview({ importId, onReconciled }: { importId: number; onReconciled
                         </button>
                     ))}
                 </div>
-                {tab === 0 && groups.suggested.some(hasSuggestion) && (
-                    <button onClick={confirmAllSuggested} disabled={busy}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium text-sm disabled:opacity-50">
-                        <CheckCircle2 className="w-4 h-4" /> Confirm all suggested
+                <div className="flex flex-wrap items-center gap-2">
+                    <button onClick={reapplyRules} disabled={busy} title="Suggest this statement's open lines from your saved rules"
+                        className="flex items-center gap-1.5 px-3 py-2.5 text-sm bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl hover:bg-slate-700/50 disabled:opacity-50">
+                        <Wand2 className="w-4 h-4" /> Re-apply rules
                     </button>
-                )}
-                {tab === 1 && groups.unmatched.length > 0 && (
-                    <button onClick={() => reconcile(groups.unmatched.map((r) => ({ row_id: r.id, action: 'confirm' as const, to_suspense: true })))}
-                        disabled={busy}
-                        title="Post every unmatched row against the Bank Suspense ledger"
-                        className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl font-medium text-sm disabled:opacity-50 hover:bg-amber-500/30">
-                        <BookText className="w-4 h-4" /> Assign all → Suspense ({groups.unmatched.length})
+                    <button onClick={() => setShowRules(true)}
+                        className="flex items-center gap-1.5 px-3 py-2.5 text-sm bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl hover:bg-slate-700/50">
+                        <ListChecks className="w-4 h-4" /> Rules
                     </button>
-                )}
+                    {tab === 1 && (
+                        <button onClick={() => setFlatList((f) => !f)}
+                            className="flex items-center gap-1.5 px-3 py-2.5 text-sm bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl hover:bg-slate-700/50">
+                            {flatList ? <Rows3 className="w-4 h-4" /> : <List className="w-4 h-4" />} {flatList ? 'Group by payee' : 'Flat list'}
+                        </button>
+                    )}
+                    {tab === 0 && groups.suggested.some(hasSuggestion) && (
+                        <button onClick={confirmAllSuggested} disabled={busy}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium text-sm disabled:opacity-50">
+                            <CheckCircle2 className="w-4 h-4" /> Confirm all suggested
+                        </button>
+                    )}
+                    {tab === 1 && groups.unmatched.length > 0 && (
+                        <button onClick={() => reconcile(groups.unmatched.map((r) => ({ row_id: r.id, action: 'confirm' as const, to_suspense: true })))}
+                            disabled={busy}
+                            title="Post every unmatched row against the Bank Suspense ledger"
+                            className="flex items-center gap-2 px-4 py-2.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl font-medium text-sm disabled:opacity-50 hover:bg-amber-500/30">
+                            <BookText className="w-4 h-4" /> Assign all → Suspense ({groups.unmatched.length})
+                        </button>
+                    )}
+                </div>
             </div>
 
-            <DataTable data={active.rows} columns={active.columns} loading={isLoading} pageSize={50}
-                searchPlaceholder="Filter rows..." emptyMessage="Nothing here" exportable={false} />
+            {tab === 1 && !flatList && !isLoading ? (
+                <BankPayeeGroups importId={importId} rows={groups.unmatched} onDone={afterChange}
+                    renderRowActions={(r) => rowActions(r, false)} />
+            ) : (
+                <DataTable data={active.rows} columns={active.columns} loading={isLoading} pageSize={50}
+                    searchPlaceholder="Filter rows..." emptyMessage="Nothing here" exportable={false} />
+            )}
 
             {manualRow && (
                 <BankRowMatchModal
                     row={manualRow}
+                    similarCount={rows.filter((r) => sameOpenPayee(manualRow, r)).length}
+                    onApplied={() => { setManualRow(null); afterChange(); }}
                     onClose={() => setManualRow(null)}
                     onSubmit={(partial) => {
                         reconcile([{ row_id: manualRow.id, action: 'manual', ...partial }]);
                         setManualRow(null);
                     }}
                 />
+            )}
+            {showRules && <BankRulesModal onClose={() => setShowRules(false)} />}
+        </div>
+    );
+}
+
+function RuleSuggestion({ row }: { row: StatementRow }) {
+    const isVendor = !row.matched_ledger_id && !!row.matched_vendor_id;
+    return (
+        <div className="text-xs">
+            <div className={`flex items-center gap-1 ${isVendor ? 'text-fuchsia-300' : 'text-amber-300'}`}>
+                {isVendor ? <Store className="w-3 h-3" /> : <BookText className="w-3 h-3" />}
+                {isVendor ? `Pays ${row.matched_vendor_name ?? 'vendor'}` : row.matched_ledger_name}
+                <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">Rule</span>
+            </div>
+            {row.match_reasons && row.match_reasons.length > 0 && (
+                <div className="text-slate-500">{row.match_reasons.join(', ')}</div>
             )}
         </div>
     );
