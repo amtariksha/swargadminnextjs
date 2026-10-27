@@ -15,7 +15,7 @@ import TabPanel from '@/components/TabPanel';
 import Modal from '@/components/Modal';
 import TallyLedgerMapping from '@/components/accounting/TallyLedgerMapping';
 import {
-    Power, RefreshCw, Building2, KeyRound, Server, Download, Camera, Wand2, AlertTriangle, SkipForward,
+    Power, RefreshCw, Building2, KeyRound, Server, Download, Camera, Wand2, AlertTriangle, SkipForward, Send,
 } from 'lucide-react';
 import { PUT, POST } from '@/lib/api';
 import { toast } from 'sonner';
@@ -267,12 +267,14 @@ function SettingsTab({
                     <Building2 className="w-4 h-4 text-purple-400" /> Company
                 </h2>
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Company name (in Tally, for reference)</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Company name (exactly as in Tally)</label>
                     <input type="text" value={form.company_name}
                         onChange={(e) => setForm({ ...form, company_name: e.target.value })} className={inputCls} />
                     <p className="text-xs text-slate-500 mt-1">
-                        Vouchers go to whichever company is <span className="text-slate-300">open</span> in Tally — keep only this one open.
-                        Ledger names are set per ledger in the <span className="text-slate-300">Ledger mapping</span> tab.
+                        Swarg posts <span className="text-slate-300">only</span> into this company, so a test copy and the live books can
+                        both be open. If it isn&rsquo;t open in Tally, posting waits (no retries used). Blank = the one open company;
+                        with several open, posting waits until this is set. Ledger names are set per ledger in the
+                        <span className="text-slate-300"> Ledger mapping</span> tab.
                     </p>
                 </div>
             </div>
@@ -291,6 +293,7 @@ const HEALTH_TONE: Record<string, { cls: string; label: string }> = {
     ok: { cls: 'text-emerald-400', label: 'all vouchers posted' },
     partial: { cls: 'text-amber-300', label: 'some vouchers failed — see Sync queue' },
     unreachable: { cls: 'text-red-400', label: 'Tally unreachable — vouchers are waiting, no retries used' },
+    company_closed: { cls: 'text-red-400', label: 'company not open in Tally — vouchers are waiting, no retries used' },
     error: { cls: 'text-red-400', label: 'error' },
 };
 
@@ -315,9 +318,11 @@ function SyncQueueTab() {
     const [statusFilter, setStatusFilter] = useState('');
     const { data, isLoading } = useTallySyncRecords(statusFilter ? { status: statusFilter } : {});
     const { data: counts } = useTallyQueueCounts();
+    const { data: cfg } = useTallySettings();
     const records = data?.data || [];
     const [retrying, setRetrying] = useState<number | null>(null);
-    const [bulk, setBulk] = useState<'skip' | 'retry' | null>(null);
+    const [bulk, setBulk] = useState<'skip' | 'retry' | 'resend' | null>(null);
+    const company = cfg?.company_name?.trim() || '';
 
     // Prefix covers the list AND the pending/failed counts.
     const refreshQueue = () => queryClient.invalidateQueries({ queryKey: ['accounting', 'tally-sync'] });
@@ -360,6 +365,31 @@ function SyncQueueTab() {
             refreshQueue();
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to retry');
+        } finally {
+            setBulk(null);
+        }
+    };
+
+    // The test-copy → live switch: what the test run posted goes again to the
+    // company now named. The backend leaves alone anything already posted to it.
+    const resendConfirmed = async () => {
+        const from = window.prompt(
+            `Re-send confirmed vouchers to "${company}"\n\nUse this once, after switching Company name from the test copy to the live books: vouchers the test run posted are queued again for "${company}". Ones already posted to "${company}" are left alone.\n\nGo-live cutover date (YYYY-MM-DD): only vouchers created on or after it are re-sent — older ones you re-posted while testing are already in the live books by hand.`,
+            '',
+        );
+        if (from === null) return;
+        const cutover = from.trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(cutover)) {
+            toast.error('Enter the cutover date as YYYY-MM-DD');
+            return;
+        }
+        setBulk('resend');
+        try {
+            const res = await POST<{ requeued: number }>('/accounting/tally/sync-records/resend-confirmed', { created_from: cutover });
+            toast.success(`${res.data?.requeued ?? 0} voucher(s) queued for ${company}`);
+            refreshQueue();
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to re-send');
         } finally {
             setBulk(null);
         }
@@ -414,6 +444,12 @@ function SyncQueueTab() {
                     className="flex items-center gap-2 px-3 py-2 text-sm rounded-xl border bg-slate-800/50 text-slate-300 border-slate-700/50 disabled:opacity-40">
                     <RefreshCw className={`w-4 h-4 ${bulk === 'retry' ? 'animate-spin' : ''}`} />
                     {bulk === 'retry' ? 'Re-queuing…' : `Retry all failed (${counts?.failed ?? 0})`}
+                </button>
+                <button type="button" onClick={resendConfirmed} disabled={bulk !== null || !counts?.confirmed || !company}
+                    title={company ? undefined : 'Set Company name in Settings first'}
+                    className="flex items-center gap-2 px-3 py-2 text-sm rounded-xl border bg-slate-800/50 text-slate-300 border-slate-700/50 disabled:opacity-40">
+                    <Send className="w-4 h-4" />
+                    {bulk === 'resend' ? 'Queuing…' : `Re-send confirmed to ${company || 'company'} (${counts?.confirmed ?? 0}) — test → live switch`}
                 </button>
             </div>
             <div className="flex items-center gap-2">
