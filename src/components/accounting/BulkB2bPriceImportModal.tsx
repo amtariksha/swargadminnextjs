@@ -2,8 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import Modal from '@/components/Modal';
-import { POST } from '@/lib/api';
-import { getApiUrl } from '@/config/tenant';
+import apiClient, { POST } from '@/lib/api';
 import { formatINR } from '@/lib/accounting';
 import { toast } from 'sonner';
 import { FileSpreadsheet, Download, Upload, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
@@ -70,6 +69,7 @@ export default function BulkB2bPriceImportModal({ isOpen, onClose, onDone }: {
     const [dry, setDry] = useState<DryRunResult | null>(null);
     const [confirmed, setConfirmed] = useState<ConfirmResult | null>(null);
     const [busy, setBusy] = useState(false);
+    const [exporting, setExporting] = useState(false);
 
     const close = () => { setDry(null); setConfirmed(null); setBusy(false); onClose(); };
 
@@ -110,10 +110,28 @@ export default function BulkB2bPriceImportModal({ isOpen, onClose, onDone }: {
         }
     };
 
-    // The export streams a CSV with a Content-Disposition header, so it is a
-    // plain navigation rather than an axios call — the axios instance would
-    // buffer it and strip the filename.
-    const exportHref = `${getApiUrl()}/accounting/b2b-prices/export`;
+    // Must go through apiClient, not a plain <a href>. The route sits behind
+    // authenticateToken, which reads ONLY the `authorization` header, and the
+    // admin JWT lives in localStorage and is injected by the axios interceptor
+    // — a browser navigation carries neither, so a link 401s every time for
+    // everyone, and re-logging-in cannot help. Set the filename here rather
+    // than relying on Content-Disposition, matching the payroll export.
+    const handleExport = async () => {
+        setExporting(true);
+        try {
+            const res = await apiClient.get('/accounting/b2b-prices/export', { responseType: 'blob' });
+            const url = URL.createObjectURL(res.data as Blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `b2b_prices_${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Export failed');
+        } finally {
+            setExporting(false);
+        }
+    };
 
     return (
         <Modal isOpen={isOpen} onClose={close} title="Bulk B2B prices" size="xl">
@@ -132,9 +150,11 @@ export default function BulkB2bPriceImportModal({ isOpen, onClose, onDone }: {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                    <a href={exportHref} className={`${btn} bg-slate-800/60 text-cyan-300 border border-cyan-500/30`}>
-                        <Download className="w-4 h-4" /> Download current prices
-                    </a>
+                    <button type="button" disabled={exporting} onClick={handleExport}
+                        className={`${btn} bg-slate-800/60 text-cyan-300 border border-cyan-500/30`}>
+                        {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                        Download current prices
+                    </button>
                     <button type="button" disabled={busy} onClick={() => fileRef.current?.click()}
                         className={`${btn} bg-gradient-to-r from-purple-500 to-pink-500 text-white`}>
                         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
