@@ -7,8 +7,10 @@ import { Download, Printer, Scale, Save } from 'lucide-react';
 import { PUT } from '@/lib/api';
 import { formatINR } from '@/lib/accounting';
 import { usePulseShopOutstanding, ShopOutstandingRow } from '@/hooks/usePulse';
+import type { TallyDebtorBalances } from '@/hooks/useAccounting';
 import { PulseSection } from './shared';
 import { ddmmyyyy, shopOutstandingCsv, downloadCsv, printShopOutstanding } from './shopOutstandingExport';
+import { FillFromTally } from './FillFromTally';
 
 /** IST calendar date — the server clock is not IST. */
 const istToday = (): string => new Date(Date.now() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
@@ -25,8 +27,12 @@ export function ShopOutstandingSection() {
     const [asOf, setAsOf] = useState<string | null>(null);
     const [sortBy, setSortBy] = useState<'name' | 'amount'>('name');
     const [reconcile, setReconcile] = useState(false);
+    const [tally, setTally] = useState<TallyDebtorBalances | null>(null);
+    // Bumped on every Tally fill so the row inputs re-seed even when the figures repeat.
+    const [fillCount, setFillCount] = useState(0);
     const { data, isLoading } = usePulseShopOutstanding(asOf);
     const date = asOf ?? data?.as_of ?? '';
+    const tallyById = useMemo(() => new Map((tally?.shops ?? []).map((s) => [s.user_id, s])), [tally]);
 
     // Re-number in the displayed order, like the sheet.
     const rows = useMemo(() => {
@@ -86,6 +92,10 @@ export function ShopOutstandingSection() {
                     then matches your sheet exactly. Re-saving replaces it. It does not touch Tally.
                 </p>
             )}
+            {reconcile && (
+                <FillFromTally asOf={asOf} date={date} tally={tally}
+                    onLoaded={(t) => { setTally(t); setFillCount((n) => n + 1); }} />
+            )}
             <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead className="bg-slate-800/50 text-slate-400">
@@ -109,7 +119,8 @@ export function ShopOutstandingSection() {
                                     {!r.is_shop && <span className="ml-2 text-[10px] text-slate-500">B2B billing</span>}
                                 </td>
                                 <td className={`p-3 text-right font-medium ${amountCls(r.balance)}`}>{formatINR(r.balance)}</td>
-                                {reconcile && <ReconcileCells row={r} asOf={date} />}
+                                {reconcile && <ReconcileRow key={fillCount} row={r} date={date} tally={tally}
+                                    shop={tallyById.get(r.user_id)} />}
                             </tr>
                         ))}
                     </tbody>
@@ -127,10 +138,23 @@ export function ShopOutstandingSection() {
     );
 }
 
+type TallyShop = TallyDebtorBalances['shops'][number];
+
+/** A row filled from Tally saves as of Tally's date — the figure is that day's balance. */
+function ReconcileRow({ row, date, tally, shop }: {
+    row: ShopOutstandingRow; date: string; tally: TallyDebtorBalances | null; shop?: TallyShop;
+}) {
+    const fromTally = tally && shop?.tally_balance != null;
+    return <ReconcileCells row={row} asOf={fromTally ? tally.as_of : date}
+        initial={shop?.tally_balance ?? null} unlinked={!!shop && shop.tally_ledger == null} />;
+}
+
 /** Swarg vs books for one shop, and the save that books the difference. */
-function ReconcileCells({ row, asOf }: { row: ShopOutstandingRow; asOf: string }) {
+function ReconcileCells({ row, asOf, initial = null, unlinked = false }: {
+    row: ShopOutstandingRow; asOf: string; initial?: number | null; unlinked?: boolean;
+}) {
     const queryClient = useQueryClient();
-    const [books, setBooks] = useState('');
+    const [books, setBooks] = useState(initial == null ? '' : String(initial));
     const [saving, setSaving] = useState(false);
 
     const save = async () => {
@@ -173,6 +197,11 @@ function ReconcileCells({ row, asOf }: { row: ShopOutstandingRow; asOf: string }
                         <Save className="w-4 h-4" />
                     </button>
                 </div>
+                {unlinked && (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                        not linked in Tally — link it in Tally Settings → Masters from Tally
+                    </p>
+                )}
             </td>
         </>
     );
