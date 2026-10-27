@@ -14,12 +14,15 @@ import { buildAttributeMatrix, pickDefaultVariant, priceRange, resolveBackorder 
 const TS = (col: string) => `to_char(${col}, 'YYYY-MM-DD HH24:MI:SS')`
 const D = (col: string) => `to_char(${col}, 'YYYY-MM-DD')`
 
-/** Columns every product read selects — casts keep JSON shape parity. */
+/** Columns every product read selects — casts keep JSON shape parity.
+ *  Never add cost_price or b2b_price: this is a PUBLIC route (swargfood.com), and
+ *  both used to be readable by anyone. The Node API redacts them per caller; this
+ *  one has no staff callers, so it simply never fetches them. */
 const PRODUCT_COLS = `
   p.id, p.preferences, p.title, p.qty_text, p.stock_qty, p.sub_cat_id,
   p.price, p.tax, p.mrp, p.offer_text, p.description, p.disclaimer,
   p.subscription, p.is_active, p.product_type, p.stock_managed_at,
-  p.cost_price, p.slug, p.web_visible, p.delivery_window,
+  p.slug, p.web_visible, p.delivery_window,
   p.source_intermediate_id, p.pack_volume,
   p.is_returnable_packaging, p.packaging_type_id,
   p.allow_back_order, ${D('p.back_order_next_available')} AS back_order_next_available,
@@ -85,7 +88,6 @@ export function formatProductRow(p: Row): Row {
     cat_slug: p.cat_slug ?? null,
     product_type: p.product_type || 'simple',
     stock_managed_at: p.stock_managed_at || 'variant',
-    cost_price: p.cost_price != null ? toFloat(p.cost_price) : null,
     slug: p.slug || null,
     // Shipping weight in grams (representative variant; null for simple products).
     weight: p.weight != null ? toFloat(p.weight) : null,
@@ -197,7 +199,7 @@ export async function loadVariantPayload(product: Row): Promise<Row | null> {
   const variantRows = await sfQuery(
     `SELECT id, slug, sku, qty_text, regular_price, sale_price,
             ${TS('sale_starts_at')} AS sale_starts_at, ${TS('sale_ends_at')} AS sale_ends_at,
-            cost_price, stock_quantity, manage_stock, stock_status,
+            stock_quantity, manage_stock, stock_status,
             allow_back_order, ${D('back_order_next_available')} AS back_order_next_available,
             image_url, short_description, is_default, sort_order, weight,
             is_active, archived_at
