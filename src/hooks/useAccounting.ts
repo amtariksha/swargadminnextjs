@@ -377,6 +377,8 @@ export interface TallyLedgerMapping {
     ledgers: TallyLedgerMappingRow[];
     tally_ledgers: { name: string; parent: string | null }[] | null;
     tally_error: string | null;
+    /** The Tally company that was read — the one posting would go to. */
+    tally_company?: string | null;
     summary: { posting_ledgers: number; checked: boolean; missing_in_tally: number | null };
 }
 
@@ -399,11 +401,16 @@ export function useTallyQueueCounts() {
     return useQuery({
         queryKey: ['accounting', 'tally-sync', 'counts'],
         queryFn: async () => {
-            const [pending, failed] = await Promise.all([
+            const [pending, failed, confirmed] = await Promise.all([
                 getList<TallySyncRecord>('/accounting/tally/sync-records', { status: 'pending', limit: 1 }),
                 getList<TallySyncRecord>('/accounting/tally/sync-records', { status: 'failed', limit: 1 }),
+                getList<TallySyncRecord>('/accounting/tally/sync-records', { status: 'confirmed', limit: 1 }),
             ]);
-            return { pending: Number(pending.meta.total || 0), failed: Number(failed.meta.total || 0) };
+            return {
+                pending: Number(pending.meta.total || 0),
+                failed: Number(failed.meta.total || 0),
+                confirmed: Number(confirmed.meta.total || 0),
+            };
         },
     });
 }

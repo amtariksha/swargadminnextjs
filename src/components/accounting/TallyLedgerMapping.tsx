@@ -65,7 +65,7 @@ export default function TallyLedgerMapping() {
             setCheck(result);
             queryClient.setQueryData(['accounting', 'tally-ledger-mapping'], result);
             if (result.tally_error) toast.error(`Couldn't read Tally: ${result.tally_error}`);
-            else toast.success(`Read ${result.tally_ledgers?.length ?? 0} ledgers from Tally`);
+            else toast.success(`Read ${result.tally_ledgers?.length ?? 0} ledgers from "${result.tally_company ?? 'Tally'}"`);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Check failed');
         } finally {
@@ -99,7 +99,8 @@ export default function TallyLedgerMapping() {
                     </button>
                 </div>
                 <MappingSummary checked={checked} missing={missing} total={postingRows.length}
-                    tallyCount={check?.tally_ledgers?.length ?? 0} error={check?.tally_error ?? null} />
+                    tallyCount={check?.tally_ledgers?.length ?? 0} error={check?.tally_error ?? null}
+                    company={check?.tally_company ?? null} />
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -151,12 +152,15 @@ export default function TallyLedgerMapping() {
 }
 
 function MappingSummary({
-    checked, missing, total, tallyCount, error,
-}: { checked: boolean; missing: number | null; total: number; tallyCount: number; error: string | null }) {
+    checked, missing, total, tallyCount, error, company,
+}: {
+    checked: boolean; missing: number | null; total: number; tallyCount: number; error: string | null; company: string | null;
+}) {
     if (error) {
         return (
             <div className="text-sm rounded-xl px-4 py-3 bg-red-500/10 border border-red-500/30 text-red-300">
-                Couldn&rsquo;t read Tally: {error}. Check that Tally is running with the company open, the Bridge URL
+                Couldn&rsquo;t read Tally: {error}. Check that Tally is running with the company open, Company name in
+                Settings matches Tally exactly, the Bridge URL
                 includes the port (e.g. <code>http://host:9000</code>), and the tunnel/firewall allows the server.
             </div>
         );
@@ -170,13 +174,14 @@ function MappingSummary({
         );
     }
     const ok = missing === 0;
+    const where = company ? `"${company}"` : 'Tally';
     return (
         <div className={`text-sm rounded-xl px-4 py-3 border ${ok
             ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
             : 'bg-amber-500/10 border-amber-500/30 text-amber-300'}`}>
             {ok
-                ? `All ${total} posting ledgers exist in Tally (${tallyCount} Tally ledgers read). Safe to post.`
-                : `${missing} of ${total} posting ledgers are not in Tally. Map them below before turning posting on — pick from the dropdown of ${tallyCount} Tally ledgers.`}
+                ? `All ${total} posting ledgers exist in ${where} (${tallyCount} Tally ledgers read). Safe to post.`
+                : `${missing} of ${total} posting ledgers are not in ${where}. Map them below before turning posting on — pick from the dropdown of ${tallyCount} Tally ledgers.`}
         </div>
     );
 }
