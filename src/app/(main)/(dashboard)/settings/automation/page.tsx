@@ -20,6 +20,10 @@ interface CronJob {
     flagTitle: string;
     timeTitle: string | null;
     everyMinute?: boolean;
+    /** The job treats a missing flag row as OFF (most jobs treat it as on). */
+    offWhenMissing?: boolean;
+    /** The backend migration that seeds this job's rows, when not 022. */
+    migration?: string;
     description: string;
 }
 
@@ -158,6 +162,30 @@ const CRON_JOBS: CronJob[] = [
             'no activity and a zero balance are skipped. Ships OFF.',
     },
     {
+        key: 'monthly-b2b-invoices',
+        name: 'Monthly B2B Invoices',
+        flagTitle: 'Monthly B2B Invoice Enabled',
+        timeTitle: 'Monthly B2B Invoice Run Time',
+        offWhenMissing: true,
+        migration: '129_billing_job_switches.sql',
+        description:
+            'On the 1st of each month, at this time, makes one GST invoice per customer on monthly ' +
+            'billing (B2B / B2C → Edit → Billing cycle: Monthly) for the whole of last month. A month ' +
+            'already billed from Shops Billing is not billed again. Needs Accounting turned on. Ships OFF.',
+    },
+    {
+        key: 'shop-day-bills',
+        name: 'Shop Day Bills',
+        flagTitle: 'Shop Day Bills Enabled',
+        timeTitle: 'Shop Day Bills Run Time',
+        migration: '129_billing_job_switches.sql',
+        description:
+            'Every evening at this time, makes one GST invoice per shop on per-delivery billing for ' +
+            "the day's delivered lines, and a top-up bill for yesterday's lines marked delivered late. " +
+            'Shop Deliveries → "Generate missing bills" does the same for any date. Bills post to Tally ' +
+            'at the next 1 AM run. Needs Accounting turned on.',
+    },
+    {
         key: 'statement-followup',
         name: 'Statement Payment Follow-up',
         flagTitle: 'Statement Followup Enabled',
@@ -252,7 +280,7 @@ export default function AutomationSettingsPage() {
     const handleToggle = async (job: CronJob) => {
         const flag = findByTitle(job.flagTitle);
         if (!flag) {
-            toast.error(`Setting "${job.flagTitle}" not found — run migration 022_cron_job_flags.sql`);
+            toast.error(`Setting "${job.flagTitle}" not found — run migration ${job.migration ?? '022_cron_job_flags.sql'}`);
             return;
         }
         const next = isEnabled(flag.value) ? '0' : '1';
@@ -299,7 +327,7 @@ export default function AutomationSettingsPage() {
                     {CRON_JOBS.map((job) => {
                         const flag = findByTitle(job.flagTitle);
                         const timeRow = job.timeTitle ? findByTitle(job.timeTitle) : null;
-                        const enabled = flag ? isEnabled(flag.value) : true;
+                        const enabled = flag ? isEnabled(flag.value) : !job.offWhenMissing;
                         const missing = !flag;
                         const busy = pendingKey === job.key;
                         return (
@@ -353,8 +381,8 @@ export default function AutomationSettingsPage() {
                                 <p className="text-sm text-slate-400">{job.description}</p>
                                 {missing && (
                                     <p className="text-xs text-amber-400">
-                                        Flag not configured — run migration 022_cron_job_flags.sql.
-                                        Until then the job defaults to enabled.
+                                        Flag not configured — run migration {job.migration ?? '022_cron_job_flags.sql'}.
+                                        Until then the job defaults to {job.offWhenMissing ? 'disabled' : 'enabled'}.
                                     </p>
                                 )}
                                 {flag?.updated_at && (
