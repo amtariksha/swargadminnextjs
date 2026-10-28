@@ -5,7 +5,6 @@
 
 import { useMemo, useState } from 'react';
 import { CalendarOff } from 'lucide-react';
-import ConfirmDialog from '@/components/ConfirmDialog';
 import { dateInputClassName } from '@/components/FormField';
 import { POST } from '@/lib/api';
 import { newClientActionId } from '@/lib/desk/action-client';
@@ -17,7 +16,7 @@ import {
 } from '@/lib/desk/ops-actions';
 import { useDeskCategories } from '@/lib/desk/ticket-hooks';
 import { ActionDrawer } from './ActionDrawer';
-import { FailureNotice, ResolveChoice, useRecordAndClose, useResolveChoice } from './OpsRecord';
+import { CloseGuardDialog, FailureNotice, ResolveChoice, useCloseGuard, useRecordAndClose, useResolveChoice } from './OpsRecord';
 
 const BUTTON = 'rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 disabled:opacity-50';
 const TITLES = {
@@ -36,13 +35,13 @@ function HolidayFlow({ ctx, userId, name, nowMs, onDone }: FlowProps) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [last, setLast] = useState<{ body: TicketActionBody; failure: RecordFailure } | null>(null);
-    const [confirmClose, setConfirmClose] = useState(false);
     const categories = useDeskCategories();
     const plan = useMemo(() => planOpsResolution('holiday_added', ctx.ticket, categories.items), [ctx.ticket, categories.items]);
     const [choice, setChoice] = useResolveChoice(plan.initial);
     const recorder = useRecordAndClose(ctx, onDone);
     const existing = ctx.snapshot.holidays.map((item) => item.date);
     const check = checkHolidayRange(from, to, earliest, existing);
+    const guard = useCloseGuard(last?.failure ?? null, onDone);
 
     const record = async (body: TicketActionBody) => {
         const failure = await recorder.record(body);
@@ -73,10 +72,9 @@ function HolidayFlow({ ctx, userId, name, nowMs, onDone }: FlowProps) {
         setBusy(true);
         try { await record(body); } finally { setBusy(false); }
     };
-    const requestClose = () => (last !== null && last.failure.kind !== 'final' ? setConfirmClose(true) : onDone());
 
     return (
-        <ActionDrawer title="Holiday" open onClose={requestClose} closable={!busy}>
+        <ActionDrawer title="Holiday" open onClose={guard.requestClose} closable={!busy && !guard.confirming}>
             <div className="space-y-3 text-sm text-slate-300">
                 <p>Pauses every subscription of {name ?? 'this customer'} ({ctx.snapshot.subscriptions.length} active).</p>
                 {existing.length > 0 ? (
@@ -102,35 +100,36 @@ function HolidayFlow({ ctx, userId, name, nowMs, onDone }: FlowProps) {
                     <FailureNotice failure={last.failure} onRetry={() => { void retry(last.body); }}
                         onRecordOnly={() => { void retry(recordOnlyBody(last.body)); }} />
                 ) : (
-                    <button type="button" disabled={check !== 'ok' || busy} onClick={() => { void submit(); }}
+                    <button type="button" disabled={check !== 'ok' || busy || categories.isPending} onClick={() => { void submit(); }}
                         className="w-full rounded-xl bg-green-600 px-3 py-2 text-white disabled:opacity-50">
                         {busy ? 'Working…' : 'Add holiday'}
                     </button>
                 )}
             </div>
-            <ConfirmDialog isOpen={confirmClose} title="Close without recording?" confirmText="Close anyway"
-                message="The holiday is saved in the backend but not on this ticket. Close anyway?"
-                onConfirm={onDone} onCancel={() => setConfirmClose(false)} />
+            <CloseGuardDialog guard={guard} onDone={onDone} message="The holiday is saved in the backend but not on this ticket. Close anyway?" />
         </ActionDrawer>
     );
 }
 
-export function HolidayAction({ ctx }: { ctx: DeskActionContext }) {
-    const [openedAt, setOpenedAt] = useState<number | null>(null);
+interface HolidayOpening { openedAt: number; userId: number; name: string | null }
+
+export function HolidayAction({ ctx, offer }: { ctx: DeskActionContext; offer: boolean }) {
+    const [opening, setOpening] = useState<HolidayOpening | null>(null);
     const availability = holidayAvailability(ctx.snapshot);
     const profile = ctx.snapshot.profile;
-    if (availability === 'staff') return null;
     const disabled = availability !== 'ok' || profile === null;
     return (
         <>
-            <button type="button" className={BUTTON} disabled={disabled}
-                title={availability === 'no_customer' || availability === 'no_subscriptions' ? TITLES[availability] : undefined}
-                onClick={() => setOpenedAt(Date.now())}>
-                <CalendarOff className="mr-1 inline h-3 w-3" />Holiday
-            </button>
-            {openedAt !== null && profile !== null ? (
-                <HolidayFlow key={openedAt} ctx={ctx} userId={profile.user_id} name={profile.name} nowMs={openedAt}
-                    onDone={() => setOpenedAt(null)} />
+            {offer && availability !== 'staff' ? (
+                <button type="button" className={BUTTON} disabled={disabled}
+                    title={availability === 'no_customer' || availability === 'no_subscriptions' ? TITLES[availability] : undefined}
+                    onClick={() => { if (profile !== null) setOpening({ openedAt: Date.now(), userId: profile.user_id, name: profile.name }); }}>
+                    <CalendarOff className="mr-1 inline h-3 w-3" />Holiday
+                </button>
+            ) : null}
+            {opening !== null ? (
+                <HolidayFlow key={opening.openedAt} ctx={ctx} userId={opening.userId} name={opening.name} nowMs={opening.openedAt}
+                    onDone={() => setOpening(null)} />
             ) : null}
         </>
     );

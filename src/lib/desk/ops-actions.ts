@@ -160,6 +160,9 @@ export function newCustomerPreset(phone: string, name: string): PresetCustomer |
     return trimmed.length >= 1 && trimmed.length <= 80 ? { userId: null, name: trimmed, phone, isNew: true } : null;
 }
 
+/** A staff number is never offered an order or money action; each trigger checks this so an open drawer is never unmounted by it. */
+export const isStaffMatch = (snapshot: Pick<CustomerSnapshot, 'match'>): boolean => snapshot.match.kind === 'staff';
+
 export type HolidayAvailability = 'ok' | 'staff' | 'no_customer' | 'no_subscriptions';
 export function holidayAvailability(snapshot: Pick<CustomerSnapshot, 'match' | 'profile' | 'subscriptions'>): HolidayAvailability {
     if (snapshot.match.kind === 'staff') return 'staff';
@@ -228,12 +231,23 @@ export function canSendPaymentLink(
         && order.total_amount > 0 && order.entry_type !== 'morning_backup';
 }
 
+/** An IST wall-clock "YYYY-MM-DD HH:mm:ss" (the backend's naive form) as epoch ms; NaN when unreadable. */
+const istNaiveMs = (value: string): number => Date.parse(`${value.trim().replace(' ', 'T').slice(0, 19)}+05:30`);
+
+/**
+ * `actions` is only this ticket's and `recent` is customer-wide, so an order another ticket already recorded (a COD order
+ * stays `unpaid`) would look unrecorded here. Offer the step only for the ticket's own order or one created while this
+ * ticket existed; an unreadable date fails closed, because the step moves money.
+ */
 export function needsDayOrderRecord(
-    order: Pick<SnapshotDayOrder, 'id' | 'order_status' | 'payment_status' | 'entry_type'>,
+    order: Pick<SnapshotDayOrder, 'id' | 'order_status' | 'payment_status' | 'entry_type' | 'created_at'>,
     recent: readonly Pick<SnapshotRecentAction, 'kind' | 'ref_id'>[],
     actions: readonly Pick<TicketAction, 'action_type' | 'ref_id'>[],
+    ticket: Pick<Ticket, 'daytime_order_id' | 'opened_at'>,
 ): boolean {
     if (order.payment_status !== 'unpaid' || order.order_status === 'cancelled' || order.entry_type === 'morning_backup') return false;
+    if (ticket.daytime_order_id !== null && ticket.daytime_order_id !== order.id) return false;
+    if (ticket.daytime_order_id !== order.id && !(istNaiveMs(order.created_at) >= Date.parse(ticket.opened_at))) return false;
     const ref = String(order.id);
     return recent.some((item) => item.kind === 'day_order' && item.ref_id === ref)
         && !actions.some((item) => item.action_type === 'day_order_created' && item.ref_id === ref);

@@ -12,7 +12,7 @@ import type { TicketActionBody } from '@/lib/desk/contracts';
 import { buildPaymentLinkBody, opsBackendErrorText, readPaymentLinkResult, type RecordFailure } from '@/lib/desk/ops-actions';
 import type { SnapshotDayOrder } from '@/lib/desk/types';
 import { ActionDrawer } from './ActionDrawer';
-import { FailureNotice, useRecordAndClose } from './OpsRecord';
+import { CloseGuardDialog, FailureNotice, useCloseGuard, useRecordAndClose } from './OpsRecord';
 
 function SendDrawer({ ctx, dayOrder, onDone }: { ctx: DeskActionContext; dayOrder: SnapshotDayOrder; onDone: () => void }) {
     const [seen] = useState(() => ctx.seenInboundAt);
@@ -21,6 +21,7 @@ function SendDrawer({ ctx, dayOrder, onDone }: { ctx: DeskActionContext; dayOrde
     const [error, setError] = useState('');
     const [last, setLast] = useState<{ body: TicketActionBody; failure: RecordFailure } | null>(null);
     const recorder = useRecordAndClose(ctx, onDone);
+    const guard = useCloseGuard(last?.failure ?? null, onDone);
     const resend = dayOrder.payment_status === 'link_sent';
 
     const record = async (body: TicketActionBody) => {
@@ -58,7 +59,7 @@ function SendDrawer({ ctx, dayOrder, onDone }: { ctx: DeskActionContext; dayOrde
     };
 
     return (
-        <ActionDrawer title="Send payment link" open onClose={onDone} closable={!busy}>
+        <ActionDrawer title="Send payment link" open onClose={guard.requestClose} closable={!busy && !guard.confirming}>
             <div className="space-y-3 text-sm text-slate-300">
                 <p>
                     Send a Razorpay payment link for ₹{dayOrder.total_amount} to the customer on WhatsApp?
@@ -75,18 +76,22 @@ function SendDrawer({ ctx, dayOrder, onDone }: { ctx: DeskActionContext; dayOrde
                     </div>
                 )}
             </div>
+            <CloseGuardDialog guard={guard} onDone={onDone}
+                message="The payment link was created but this is not on the ticket. Close anyway?" />
         </ActionDrawer>
     );
 }
 
-export function PaymentLinkButton({ ctx, dayOrder }: { ctx: DeskActionContext; dayOrder: SnapshotDayOrder }) {
+export function PaymentLinkButton({ ctx, dayOrder, offer }: { ctx: DeskActionContext; dayOrder: SnapshotDayOrder; offer: boolean }) {
     const [open, setOpen] = useState(false);
     return (
         <>
-            <button type="button" onClick={() => setOpen(true)}
-                className="rounded-lg bg-slate-800 px-2 py-1 text-xs text-slate-200 hover:bg-slate-700">
-                {dayOrder.payment_status === 'link_sent' ? 'Resend payment link' : 'Send payment link'}
-            </button>
+            {offer ? (
+                <button type="button" onClick={() => setOpen(true)}
+                    className="rounded-lg bg-slate-800 px-2 py-1 text-xs text-slate-200 hover:bg-slate-700">
+                    {dayOrder.payment_status === 'link_sent' ? 'Resend payment link' : 'Send payment link'}
+                </button>
+            ) : null}
             {open ? <SendDrawer ctx={ctx} dayOrder={dayOrder} onDone={() => setOpen(false)} /> : null}
         </>
     );

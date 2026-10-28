@@ -239,16 +239,32 @@ describe('row eligibility', () => {
         expect(canSendPaymentLink({ ...order, entry_type: null })).toBe(true);
     });
     it('N1-N6 day order record', () => {
-        const order = { id: 501, order_status: 'confirmed', payment_status: 'unpaid', entry_type: 'whatsapp' } as const;
+        const order = { id: 501, order_status: 'confirmed', payment_status: 'unpaid', entry_type: 'whatsapp', created_at: '2026-10-20 10:30:00' } as const;
+        const ticket = { daytime_order_id: null, opened_at: '2026-10-20T09:00:00+05:30' } as const;
         const recent = [{ kind: 'day_order', ref_id: '501' }] as const;
-        expect(needsDayOrderRecord(order, recent, [])).toBe(true);
-        expect(needsDayOrderRecord(order, recent, [{ action_type: 'day_order_created', ref_id: '501' }])).toBe(false);
-        expect(needsDayOrderRecord(order, [], [])).toBe(false);
-        expect(needsDayOrderRecord(order, [{ kind: 'day_order', ref_id: '502' }], [])).toBe(false);
-        expect(needsDayOrderRecord({ ...order, payment_status: 'link_sent' }, recent, [])).toBe(false);
-        expect(needsDayOrderRecord({ ...order, order_status: 'cancelled' }, recent, [])).toBe(false);
-        expect(needsDayOrderRecord({ ...order, entry_type: 'morning_backup' }, recent, [])).toBe(false);
-        expect(needsDayOrderRecord(order, recent, [{ action_type: 'payment_link_sent', ref_id: '501' }])).toBe(true);
+        expect(needsDayOrderRecord(order, recent, [], ticket)).toBe(true);
+        expect(needsDayOrderRecord(order, recent, [{ action_type: 'day_order_created', ref_id: '501' }], ticket)).toBe(false);
+        expect(needsDayOrderRecord(order, [], [], ticket)).toBe(false);
+        expect(needsDayOrderRecord(order, [{ kind: 'day_order', ref_id: '502' }], [], ticket)).toBe(false);
+        expect(needsDayOrderRecord({ ...order, payment_status: 'link_sent' }, recent, [], ticket)).toBe(false);
+        expect(needsDayOrderRecord({ ...order, order_status: 'cancelled' }, recent, [], ticket)).toBe(false);
+        expect(needsDayOrderRecord({ ...order, entry_type: 'morning_backup' }, recent, [], ticket)).toBe(false);
+        expect(needsDayOrderRecord(order, recent, [{ action_type: 'payment_link_sent', ref_id: '501' }], ticket)).toBe(true);
+    });
+    it('N7-N10 an order another ticket handled is not offered here (review M3)', () => {
+        const order = { id: 501, order_status: 'confirmed', payment_status: 'unpaid', entry_type: 'whatsapp', created_at: '2026-10-20 10:30:00' } as const;
+        const recent = [{ kind: 'day_order', ref_id: '501' }] as const;
+        // the order predates this ticket: a COD order recorded on an earlier ticket stays unpaid
+        expect(needsDayOrderRecord(order, recent, [], { daytime_order_id: null, opened_at: '2026-10-21T09:00:00+05:30' })).toBe(false);
+        // IST wall clock vs the ticket's +05:30 instant, whatever the process time zone
+        expect(needsDayOrderRecord(order, recent, [], { daytime_order_id: null, opened_at: '2026-10-20T10:30:00+05:30' })).toBe(true);
+        expect(needsDayOrderRecord(order, recent, [], { daytime_order_id: null, opened_at: '2026-10-20T10:30:01+05:30' })).toBe(false);
+        // the ticket is linked to a different order
+        expect(needsDayOrderRecord(order, recent, [], { daytime_order_id: 777, opened_at: '2026-10-20T09:00:00+05:30' })).toBe(false);
+        // linked to this very order: no date window
+        expect(needsDayOrderRecord(order, recent, [], { daytime_order_id: 501, opened_at: '2026-10-21T09:00:00+05:30' })).toBe(true);
+        // an unreadable date fails closed
+        expect(needsDayOrderRecord({ ...order, created_at: 'garbage' }, recent, [], { daytime_order_id: null, opened_at: '2026-10-20T09:00:00+05:30' })).toBe(false);
     });
 });
 

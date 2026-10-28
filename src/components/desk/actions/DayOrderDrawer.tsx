@@ -1,12 +1,12 @@
 'use client';
 
 // Day order from the Desk pane: customer fixed from the snapshot, then a mandatory payment step before the
-// drawer can close (R-4B1), then one `day_order_created` record. Each drawer is a keyed child so every opening
-// starts clean and captures its own seen-token / client id.
+// drawer can close (R-4B1), then one `day_order_created` record. The seen-token is taken when the exec CLICKS the
+// button (contract §2.2: the message the exec saw, never refreshed), then passed down; the client id is per drawer.
+// An open drawer never unmounts because the row stopped being eligible: eligibility only decides the trigger button.
 
 import { useEffect, useMemo, useState } from 'react';
 import { Sun } from 'lucide-react';
-import ConfirmDialog from '@/components/ConfirmDialog';
 import DaytimeOrderForm from '@/components/DaytimeOrderForm';
 import { inputClassName } from '@/components/FormField';
 import { useDaytimeOrder } from '@/hooks/useData';
@@ -21,7 +21,7 @@ import { useDeskCategories } from '@/lib/desk/ticket-hooks';
 import type { SnapshotDayOrder } from '@/lib/desk/types';
 import { ActionDrawer } from './ActionDrawer';
 import { DayOrderPaymentPanel } from './DayOrderPaymentPanel';
-import { ResolveChoice, useRecordAndClose, useResolveChoice } from './OpsRecord';
+import { CloseGuardDialog, ResolveChoice, useCloseGuard, useRecordAndClose, useResolveChoice } from './OpsRecord';
 
 const BUTTON = 'rounded-lg bg-slate-800 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 disabled:opacity-50';
 const PRIMARY = 'w-full rounded-xl bg-green-600 px-3 py-2 text-sm text-white disabled:opacity-50';
@@ -31,16 +31,15 @@ type Stage =
     | { at: 'failed'; body: TicketActionBody; failure: RecordFailure };
 
 interface PaymentDrawerProps {
-    ctx: DeskActionContext; title: string; orderId: number; total: number | null; deliveryDate: string | null;
-    newCustomer: boolean; strict: boolean; onDone: () => void;
+    ctx: DeskActionContext; seen: string | null; title: string; orderId: number; total: number | null;
+    deliveryDate: string | null; newCustomer: boolean; strict: boolean; onDone: () => void;
 }
 
 /** Payment step + record. `strict` (a just-saved order) cannot be closed before a step is taken. */
-function PaymentDrawer({ ctx, title, orderId, total, deliveryDate, newCustomer, strict, onDone }: PaymentDrawerProps) {
-    const [seen] = useState(() => ctx.seenInboundAt);
+function PaymentDrawer({ ctx, seen, title, orderId, total, deliveryDate, newCustomer, strict, onDone }: PaymentDrawerProps) {
     const [clientActionId] = useState(newClientActionId);
     const [stage, setStage] = useState<Stage>({ at: 'payment' });
-    const [confirmClose, setConfirmClose] = useState(false);
+    const [walletConfirm, setWalletConfirm] = useState(false);
     const needsOrder = total === null || deliveryDate === null;
     const order = useDaytimeOrder(needsOrder ? orderId : undefined);
     const categories = useDeskCategories();
@@ -49,14 +48,14 @@ function PaymentDrawer({ ctx, title, orderId, total, deliveryDate, newCustomer, 
     const recorder = useRecordAndClose(ctx, onDone);
     const finalTotal = total ?? order.data?.total_amount ?? null;
     const finalDate = deliveryDate ?? order.data?.delivery_date ?? null;
-    const guard = strict || stage.at !== 'payment';
+    const leaveWarning = strict || stage.at !== 'payment';
 
     useEffect(() => {
-        if (!guard) return undefined;
+        if (!leaveWarning) return undefined;
         const onBeforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); };
         window.addEventListener('beforeunload', onBeforeUnload);
         return () => window.removeEventListener('beforeunload', onBeforeUnload);
-    }, [guard]);
+    }, [leaveWarning]);
 
     const post = async (body: TicketActionBody) => {
         setStage({ at: 'recording', body });
@@ -71,11 +70,14 @@ function PaymentDrawer({ ctx, title, orderId, total, deliveryDate, newCustomer, 
         }));
     };
     const failure = stage.at === 'failed' ? stage.failure : null;
-    const closable = stage.at === 'failed' || (!strict && stage.at === 'payment');
-    const requestClose = () => (failure !== null && failure.kind !== 'final' ? setConfirmClose(true) : onDone());
+    const guard = useCloseGuard(failure, onDone);
+    // A just-saved order can only be left before a step is taken, and only if its total can never be loaded (nothing to pay).
+    const orderUnavailable = needsOrder && order.isError;
+    const closable = (stage.at === 'failed' || (stage.at === 'payment' && (!strict || orderUnavailable)))
+        && !guard.confirming && !walletConfirm;
 
     return (
-        <ActionDrawer title={title} open onClose={requestClose} closable={closable}>
+        <ActionDrawer title={title} open onClose={guard.requestClose} closable={closable}>
             <div className="space-y-4">
                 {needsOrder && order.isPending ? <p className="text-sm text-slate-400">Loading the saved order…</p> : null}
                 {needsOrder && order.isError ? (
@@ -84,10 +86,13 @@ function PaymentDrawer({ ctx, title, orderId, total, deliveryDate, newCustomer, 
                         <button type="button" className={BUTTON} onClick={() => { void order.refetch(); }}>Retry</button>
                     </div>
                 ) : null}
-                {finalTotal !== null && finalDate !== null ? (
+                {finalTotal !== null && finalDate !== null && categories.isPending ? (
+                    <p className="text-sm text-slate-400">Loading…</p>
+                ) : null}
+                {finalTotal !== null && finalDate !== null && !categories.isPending ? (
                     <>
                         <ResolveChoice plan={plan} current={ctx.category} value={choice} onChange={setChoice} disabled={stage.at !== 'payment'} />
-                        <DayOrderPaymentPanel orderId={orderId} total={finalTotal} onStep={onStep} />
+                        <DayOrderPaymentPanel orderId={orderId} total={finalTotal} onStep={onStep} onConfirming={setWalletConfirm} />
                     </>
                 ) : null}
                 {stage.at === 'recording' ? <p className="text-sm text-slate-300">Recording on the ticket…</p> : null}
@@ -103,9 +108,8 @@ function PaymentDrawer({ ctx, title, orderId, total, deliveryDate, newCustomer, 
                     </div>
                 ) : null}
             </div>
-            <ConfirmDialog isOpen={confirmClose} title="Close without recording?" confirmText="Close anyway"
-                message={`Order ${orderId} is saved and its payment step is done, but it is not on this ticket. The ticket stays open and the pane will list the order under recent actions. Close anyway?`}
-                onConfirm={onDone} onCancel={() => setConfirmClose(false)} />
+            <CloseGuardDialog guard={guard} onDone={onDone}
+                message={`Order ${orderId} is saved and its payment step is done, but it is not on this ticket. The ticket stays open and the pane will list the order under recent actions. Close anyway?`} />
         </ActionDrawer>
     );
 }
@@ -139,42 +143,49 @@ function DayOrderIntake({ preset, onSaved, onClose }: {
     );
 }
 
-export function DayOrderAction({ ctx }: { ctx: DeskActionContext }) {
-    const [openKey, setOpenKey] = useState(0);
-    const [open, setOpen] = useState(false);
+/** One opening of a flow: the key remounts the drawers, `seen` is the token at the click. */
+interface Session { key: number; seen: string | null }
+
+export function DayOrderAction({ ctx, offer }: { ctx: DeskActionContext; offer: boolean }) {
+    const [session, setSession] = useState<Session | null>(null);
     const [saved, setSaved] = useState<Saved | null>(null);
     const preset = presetCustomerFor(ctx.snapshot, ctx.ticket.customer_name);
-    if (preset.kind === 'blocked' && preset.reason === 'staff') return null;
-    const close = () => { setOpen(false); setSaved(null); };
+    const close = () => { setSession(null); setSaved(null); };
     return (
         <>
-            <button type="button" className={BUTTON} disabled={preset.kind === 'blocked'}
-                title={preset.kind === 'blocked' ? 'Pick the customer in the match banner first' : undefined}
-                onClick={() => { setOpenKey((key) => key + 1); setSaved(null); setOpen(true); }}>
-                <Sun className="mr-1 inline h-3 w-3" />Day order
-            </button>
-            {open && openKey > 0 && preset.kind !== 'blocked' && saved === null ? (
-                <DayOrderIntake key={openKey} preset={preset} onSaved={setSaved} onClose={close} />
+            {offer && !(preset.kind === 'blocked' && preset.reason === 'staff') ? (
+                <button type="button" className={BUTTON} disabled={preset.kind === 'blocked'}
+                    title={preset.kind === 'blocked' ? 'Pick the customer in the match banner first' : undefined}
+                    onClick={() => { setSaved(null); setSession((prev) => ({ key: (prev?.key ?? 0) + 1, seen: ctx.seenInboundAt })); }}>
+                    <Sun className="mr-1 inline h-3 w-3" />Day order
+                </button>
             ) : null}
-            {open && saved !== null ? (
-                <PaymentDrawer key={openKey} ctx={ctx} title="New day order" orderId={saved.orderId} total={saved.total}
-                    deliveryDate={null} newCustomer={saved.preset.isNew} strict onDone={close} />
+            {session !== null && saved === null && preset.kind !== 'blocked' ? (
+                <DayOrderIntake key={session.key} preset={preset} onSaved={setSaved} onClose={close} />
+            ) : null}
+            {session !== null && saved !== null ? (
+                <PaymentDrawer key={session.key} ctx={ctx} seen={session.seen} title="New day order" orderId={saved.orderId}
+                    total={saved.total} deliveryDate={null} newCustomer={saved.preset.isNew} strict onDone={close} />
             ) : null}
         </>
     );
 }
 
 /** Row button for a day order created outside a finished drawer (D-11). */
-export function DayOrderResumeAction({ ctx, dayOrder }: { ctx: DeskActionContext; dayOrder: SnapshotDayOrder }) {
-    const [openKey, setOpenKey] = useState(0);
-    const [open, setOpen] = useState(false);
+export function DayOrderResumeAction({ ctx, dayOrder, offer }: { ctx: DeskActionContext; dayOrder: SnapshotDayOrder; offer: boolean }) {
+    const [session, setSession] = useState<Session | null>(null);
     return (
         <>
-            <button type="button" className={BUTTON} onClick={() => { setOpenKey((key) => key + 1); setOpen(true); }}>Take payment step</button>
-            {open ? (
-                <PaymentDrawer key={openKey} ctx={ctx} title={`Payment for order #${dayOrder.order_no}`} orderId={dayOrder.id}
-                    total={dayOrder.total_amount} deliveryDate={dayOrder.delivery_date} newCustomer={false} strict={false}
-                    onDone={() => setOpen(false)} />
+            {offer ? (
+                <button type="button" className={BUTTON}
+                    onClick={() => setSession((prev) => ({ key: (prev?.key ?? 0) + 1, seen: ctx.seenInboundAt }))}>
+                    Take payment step
+                </button>
+            ) : null}
+            {session !== null ? (
+                <PaymentDrawer key={session.key} ctx={ctx} seen={session.seen} title={`Payment for order #${dayOrder.order_no}`}
+                    orderId={dayOrder.id} total={dayOrder.total_amount} deliveryDate={dayOrder.delivery_date} newCustomer={false}
+                    strict={false} onDone={() => setSession(null)} />
             ) : null}
         </>
     );

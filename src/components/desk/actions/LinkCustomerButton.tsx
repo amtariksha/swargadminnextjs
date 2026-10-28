@@ -15,7 +15,7 @@ import {
 } from '@/lib/desk/ops-actions';
 import type { SnapshotCandidate } from '@/lib/desk/types';
 import { ActionDrawer } from './ActionDrawer';
-import { FailureNotice, useRecordAndClose } from './OpsRecord';
+import { CloseGuardDialog, FailureNotice, useCloseGuard, useRecordAndClose } from './OpsRecord';
 
 const label = (candidate: SnapshotCandidate) => `${candidate.name ?? 'this customer'} (…${candidate.phone_tail})`;
 
@@ -26,6 +26,7 @@ function LinkDrawer({ ctx, candidate, onDone }: { ctx: DeskActionContext; candid
     const [error, setError] = useState('');
     const [last, setLast] = useState<{ body: TicketActionBody; failure: RecordFailure } | null>(null);
     const recorder = useRecordAndClose(ctx, onDone);
+    const guard = useCloseGuard(last?.failure ?? null, onDone);
     const phone = ctx.snapshot.canonical_phone;
 
     const record = async (body: TicketActionBody) => {
@@ -62,7 +63,7 @@ function LinkDrawer({ ctx, candidate, onDone }: { ctx: DeskActionContext; candid
     };
 
     return (
-        <ActionDrawer title="Link this WhatsApp number?" open onClose={onDone} closable={!busy}>
+        <ActionDrawer title="Link this WhatsApp number?" open onClose={guard.requestClose} closable={!busy && !guard.confirming}>
             <div className="space-y-3 text-sm text-slate-300">
                 <p>
                     Future messages from {phone} will be matched to {label(candidate)}. The number is added to that
@@ -79,14 +80,15 @@ function LinkDrawer({ ctx, candidate, onDone }: { ctx: DeskActionContext; candid
                     </div>
                 )}
             </div>
+            <CloseGuardDialog guard={guard} onDone={onDone}
+                message="The number is linked in the backend but this is not on the ticket. Close anyway?" />
         </ActionDrawer>
     );
 }
 
-export function LinkCustomerButton({ ctx }: { ctx: DeskActionContext }) {
+export function LinkCustomerButton({ ctx, offer }: { ctx: DeskActionContext; offer: boolean }) {
     const [chosen, setChosen] = useState<SnapshotCandidate | null>(null);
-    const candidates = linkableCandidates(ctx.snapshot);
-    if (candidates.length === 0) return null;
+    const candidates = offer ? linkableCandidates(ctx.snapshot) : [];
     return (
         <>
             {candidates.map((candidate) => (

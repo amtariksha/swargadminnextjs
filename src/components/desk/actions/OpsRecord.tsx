@@ -4,6 +4,7 @@
 // the "Resolve the ticket" choice (D-3).
 
 import { useState } from 'react';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { selectClassName } from '@/components/FormField';
 import type { ActionPostOutcome } from '@/lib/desk/action-client';
 import type { DeskActionContext } from '@/lib/desk/action-context';
@@ -73,6 +74,25 @@ export function ResolveChoice({ plan, current, value, onChange, disabled }: Reso
 export function useResolveChoice(initial: OpsResolveChoice): [OpsResolveChoice, (next: OpsResolveChoice) => void] {
     const [override, setOverride] = useState<OpsResolveChoice | null>(null);
     return [override ?? initial, setOverride];
+}
+
+/**
+ * Closing a drawer whose backend step is done but whose record failed (retryable) asks first; `confirming` must also
+ * switch off the drawer's own Escape/backdrop close, or Escape closes both.
+ */
+export function useCloseGuard(failure: RecordFailure | null, onDone: () => void) {
+    const [confirming, setConfirming] = useState(false);
+    const requestClose = () => (failure !== null && failure.kind !== 'final' ? setConfirming(true) : onDone());
+    return { confirming, requestClose, cancel: () => setConfirming(false) };
+}
+
+export function CloseGuardDialog({ guard, message, onDone }: {
+    guard: ReturnType<typeof useCloseGuard>; message: string; onDone: () => void;
+}) {
+    return (
+        <ConfirmDialog isOpen={guard.confirming} title="Close without recording?" confirmText="Close anyway"
+            message={message} onConfirm={onDone} onCancel={guard.cancel} />
+    );
 }
 
 /** The failure of a record that did not land: text plus the one action that can still help. */

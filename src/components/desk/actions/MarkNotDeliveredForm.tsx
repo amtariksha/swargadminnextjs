@@ -19,7 +19,7 @@ import {
 import { REASON_CATEGORIES } from '@/lib/deliveryHelpers';
 import type { SnapshotDelivery } from '@/lib/desk/types';
 import { ActionDrawer } from './ActionDrawer';
-import { FailureNotice, useRecordAndClose } from './OpsRecord';
+import { CloseGuardDialog, FailureNotice, useCloseGuard, useRecordAndClose } from './OpsRecord';
 
 interface ReasonCatalogRow { id: number; category: number; category_label: string; reason_text: string; sort_order: number }
 type Category = 1 | 2 | 3 | 4;
@@ -36,6 +36,7 @@ function Flow({ ctx, delivery, onDone }: { ctx: DeskActionContext; delivery: Sna
     const [error, setError] = useState('');
     const [last, setLast] = useState<{ body: TicketActionBody; failure: RecordFailure } | null>(null);
     const recorder = useRecordAndClose(ctx, onDone);
+    const guard = useCloseGuard(last?.failure ?? null, onDone);
     const catalog = useQuery({
         queryKey: ['delivery-reason-catalog'],
         queryFn: async () => (await GET<ReasonCatalogRow[]>('/get_delivery_reason_catalog')).data ?? [],
@@ -72,7 +73,7 @@ function Flow({ ctx, delivery, onDone }: { ctx: DeskActionContext; delivery: Sna
     };
 
     return (
-        <ActionDrawer title="Mark not delivered" open onClose={onDone} closable={!busy}>
+        <ActionDrawer title="Mark not delivered" open onClose={guard.requestClose} closable={!busy && !guard.confirming}>
             <div className="space-y-3 text-sm text-slate-300">
                 <p>
                     {delivery.delivery_date} · {delivery.product_title}{delivery.qty_text ? ` (${delivery.qty_text})` : ''} × {delivery.qty}
@@ -105,20 +106,25 @@ function Flow({ ctx, delivery, onDone }: { ctx: DeskActionContext; delivery: Sna
                     </button>
                 )}
             </div>
+            <CloseGuardDialog guard={guard} onDone={onDone}
+                message="The delivery is marked not delivered in the backend but this is not on the ticket. Close anyway?" />
         </ActionDrawer>
     );
 }
 
-export function MarkNotDeliveredAction({ ctx, delivery }: { ctx: DeskActionContext; delivery: SnapshotDelivery }) {
+export function MarkNotDeliveredAction({ ctx, delivery, offer }: { ctx: DeskActionContext; delivery: SnapshotDelivery; offer: boolean }) {
     const nowMs = useNowMs(60_000);
     const [open, setOpen] = useState(false);
-    if (nowMs === 0 || !canMarkNotDelivered(delivery, istDateAfter(nowMs, 0))) return null;
+    // Eligibility only gates the button: once the backend call lands the row is "not delivered" and the flow must stay for its Retry.
+    const eligible = offer && nowMs !== 0 && canMarkNotDelivered(delivery, istDateAfter(nowMs, 0));
     return (
         <>
-            <button type="button" onClick={() => setOpen(true)}
-                className="rounded-lg bg-slate-800 px-2 py-1 text-xs text-slate-200 hover:bg-slate-700">
-                <PackageX className="mr-1 inline h-3 w-3" />Not delivered
-            </button>
+            {eligible ? (
+                <button type="button" onClick={() => setOpen(true)}
+                    className="rounded-lg bg-slate-800 px-2 py-1 text-xs text-slate-200 hover:bg-slate-700">
+                    <PackageX className="mr-1 inline h-3 w-3" />Not delivered
+                </button>
+            ) : null}
             {open ? <Flow ctx={ctx} delivery={delivery} onDone={() => setOpen(false)} /> : null}
         </>
     );
