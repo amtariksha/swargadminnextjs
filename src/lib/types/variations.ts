@@ -87,6 +87,8 @@ export interface Variant {
     sale_starts_at?: string | null;
     sale_ends_at?: string | null;
     cost_price?: number | null;
+    /** Common B2B (shop) price for this size. NUMERIC — arrives as a string. Blank = shops pay retail. */
+    b2b_price?: number | string | null;
     stock_quantity?: number | null;
     manage_stock: number;
     stock_status: StockStatus;
