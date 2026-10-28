@@ -72,12 +72,12 @@ describe('URL state', () => {
     it('parseTabParam falls back to mine', () => {
         expect(parseTabParam('wrap_up')).toBe('wrap_up');
         expect(parseTabParam('all')).toBe('all');
-        for (const bad of ['acks', 'list', null]) expect(parseTabParam(bad)).toBe('mine');
+        for (const bad of ['acks', 'list', null]) expect(parseTabParam(bad)).toBe('all');
     });
     it('deskHref leaves the default tab out', () => {
-        expect(deskHref(null, 'mine')).toBe('/desk');
-        expect(deskHref(12, 'mine')).toBe('/desk?ticket=12');
-        expect(deskHref(12, 'all')).toBe('/desk?ticket=12&tab=all');
+        expect(deskHref(null, 'all')).toBe('/desk');
+        expect(deskHref(12, 'all')).toBe('/desk?ticket=12');
+        expect(deskHref(12, 'mine')).toBe('/desk?ticket=12&tab=mine');
         expect(deskHref(null, 'wrap_up')).toBe('/desk?tab=wrap_up');
     });
     it('inboxHref links a real number and falls back otherwise', () => {

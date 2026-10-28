@@ -101,7 +101,7 @@ export function TicketsTable({ rows, bySlug, loading, hasNextPage, isFetchingNex
                 emptyMessage="No tickets in this range"
                 exportable={exportFilters !== null}
                 onExport={() => { if (exportFilters !== null && !exporting) void runExport(exportFilters); }}
-                onRowClick={(row) => router.push(deskHref(row.ticket_no, 'mine'))}
+                onRowClick={(row) => router.push(deskHref(row.ticket_no, 'all'))}
             />
             {hasNextPage ? (
                 <button

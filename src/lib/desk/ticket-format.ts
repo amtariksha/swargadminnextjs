@@ -38,14 +38,14 @@ export function parseTicketParam(value: string | null): number | null {
 }
 
 export function parseTabParam(value: string | null): DeskTab {
-    return DESK_TABS.find((tab) => tab === value) ?? 'mine';
+    return DESK_TABS.find((tab) => tab === value) ?? 'all';
 }
 
-/** 'mine' is the default tab and is left out of the URL. */
+/** 'all' is the default tab and is left out of the URL. */
 export function deskHref(ticketNo: number | null, tab: DeskTab): string {
     const parts: string[] = [];
     if (ticketNo !== null) parts.push(`ticket=${ticketNo}`);
-    if (tab !== 'mine') parts.push(`tab=${tab}`);
+    if (tab !== 'all') parts.push(`tab=${tab}`);
     return parts.length === 0 ? '/desk' : `/desk?${parts.join('&')}`;
 }
 
