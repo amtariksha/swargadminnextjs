@@ -107,9 +107,9 @@ const navItems: NavItem[] = [
             // 'business-pulse' shows every section; a 'pulse-*' key shows one
             // (the page filters its sections the same way).
             { name: 'Business Pulse', href: '/business-pulse', icon: <Activity className="w-4 h-4" />, anyPermissionKeys: [PULSE_PARENT_PERMISSION, ...PULSE_SECTION_KEYS] },
-            { name: 'Performance Report', href: '/performance-report', icon: <TrendingUp className="w-4 h-4" /> },
+            { name: 'Performance Report', href: '/performance-report', icon: <TrendingUp className="w-4 h-4" />, anyPermissionKeys: parentOr('delivery-report', 'performance-report') },
             { name: 'Delivery Report', href: '/delivery-report', icon: <BarChart3 className="w-4 h-4" /> },
-            { name: 'Recovery Report', href: '/recovery', icon: <IndianRupee className="w-4 h-4" /> },
+            { name: 'Recovery Report', href: '/recovery', icon: <IndianRupee className="w-4 h-4" />, anyPermissionKeys: parentOr('transactions', 'recovery') },
             { name: 'Refunds Report', href: '/refunds', icon: <RotateCcw className="w-4 h-4" />, permissionKey: 'refunds' },
             { name: 'Payroll Reports', href: '/payroll', icon: <Banknote className="w-4 h-4" />, permissionKey: 'payroll' },
         ],
@@ -350,9 +350,9 @@ const navItems: NavItem[] = [
             { name: 'Transaction Descriptions', href: '/settings/transaction-descriptions', icon: <Receipt className="w-4 h-4" /> },
             { name: 'Banners', href: '/banners', icon: <Image className="w-4 h-4" /> },
             { name: 'Testimonials', href: '/testimonials', icon: <MessageSquare className="w-4 h-4" /> },
-            { name: 'Pages', href: '/pages', icon: <FileText className="w-4 h-4" /> },
+            { name: 'Pages', href: '/pages', icon: <FileText className="w-4 h-4" />, anyPermissionKeys: parentOr('settings', 'pages') },
             { name: 'App Updates', href: '/app-updates', icon: <Smartphone className="w-4 h-4" />, permissionKey: 'app-updates' },
-            { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-4 h-4" /> },
+            { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-4 h-4" />, anyPermissionKeys: parentOr('settings', 'delivery-locations') },
             { name: 'Drop Points', href: '/drop-points', icon: <MapPin className="w-4 h-4" />, permissionKey: 'drop-points' },
             { name: 'Pincodes', href: '/pincodes', icon: <MapPin className="w-4 h-4" /> },
             { name: 'Notification Images', href: '/notifications/images', icon: <Image className="w-4 h-4" />, permissionKey: 'notifications' },
@@ -369,13 +369,13 @@ const navItems: NavItem[] = [
         name: 'Archive',
         icon: <CalendarDays className="w-5 h-5" />,
         children: [
-            { name: 'Upcoming Orders', href: '/upcoming-orders', icon: <ShoppingCart className="w-4 h-4" /> },
-            { name: 'Upcoming Subs', href: '/upcoming-subs-orders', icon: <CalendarDays className="w-4 h-4" /> },
+            { name: 'Upcoming Orders', href: '/upcoming-orders', icon: <ShoppingCart className="w-4 h-4" />, anyPermissionKeys: parentOr('orders', 'upcoming-orders') },
+            { name: 'Upcoming Subs', href: '/upcoming-subs-orders', icon: <CalendarDays className="w-4 h-4" />, anyPermissionKeys: parentOr('orders', 'upcoming-subs-orders') },
             // The href carries a query string, so segment derivation can't find a
             // key — gate it explicitly (it is a tab of the production-delivery page).
             { name: 'Pre-Packing List', href: '/production-delivery?tab=prepacking', icon: <Package className="w-4 h-4" />, anyPermissionKeys: parentOr('production-delivery', 'pre-packing-list') },
-            { name: 'User Holidays', href: '/holidays', icon: <Calendar className="w-4 h-4" /> },
-            { name: 'Calendar', href: '/calendar', icon: <Calendar className="w-4 h-4" /> },
+            { name: 'User Holidays', href: '/holidays', icon: <Calendar className="w-4 h-4" />, anyPermissionKeys: parentOr('orders', 'holidays') },
+            { name: 'Calendar', href: '/calendar', icon: <Calendar className="w-4 h-4" />, anyPermissionKeys: parentOr('orders', 'calendar') },
             { name: 'Low Wallet', href: '/notifications/low-wallet', icon: <Wallet className="w-4 h-4" /> },
             { name: 'Notification Log', href: '/notifications/log', icon: <Bell className="w-4 h-4" /> },
         ],
