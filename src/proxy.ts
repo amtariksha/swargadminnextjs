@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveWhoami } from '@/lib/desk/whoami';
+import type { DeskWhoami } from '@/lib/desk/types';
 
 // ─── HS256 verify (Edge-runtime compatible — Web Crypto only) ──────────────
 // Mirrors the algorithm used by swargnodejsbackend's /login when minting JWTs.
@@ -52,8 +54,15 @@ async function verifyAdminToken(
         const expected = await hmacSign(`${header}.${body}`, secret);
         if (sig !== expected) return null;
         const payload = JSON.parse(base64urlDecode(body)) as AdminJwtPayload
-            & { sid?: number; stall?: boolean };
+            & { sid?: number; stall?: boolean; tenant?: string };
         if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+
+        // Every tenant shares JWT_SECRET; the backend stamps the minting tenant
+        // on each token (src/utils/tokenTenant.js). Another tenant's token is
+        // not ours. A token without the claim predates it, and the backend's
+        // whoami (tenant-checked) decides those.
+        const ownTenant = (process.env.NEXT_PUBLIC_TENANT_CODE || 'swarg').trim().toLowerCase();
+        if (payload.tenant && String(payload.tenant).trim().toLowerCase() !== ownTenant) return null;
 
         // Reject a stall POS till session.
         //
@@ -101,6 +110,44 @@ const PUBLIC_API_PATHS = [
 
 function isPublicApiPath(pathname: string): boolean {
     return PUBLIC_API_PATHS.some((p) => pathname.startsWith(p));
+}
+
+// ─── Server-side role gate for WhatsApp and LMS ────────────────────────────
+// A valid signature only proves the backend minted the token, and it mints one
+// for every customer-app and delivery-app login. The WhatsApp and LMS handlers
+// run on the Supabase service role and trust the x-user-* headers set below,
+// so the backend's whoami must first confirm back-office staff (or, for
+// WhatsApp only, the delivery app's whatsapp-inbox capability). Desk handlers
+// ask the same whoami themselves (withDesk). Answers are cached per token
+// (lib/desk/whoami.ts); a backend outage is a 503, never an allow.
+
+type RoleGatedSurface = 'whatsapp' | 'lms';
+
+let warnedNoStaffFlag = false;
+
+/** May a caller with this whoami use `surface`? */
+export function whoamiAllows(surface: RoleGatedSurface, whoami: DeskWhoami): boolean {
+    if (whoami.staff === undefined && !warnedNoStaffFlag) {
+        warnedNoStaffFlag = true;
+        console.warn('[proxy] backend whoami has no `staff` flag: deploy swargnodejsbackend first. LMS is closed until then.');
+    }
+    if (whoami.staff === true) return true;
+    return surface === 'whatsapp' && whoami.inbox === true;
+}
+
+async function roleGate(token: string, surface: RoleGatedSurface): Promise<NextResponse | null> {
+    const allows = (whoami: DeskWhoami) => whoamiAllows(surface, whoami);
+    const resolved = await resolveWhoami(token, allows);
+    if (resolved.kind === 'unauthorized') {
+        return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
+    }
+    if (resolved.kind === 'unavailable') {
+        return NextResponse.json(
+            { error: 'Could not check your access. Try again in a moment.' },
+            { status: 503 },
+        );
+    }
+    return allows(resolved.whoami) ? null : NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 }
 
 // ─── Middleware ────────────────────────────────────────────────────────────
@@ -191,6 +238,11 @@ export async function proxy(request: NextRequest) {
         return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
     }
 
+    if (!pathname.startsWith(DESK_API_PREFIX)) {
+        const denied = await roleGate(token, pathname.startsWith(LMS_API_PREFIX) ? 'lms' : 'whatsapp');
+        if (denied) return denied;
+    }
+
     // ── Map admin JWT → WACRM x-user-* headers ────────────────────────────
     // Day-1 org mapping: single tenant via WACRM_ORG_ID env. When a second
     // tenant goes live, derive orgId from req.tenant (subdomain / header)
@@ -200,29 +252,13 @@ export async function proxy(request: NextRequest) {
     const email = payload.email ?? '';
     const name = payload.name ?? payload.full_name ?? '';
 
-    // ── Super-admin detection ─────────────────────────────────────────────
-    // swargnodejsbackend's generateToken (src/middleware/auth.js:388) signs a
-    // JWT containing only `{userId, iat, exp}` — no role, no permissions. So
-    // we can't read role from the token and must apply a sensible default.
-    //
-    // Single-tenant mode (WACRM_ORG_ID is set, only one org in Supabase):
-    //   everyone authenticated through admin login is treated as super_admin
-    //   for the WhatsApp surface. The /api/whatsapp/** routes downgrade their
-    //   per-org filters (e.g. integrated_numbers.org_id) and surface the
-    //   full dataset, which matches operator expectations on a single-tenant
-    //   deploy. The permission gate to even reach /whatsapp/** is enforced
-    //   client-side in Sidebar.tsx via the `whatsapp` role permission, so
-    //   only users granted that permission can hit these endpoints anyway.
-    //
-    // TODO when multi-tenant lands: replace this with one of:
-    //   (a) bake role into the JWT in swargnodejsbackend and read it here, or
-    //   (b) fetch the user's role from backend `/users/<id>` with a 60 s
-    //       in-memory cache, or
-    //   (c) trust the front-end's `x-user-permissions` header (signed
-    //       client-side) after a separate signature check.
-    // Once that lands, switch back to a stricter check and re-enable the
-    // per-org filters in /api/whatsapp/numbers, /conversations, etc.
-    const isSuperAdmin = true;
+    // ── Role for the WACRM handlers ───────────────────────────────────────
+    // The backend token carries no role. Single-tenant mode (WACRM_ORG_ID set,
+    // one org in Supabase): every caller that passed the role gate above (back-
+    // office staff, or a whatsapp-inbox driver on /api/whatsapp) is super_admin
+    // to the WACRM handlers, which then skip their per-org filters. Finer
+    // per-permission rules (e.g. broadcasts for `whatsapp` holders only) and
+    // the per-org filters come back with multi-tenant WACRM.
     const role = 'super_admin';
 
     const requestHeaders = new Headers(request.headers);
