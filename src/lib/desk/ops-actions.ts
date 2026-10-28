@@ -318,3 +318,16 @@ export function recordFailure(error: unknown): RecordFailure {
     if (code === 'internal_error' || code === 'authz_unavailable') return { kind: 'retry', text: deskErrorText(code, message) };
     return { kind: 'final', text: FINAL_TEXT[code] ?? deskErrorText(code, message) };
 }
+
+/** After `customer_linked` the route changes the ticket's customer only inside the snapshot set (P4a): true = warn the exec. */
+export function customerLinkNotApplied(ticket: Pick<Ticket, 'backend_user_id'>, linkedUserId: number): boolean {
+    return ticket.backend_user_id !== linkedUserId;
+}
+
+/** The same body re-posted without resolving: used after a 422 resolve precondition (nothing was written, P4a D-8). */
+export function recordOnlyBody<T extends TicketActionBody>(body: T): T {
+    const copy: Record<string, unknown> = { ...body, resolve: false };
+    delete copy.category_slug;
+    delete copy.classification_source;
+    return copy as unknown as T;
+}

@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { ticketActionBody } from '@/lib/desk/contracts';
 import { DeskClientError } from '@/lib/desk/desk-query';
 import {
-    buildCustomerLinkedBody, buildDayOrderBody, buildHolidayBody, buildNotDeliveredBody, buildPaymentLinkBody,
+    buildCustomerLinkedBody, buildDayOrderBody, customerLinkNotApplied, buildHolidayBody, buildNotDeliveredBody, buildPaymentLinkBody,
     canMarkNotDelivered, canSendPaymentLink, checkHolidayRange, holidayAvailability, holidayEarliestDate,
     holidayErrorText, holidayRangeText, HOLIDAY_REFUSED_TEXT, istDateAfter, linkableCandidates, needsDayOrderRecord,
-    newCustomerPreset, opsBackendErrorText, paymentStepFor, planOpsResolution, presetCustomerFor,
+    newCustomerPreset, opsBackendErrorText, recordOnlyBody, paymentStepFor, planOpsResolution, presetCustomerFor,
     readAlternatePhoneResult, readPaymentLinkResult, recordFailure, resolveFragment, type OpsResolveChoice,
 } from '@/lib/desk/ops-actions';
 import type { Category, CustomerSnapshot, SnapshotCandidate, TicketEvent } from '@/lib/desk/types';
@@ -308,6 +308,26 @@ describe('resolveFragment', () => {
         const bare = resolveFragment(choice(true, null), ticket, []);
         expect(bare).toEqual({ resolve: true });
         expect(Object.keys(bare)).toEqual(['resolve']);
+    });
+});
+
+describe('recordOnlyBody', () => {
+    it('keeps the id and token but drops resolve, category and source', () => {
+        const body = buildDayOrderBody(COMMON, { resolve: true, category_slug: 'new_day_order', classification_source: 'human' }, {
+            orderId: 5, total: 10, deliveryDate: '2026-10-19', step: paymentStepFor({ kind: 'collect_on_delivery' }), newCustomer: false,
+        });
+        const plain = recordOnlyBody(body);
+        expect(plain).toMatchObject({ client_action_id: CID, seen_inbound_at: S, resolve: false });
+        expect('category_slug' in plain || 'classification_source' in plain).toBe(false);
+        parses(plain);
+    });
+});
+
+describe('customerLinkNotApplied', () => {
+    it('warns only when the returned ticket customer differs from the linked user', () => {
+        expect(customerLinkNotApplied({ backend_user_id: 7 }, 7)).toBe(false);
+        expect(customerLinkNotApplied({ backend_user_id: 501 }, 7)).toBe(true);
+        expect(customerLinkNotApplied({ backend_user_id: null }, 7)).toBe(true);
     });
 });
 
