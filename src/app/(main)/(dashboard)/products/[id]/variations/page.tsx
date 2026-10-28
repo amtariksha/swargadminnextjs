@@ -255,6 +255,7 @@ export default function ProductVariationsPage() {
                                 <th className="px-3 py-2 text-left font-medium">SKU</th>
                                 <th className="px-3 py-2 text-left font-medium">Regular price</th>
                                 <th className="px-3 py-2 text-left font-medium">Sale price</th>
+                                <th className="px-3 py-2 text-left font-medium" title="What shops pay for this size. Blank = they pay the retail price.">B2B price</th>
                                 <th className="px-3 py-2 text-left font-medium">Stock</th>
                                 <th className="px-3 py-2 text-left font-medium">Status</th>
                                 <th className="px-3 py-2 text-left font-medium">Default</th>
@@ -414,6 +415,7 @@ function VariantRow({
         sku: variant.sku ?? '',
         regular_price: variant.regular_price?.toString() ?? '',
         sale_price: variant.sale_price?.toString() ?? '',
+        b2b_price: variant.b2b_price != null ? String(Number(variant.b2b_price)) : '',
         stock_quantity: variant.stock_quantity?.toString() ?? '',
     });
     const [dirty, setDirty] = useState(false);
@@ -426,6 +428,7 @@ function VariantRow({
                 sku: editing.sku.trim() || null,
                 regular_price: editing.regular_price === '' ? null : parseFloat(editing.regular_price),
                 sale_price: editing.sale_price === '' ? null : parseFloat(editing.sale_price),
+                b2b_price: editing.b2b_price === '' ? null : parseFloat(editing.b2b_price),
                 stock_quantity: editing.stock_quantity === '' ? null : parseInt(editing.stock_quantity, 10),
             });
             toast.success('Saved');
@@ -471,6 +474,13 @@ function VariantRow({
                         >🏷️</span>
                     )}
                 </div>
+            </td>
+            <td className="px-3 py-2">
+                <input type="number" min={0} step="0.01" value={editing.b2b_price}
+                    onChange={(e) => setField('b2b_price', e.target.value)}
+                    placeholder="retail"
+                    title="What shops pay for this size. Blank = retail price."
+                    className="w-24 px-2 py-1 bg-slate-800/50 border border-slate-700/50 rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-purple-500/50" />
             </td>
             <td className="px-3 py-2">
                 <input type="number" min={0} value={editing.stock_quantity}
@@ -766,6 +776,7 @@ function BulkEditModal({
     const [form, setForm] = useState({
         regular_price: '',
         sale_price: '',
+        b2b_price: '',
         // Variations (PRD §5.6 / D-13): scheduled sale window. Date-time
         // strings are sent verbatim — backend stores in TIMESTAMP columns.
         // isSaleWindowActive (variantPricing.js) decides at delivery-cron
@@ -781,6 +792,7 @@ function BulkEditModal({
         const changes: Record<string, unknown> = {};
         if (form.regular_price !== '') changes.regular_price = parseFloat(form.regular_price);
         if (form.sale_price !== '') changes.sale_price = parseFloat(form.sale_price);
+        if (form.b2b_price !== '') changes.b2b_price = parseFloat(form.b2b_price);
         if (form.sale_starts_at !== '') changes.sale_starts_at = form.sale_starts_at;
         if (form.sale_ends_at !== '') changes.sale_ends_at = form.sale_ends_at;
         if (form.stock_quantity !== '') changes.stock_quantity = parseInt(form.stock_quantity, 10);
@@ -819,6 +831,16 @@ function BulkEditModal({
                             value={form.sale_price}
                             onChange={(e) => setForm({ ...form, sale_price: e.target.value })}
                             className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white" />
+                    </div>
+                    <div className="col-span-2">
+                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                            B2B price
+                            <span className="text-slate-500 text-xs ml-1">(what shops pay per unit)</span>
+                        </label>
+                        <input type="number" step="0.01" min={0}
+                            value={form.b2b_price}
+                            onChange={(e) => setForm({ ...form, b2b_price: e.target.value })}
+                            className="w-full px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-white sm:max-w-[15rem]" />
                     </div>
                     {/* Variations (PRD §5.6 / D-13): scheduled sale window. Both
                         bounds optional — leave start blank for "always on" sale,

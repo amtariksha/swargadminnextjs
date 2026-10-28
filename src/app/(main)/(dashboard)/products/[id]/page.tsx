@@ -3,6 +3,7 @@
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
+import { useQueryClient } from '@tanstack/react-query';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useProduct, useSubcategories, useUpdateProduct, useUploadProductImage, useDeleteProductImage, usePackagingTypes, useFeatureFlag } from '@/hooks/useData';
@@ -15,7 +16,8 @@ import RelatedProductsMultiSelect from '@/components/products/RelatedProductsMul
 import R2ImagePicker from '@/components/products/R2ImagePicker';
 import { plainTextToLexical, lexicalToPlainText } from '@/lib/lexical';
 import { IMAGE_BASE_URL } from '@/config/tenant';
-import { ArrowLeft, Save, Trash2, Upload, X, Layers } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Upload, X, Layers, Store } from 'lucide-react';
+import BulkB2bPriceImportModal from '@/components/accounting/BulkB2bPriceImportModal';
 import { toast } from 'sonner';
 import { POST } from '@/lib/api';
 
@@ -99,6 +101,8 @@ export default function EditProductPage() {
     const deleteImage = useDeleteProductImage();
     const [deleteImageId, setDeleteImageId] = useState<number | null>(null);
     const [deleteProductConfirm, setDeleteProductConfirm] = useState(false);
+    const [b2bOpen, setB2bOpen] = useState(false);
+    const queryClient = useQueryClient();
     const sliderFileRef = useRef<HTMLInputElement>(null);
     // Phase 2 — marketing fields not managed by react-hook-form.
     const [metaImage, setMetaImage] = useState<string[]>([]);
@@ -334,6 +338,11 @@ export default function EditProductPage() {
                 {/* Variations editor — appears when the tenant has the flag
                     enabled (app_setting key `enable_variations`). Migration
                     030 / D-7. */}
+                <button onClick={() => setB2bOpen(true)}
+                    title="Bulk B2B prices for all products and sizes"
+                    className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border border-slate-700/50 text-slate-200 rounded-lg text-sm hover:border-purple-500/50">
+                    <Store className="w-4 h-4" /> B2B prices
+                </button>
                 {variationsEnabled && (
                     <button onClick={() => router.push(`/products/${id}/variations`)}
                         className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border border-slate-700/50 text-slate-200 rounded-lg text-sm hover:border-purple-500/50">
@@ -375,8 +384,11 @@ export default function EditProductPage() {
                         <FormField label="MRP (₹)" error={errors.mrp} required className={fieldNumber}>
                             <input {...register('mrp', { valueAsNumber: true })} type="number" step="0.01" className={inputClassName} />
                         </FormField>
-                        <FormField label="B2B price (₹)" error={errors.b2b_price} className={fieldNumber}>
-                            <input {...register('b2b_price', { setValueAs: (v) => (v === '' || v == null ? undefined : Number(v)) })} type="number" step="0.01" className={inputClassName} placeholder="blank = MRP" />
+                        <FormField label="B2B price (₹)" error={errors.b2b_price} className={fieldNumber}
+                            hint={productType === 'variable'
+                                ? 'Sized product: shops pay each size\'s own B2B price — set it on Variations.'
+                                : 'What shops pay per unit. Blank = retail price.'}>
+                            <input {...register('b2b_price', { setValueAs: (v) => (v === '' || v == null ? undefined : Number(v)) })} type="number" step="0.01" className={inputClassName} placeholder="blank = retail" />
                         </FormField>
                         <FormField label="Tax (%)" error={errors.tax} className={fieldNumber}>
                             <input {...register('tax', { valueAsNumber: true })} type="number" min={0} max={99} className={inputClassName} />
@@ -663,6 +675,14 @@ export default function EditProductPage() {
             {/* Delete Image Confirm */}
             <ConfirmDialog isOpen={deleteImageId !== null} title="Delete Image" message="Are you sure you want to delete this image?"
                 onConfirm={handleDeleteImage} onCancel={() => setDeleteImageId(null)} variant="danger" confirmText="Delete" isLoading={deleteImage.isPending} />
+
+            {/* Bulk B2B prices — the same sheet as Products → B2B prices. After an
+                import, reload so the B2B field shows the new value. */}
+            <BulkB2bPriceImportModal isOpen={b2bOpen} onClose={() => setB2bOpen(false)}
+                onDone={() => {
+                    queryClient.invalidateQueries({ queryKey: ['product', id] });
+                    queryClient.invalidateQueries({ queryKey: ['variants'] });
+                }} />
 
             {/* Delete Product Confirm */}
             <ConfirmDialog isOpen={deleteProductConfirm} title="Delete Product" message={`Delete "${product.title}"? This cannot be undone.`}

@@ -8,7 +8,9 @@ import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { QueryError } from '@/components/QueryError';
 import { inputClassName } from '@/components/FormField';
-import { Plus, Package, Eye, Image as ImageIcon } from 'lucide-react';
+import { Plus, Package, Eye, Image as ImageIcon, Store } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import BulkB2bPriceImportModal from '@/components/accounting/BulkB2bPriceImportModal';
 import { POST, ApiError } from '@/lib/api';
 import { IMAGE_BASE_URL } from '@/config/tenant';
 import { toast } from 'sonner';
@@ -19,6 +21,12 @@ export default function ProductsPage() {
     const { data: products = [], isLoading, isError, error, refetch } = useProducts();
     const [quickEditModal, setQuickEditModal] = useState<{ product: Product; type: 'preferences' | 'stock_qty'; value: string } | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [b2bOpen, setB2bOpen] = useState(false);
+    const queryClient = useQueryClient();
+    const onB2bImported = () => {
+        refetch();
+        queryClient.invalidateQueries({ queryKey: ['variants'] });
+    };
 
     const handleToggleActive = async (product: Product) => {
         try {
@@ -163,10 +171,17 @@ export default function ProductsPage() {
                     <h1 className="text-2xl font-bold text-white">Products</h1>
                     <p className="text-slate-400">Manage your product catalog</p>
                 </div>
-                <button onClick={() => router.push('/products/new')}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium">
-                    <Plus className="w-5 h-5" /> Add Product
-                </button>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => setB2bOpen(true)}
+                        title="Export every product and size with its B2B price, edit the sheet, import it back"
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 border border-slate-700/50 text-slate-200 rounded-xl font-medium hover:border-purple-500/50">
+                        <Store className="w-5 h-5" /> B2B prices
+                    </button>
+                    <button onClick={() => router.push('/products/new')}
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium">
+                        <Plus className="w-5 h-5" /> Add Product
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -200,6 +215,8 @@ export default function ProductsPage() {
                     searchPlaceholder="Search products..."
                     onRowClick={(item) => router.push(`/products/${item.id}`)} />
             )}
+
+            <BulkB2bPriceImportModal isOpen={b2bOpen} onClose={() => setB2bOpen(false)} onDone={onB2bImported} />
 
             {/* Quick Edit Modal (Preferences / Stock) */}
             {quickEditModal && (
