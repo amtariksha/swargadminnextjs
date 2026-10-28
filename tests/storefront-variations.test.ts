@@ -19,6 +19,15 @@ const variant = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('priceRange', () => {
+    it('spans what customers pay — the sale price while open — not the MRP', () => {
+        const r = priceRange([
+            variant({ id: 88, regular_price: 249, sale_price: 149 }),
+            variant({ id: 87, regular_price: 560, sale_price: 499 }),
+            variant({ id: 89, regular_price: 900, sale_price: 850, sale_ends_at: '2020-01-01 00:00:00' }),
+        ]);
+        expect(r).toEqual({ min: 149, max: 900 });
+    });
+
     it('spans active in-stock variants and skips out_of_stock + non-positive prices', () => {
         const r = priceRange([
             variant({ id: 1, regular_price: 150 }),

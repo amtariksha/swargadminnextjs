@@ -22,6 +22,7 @@ import FormField, { inputClassName, selectClassName, textareaClassName, dateInpu
 import { POST, PUT, ApiError } from '@/lib/api';
 import { MapPin, Plus, Trash2, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { sizeSellingPrice } from '@/lib/variantPrice';
 
 /** Compose a saved customer address into a single doorstep line. */
 function composeAddress(a: Address): string {
@@ -44,7 +45,8 @@ function variantLabel(v: Variant): string {
         .filter((p) => p.value)
         .map((p) => `${p.attribute_name}: ${p.value}`)
         .join(', ');
-    const price = v.regular_price != null ? ` — ₹${v.regular_price}` : '';
+    const selling = sizeSellingPrice(v);
+    const price = selling != null ? ` — ₹${selling}` : '';
     return (text || v.qty_text || v.slug) + price;
 }
 
@@ -153,7 +155,7 @@ function LineItemRow({ item, idx, products, onProductChange, onChange, onRemove 
         // Default the row price to the variant's price; fall back to the base
         // product price when a variant carries no explicit price. Always sets a
         // value so picking a variant visibly updates the unit price.
-        const price = variant?.regular_price ?? product?.price;
+        const price = sizeSellingPrice(variant) ?? product?.price;
         onChange(idx, {
             variant_id: variantId,
             ...(price != null ? { unit_price: String(price) } : {}),
@@ -174,7 +176,7 @@ function LineItemRow({ item, idx, products, onProductChange, onChange, onRemove 
         if (autoPickedFor.current === item.product_id) return;
         autoPickedFor.current = item.product_id;
         const first = variants[0];
-        const price = first.regular_price ?? product?.price;
+        const price = sizeSellingPrice(first) ?? product?.price;
         onChange(idx, {
             variant_id: first.id,
             ...(price != null ? { unit_price: String(price) } : {}),
