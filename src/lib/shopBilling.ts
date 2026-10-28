@@ -36,7 +36,7 @@ export interface ShopStop {
     moved_to_day: boolean; // handed to a day driver (live b2b_shop day order)
     status: number; // 1 = pending, 3 = all lines resolved
     products: ShopLine[];
-    billing_cycle: number; // 0 per delivery, 1 monthly
+    billing_cycle: number; // 0 one bill per day, 1 monthly, 2 weekly (statement week)
     invoices: ShopInvoice[]; // every invoice behind this shop's day
     unbilled: number; // delivered lines that should have an invoice and don't
 }
@@ -85,6 +85,11 @@ export function shopBillLabel(shop: ShopStop, accountingEnabled: boolean): Badge
         return shop.invoices.length
             ? { label: 'Monthly bill made', cls: GREEN }
             : { label: 'Monthly — billed after the month ends', cls: GREY };
+    }
+    if (shop.billing_cycle === 2) {
+        return shop.invoices.length
+            ? { label: 'Weekly bill made', cls: GREEN }
+            : { label: 'Weekly — billed on the statement day', cls: GREY };
     }
     if (shop.unbilled > 0) {
         return { label: `${shop.unbilled} delivered line${shop.unbilled === 1 ? '' : 's'} not billed`, cls: RED };

@@ -20,12 +20,24 @@ import { previousMonthBounds } from '@/lib/accounting';
 interface B2bStatus {
     is_b2b: number; // a shop (has its truck stop)
     gst_b2b?: number;
-    billing_cycle: number; // 0 per delivery, 1 monthly
+    billing_cycle: number; // 0 one bill per day, 1 monthly, 2 weekly
     drop_point_id: number | null;
     route_order: number | null;
 }
 
 type PendingChange = 'mark' | 'remove' | null;
+
+const CYCLE_OPTIONS = [
+    { value: 0, label: 'Daily' },
+    { value: 2, label: 'Weekly' },
+    { value: 1, label: 'Monthly' },
+];
+
+const CYCLE_HINT: Record<number, string> = {
+    0: 'Daily — one invoice per day for all its delivered lines (made each evening).',
+    2: "Weekly — one invoice per statement week (Mon–Sun by default), made on the statement day before the statement.",
+    1: 'Monthly — one consolidated invoice per month, made on the 1st.',
+};
 
 // Same key the new-order page reads, so a change here shows there too.
 const statusKey = (userId: number) => ['customer-b2b-status', userId] as const;
@@ -85,12 +97,26 @@ export function B2bShopPanel({ userId }: { userId: number }) {
         }
     };
 
+    // The statement week today falls in or last completed — the same week the
+    // statement-day run bills (lines already billed are left out).
+    const generateWeekBill = async () => {
+        setSaving(true);
+        try {
+            const r = await POST<{ invoice_number?: string }>('/admin/generate_weekly_bill', { user_id: userId });
+            toast.success(r.message || 'Bill generated');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to generate bill');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     if (isLoading || !status) {
         return <div className="rounded-xl border border-slate-800/60 p-4 text-sm text-slate-500">Loading B2B shop status…</div>;
     }
 
     const isShop = status.is_b2b === 1;
-    const cycle = status.billing_cycle === 1 ? 1 : 0;
+    const cycle = [1, 2].includes(status.billing_cycle) ? status.billing_cycle : 0;
 
     return (
         <div className="rounded-xl border border-slate-800/60 p-4 space-y-4">
@@ -143,15 +169,13 @@ export function B2bShopPanel({ userId }: { userId: number }) {
                         <div>
                             <p className="text-sm text-white">Billing cycle</p>
                             <p className="text-xs text-slate-500 mt-0.5">
-                                {cycle === 1
-                                    ? 'Monthly — one consolidated invoice per month (no per-delivery invoices).'
-                                    : 'Per delivery — each delivery is invoiced.'}
+                                {CYCLE_HINT[cycle]}
                             </p>
                         </div>
                         <div className="flex gap-2 shrink-0">
-                            {[{ value: 0, label: 'Per delivery' }, { value: 1, label: 'Monthly' }].map((opt) => (
+                            {CYCLE_OPTIONS.map((opt) => (
                                 <button key={opt.value} type="button" disabled={saving || cycle === opt.value}
-                                    onClick={() => save(1, opt.value, opt.value === 1 ? 'Set to monthly billing' : 'Set to per-delivery billing')}
+                                    onClick={() => save(1, opt.value, `Set to ${opt.label.toLowerCase()} billing`)}
                                     className={`px-3 py-1.5 text-xs rounded-lg disabled:cursor-default ${cycle === opt.value
                                         ? 'bg-purple-500/30 text-purple-200'
                                         : 'bg-slate-800 text-slate-400 hover:bg-slate-700 disabled:opacity-50'}`}>
@@ -164,6 +188,12 @@ export function B2bShopPanel({ userId }: { userId: number }) {
                         <button type="button" onClick={generateBill} disabled={saving}
                             className="w-full px-4 py-2 text-sm rounded-xl bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 disabled:opacity-50">
                             {saving ? 'Working…' : "Generate last month's bill"}
+                        </button>
+                    )}
+                    {cycle === 2 && (
+                        <button type="button" onClick={generateWeekBill} disabled={saving}
+                            className="w-full px-4 py-2 text-sm rounded-xl bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 disabled:opacity-50">
+                            {saving ? 'Working…' : "Generate this statement week's bill"}
                         </button>
                     )}
                 </div>

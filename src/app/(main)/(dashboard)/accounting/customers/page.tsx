@@ -126,7 +126,7 @@ export default function AccountingCustomersPage() {
                         : <span className="text-xs px-2 py-1 rounded-lg bg-slate-700/50 text-slate-400">{CUSTOMER_TYPE_LABELS[Number(item.customer_type ?? 0)]}</span>}
                     {item.is_shop && (
                         <span className="text-xs px-2 py-1 rounded-lg bg-purple-500/20 text-purple-300"
-                            title={`B2B shop — truck stop #${item.shop_drop_point_id}, ${item.billing_cycle === 1 ? 'monthly' : 'per-delivery'} billing`}>
+                            title={`B2B shop — truck stop #${item.shop_drop_point_id}, ${item.billing_cycle === 1 ? 'monthly' : item.billing_cycle === 2 ? 'weekly' : 'daily'} billing`}>
                             Shop
                         </span>
                     )}

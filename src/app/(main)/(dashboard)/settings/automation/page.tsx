@@ -186,6 +186,18 @@ const CRON_JOBS: CronJob[] = [
             'at the next 1 AM run. Needs Accounting turned on.',
     },
     {
+        key: 'shop-week-bills',
+        name: 'Shop Week Bills',
+        flagTitle: 'Shop Week Bills Enabled',
+        timeTitle: 'Shop Week Bills Run Time',
+        migration: '131_shop_week_bills.sql',
+        description:
+            'On the weekly statement day (Sunday unless set otherwise), at this time, makes one GST invoice ' +
+            'per shop on weekly billing (B2B / B2C → Edit → Billing cycle: Weekly) for the statement week, and ' +
+            "a top-up for last week's lines marked delivered late. Keep it before the statement time (09:00) " +
+            "so the week's bill is on the week's statement. Needs Accounting turned on.",
+    },
+    {
         key: 'statement-followup',
         name: 'Statement Payment Follow-up',
         flagTitle: 'Statement Followup Enabled',

@@ -33,12 +33,14 @@ function InvoiceRef({ invoice, tallyPostingEnabled }: { invoice: ShopInvoice; ta
     );
 }
 
+const CYCLE_LABEL: Record<number, string> = { 0: 'Billed daily', 1: 'Monthly billing', 2: 'Weekly billing' };
+
 export function ShopDeliveryCard({ shop, accountingEnabled, tallyPostingEnabled, onSendToDay }: ShopDeliveryCardProps) {
     const done = shop.status === 3;
     const hasNotDelivered = shop.products.some((p) => p.status === 2);
-    // Per-delivery shops show each line's invoice beside it; monthly and day-pooled
-    // shops have one invoice for the lot, listed below the lines.
-    const perLine = accountingEnabled && !shop.moved_to_day && shop.billing_cycle !== 1;
+    // Day-billed shops show each line's bill beside it; weekly, monthly and
+    // day-pooled shops have one bill for the lot, listed below the lines.
+    const perLine = accountingEnabled && !shop.moved_to_day && shop.billing_cycle === 0;
 
     return (
         <div className="glass rounded-xl p-5 space-y-3">
@@ -54,7 +56,7 @@ export function ShopDeliveryCard({ shop, accountingEnabled, tallyPostingEnabled,
                     </p>
                     <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                         <Chip badge={shopBillLabel(shop, accountingEnabled)} />
-                        <span className="text-[11px] text-slate-500">{shop.billing_cycle === 1 ? 'Monthly billing' : 'Per-delivery billing'}</span>
+                        <span className="text-[11px] text-slate-500">{CYCLE_LABEL[shop.billing_cycle] ?? CYCLE_LABEL[0]}</span>
                     </div>
                 </div>
                 {shop.moved_to_day ? (
