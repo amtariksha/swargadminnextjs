@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { IMAGE_BASE_URL } from '@/config/tenant';
 
 import { formatApiDate } from '@/lib/dateUtils';
+import { OrderSegmentTabs, type OrderSegment } from '@/components/orders/OrderSegmentTabs';
 
 // Small inline component — renders a value next to a one-click copy button.
 // Used for the order ID and customer phone in the orders list so the
@@ -57,6 +58,9 @@ function getOrderStatus(row: OrderRow): string {
     return row.order_status === 0 ? 'Active' : row.order_status === 1 ? 'Stopped' : 'N/A';
 }
 
+/** A shop's order: its customer has a kind='shop' drop point (is_b2b from GET /get_order). */
+const isB2bOrder = (row: OrderRow): boolean => row.is_b2b === 1 || row.is_b2b === true;
+
 function getSubTypeLabel(type: number | null | undefined): string {
     if (type === null || type === undefined) return 'N/A';
     return SUB_TYPE[type] || 'N/A';
@@ -75,7 +79,6 @@ const INITIAL_FILTERS = {
     not_onetime: false,
     is_back_order: false,
     undelivered_back_order: false,
-    b2b_only: false,
 };
 
 type FilterKey = keyof typeof INITIAL_FILTERS;
@@ -92,7 +95,6 @@ const FILTER_LABELS: Record<FilterKey, string> = {
     not_onetime: 'Not OneTime',
     is_back_order: 'Back-order orders',
     undelivered_back_order: 'Undelivered back-orders',
-    b2b_only: 'B2B Orders',
 };
 
 export default function OrdersPage() {
@@ -103,15 +105,31 @@ export default function OrdersPage() {
         if (typeof window !== 'undefined') {
             try {
                 const saved = localStorage.getItem('filters-orders');
-                if (saved) return JSON.parse(saved);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    return Object.fromEntries((Object.keys(INITIAL_FILTERS) as FilterKey[])
+                        .map(key => [key, parsed[key] === true])) as typeof INITIAL_FILTERS;
+                }
             } catch { /* ignore */ }
         }
         return INITIAL_FILTERS;
     });
+    const [segment, setSegment] = useState<OrderSegment>(() => {
+        if (typeof window === 'undefined') return 'all';
+        try {
+            const saved = localStorage.getItem('orders-segment');
+            if (saved === 'all' || saved === 'b2c' || saved === 'b2b') return saved;
+            if (JSON.parse(localStorage.getItem('filters-orders') || '{}').b2b_only === true) return 'b2b';
+        } catch { /* ignore */ }
+        return 'all';
+    });
+    useEffect(() => {
+        try { localStorage.setItem('orders-segment', segment); } catch { /* ignore */ }
+    }, [segment]);
 
     // Persist filters
     useEffect(() => {
-        localStorage.setItem('filters-orders', JSON.stringify(filters));
+        try { localStorage.setItem('filters-orders', JSON.stringify(filters)); } catch { /* ignore */ }
     }, [filters]);
 
     // Server-side search. The backend's GET /get_order has a default
@@ -201,19 +219,24 @@ export default function OrdersPage() {
         if (filters.undelivered_back_order) {
             result = result.filter(o => o.is_back_order === 1 && !o.delivery_status);
         }
-        // B2B-only — customers with a kind='shop' drop point (truck-delivered,
-        // GST-invoiced). is_b2b comes from GET /get_order (1/0 or boolean).
-        if (filters.b2b_only) {
-            result = result.filter(o => o.is_b2b === 1 || o.is_b2b === true);
-        }
-
         return result;
     }, [orders, filters, tomorrow]);
+
+    const segmentCounts = useMemo(() => {
+        const b2b = filteredOrders.filter(isB2bOrder).length;
+        return { all: filteredOrders.length, b2c: filteredOrders.length - b2b, b2b };
+    }, [filteredOrders]);
+
+    const visibleOrders = useMemo(() => {
+        if (segment === 'all') return filteredOrders;
+        const wantB2b = segment === 'b2b';
+        return filteredOrders.filter(o => isB2bOrder(o) === wantB2b);
+    }, [filteredOrders, segment]);
 
     // Export CSV
     const handleExport = useCallback(() => {
         const headers = ['ID', 'Transaction ID', 'Product', 'Order Type', 'Status', 'Order Status', 'Sub Type', 'Name', 'Phone', 'Wallet', 'Amount', 'Qty', 'Start Date', 'Pincode', 'Created', 'Last Update'];
-        const rows = filteredOrders.map(o => [
+        const rows = visibleOrders.map(o => [
             o.id, o.trasation_id || '', o.title || '', ORDER_TYPE[o.order_type] || '',
             STATUS[o.status] || '', getOrderStatus(o), getSubTypeLabel(o.subscription_type),
             o.name || '', o.s_phone || '', o.wallet_amount || 0, o.order_amount || 0,
@@ -224,10 +247,10 @@ export default function OrdersPage() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${format(new Date(), 'yyyyMMdd')}_Orders.csv`;
+        a.download = `${format(new Date(), 'yyyyMMdd')}_Orders${segment === 'all' ? '' : `_${segment.toUpperCase()}`}.csv`;
         a.click();
         URL.revokeObjectURL(url);
-    }, [filteredOrders]);
+    }, [visibleOrders, segment]);
 
     const columns: Column<OrderRow>[] = [
         {
@@ -306,7 +329,7 @@ export default function OrdersPage() {
                     <p className="text-slate-400">Manage all customer orders</p>
                 </div>
                 <div className="flex items-center gap-3">
-                    <button onClick={handleExport} disabled={filteredOrders.length === 0}
+                    <button onClick={handleExport} disabled={visibleOrders.length === 0}
                         className="flex items-center gap-2 px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-xl text-sm text-slate-300 hover:text-white disabled:opacity-40">
                         <Download className="w-4 h-4" /> Export
                     </button>
@@ -355,6 +378,8 @@ export default function OrdersPage() {
                 </p>
             </div>
 
+            <OrderSegmentTabs value={segment} counts={segmentCounts} onChange={setSegment} />
+
             {/* Filters */}
             <div className="glass rounded-xl p-4">
                 <div className="flex flex-wrap gap-x-6 gap-y-2">
@@ -373,7 +398,7 @@ export default function OrdersPage() {
                 search above is server-side and bypasses the 180-day cap.
                 Keeping the table's internal search would silently filter
                 the loaded set and confuse the operator. */}
-            <DataTable data={filteredOrders} columns={columns} loading={isLoading} pageSize={50}
+            <DataTable data={visibleOrders} columns={columns} loading={isLoading} pageSize={50}
                 searchable={false}
                 rowClassName={(o) => o.daytime_order_id != null ? 'bg-amber-500/10' : ''}
                 onRowClick={(o) => router.push(`/orders/${o.id}`)} />

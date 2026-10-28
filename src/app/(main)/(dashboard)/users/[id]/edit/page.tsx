@@ -46,10 +46,14 @@ export default function EditUserPage() {
     const saveB2b = async (is_b2b: number, billing_cycle: number, okMsg: string) => {
         setB2bSaving(true);
         try {
-            await POST('/admin/set_b2b_shop', { user_id: Number(id), is_b2b, billing_cycle });
+            const saved = await POST<{ driver_links_removed?: number }>('/admin/set_b2b_shop', { user_id: Number(id), is_b2b, billing_cycle });
             const r = await GET<B2bStatus>(`/admin/customer_b2b_status/${id}`);
             if (r.data) setB2b(r.data);
-            toast.success(okMsg);
+            // Marking a shop also takes its orders off any last-mile driver.
+            const unlinked = saved.data?.driver_links_removed ?? 0;
+            toast.success(unlinked > 0
+                ? `${okMsg} — removed the driver from ${unlinked} order${unlinked === 1 ? '' : 's'}`
+                : okMsg);
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to update B2B status');
         } finally {
