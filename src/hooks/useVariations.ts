@@ -13,8 +13,9 @@
  *   ['notify-requests', filters]            — pending notify-me list
  */
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { GET, POST, PUT, PATCH, DELETE } from '@/lib/api';
+import { CATALOG_B2B_PRICES_KEY } from '@/hooks/useAccounting';
 import type {
     Attribute,
     AttributeValue,
@@ -25,6 +26,12 @@ import type {
     VariantGenerateResult,
     NotifyRequest,
 } from '@/lib/types/variations';
+
+/** A size's save can change its B2B price or the product's sizes — refresh both lists. */
+function invalidateVariants(qc: QueryClient, productId: number) {
+    qc.invalidateQueries({ queryKey: ['variants', productId] });
+    qc.invalidateQueries({ queryKey: CATALOG_B2B_PRICES_KEY });
+}
 
 /* ───────────────────────────────────────────────────────────────────────
  * Attribute library
@@ -181,7 +188,7 @@ export function useCreateVariant() {
             const res = await POST<Variant>(`/products/${productId}/variants`, payload as unknown as Record<string, unknown>);
             return res.data;
         },
-        onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['variants', vars.productId] }),
+        onSuccess: (_d, vars) => invalidateVariants(qc, vars.productId),
     });
 }
 
@@ -195,7 +202,7 @@ export function useGenerateVariants() {
             );
             return res.data;
         },
-        onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['variants', vars.productId] }),
+        onSuccess: (_d, vars) => invalidateVariants(qc, vars.productId),
     });
 }
 
@@ -206,7 +213,7 @@ export function useUpdateVariant() {
             const res = await PATCH<Variant>(`/products/${productId}/variants/${variantId}`, changes as Record<string, unknown>);
             return res.data;
         },
-        onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['variants', vars.productId] }),
+        onSuccess: (_d, vars) => invalidateVariants(qc, vars.productId),
     });
 }
 
@@ -217,7 +224,7 @@ export function useArchiveVariant() {
             await DELETE(`/products/${productId}/variants/${variantId}`);
             return { productId, variantId };
         },
-        onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['variants', vars.productId] }),
+        onSuccess: (_d, vars) => invalidateVariants(qc, vars.productId),
     });
 }
 
@@ -236,7 +243,7 @@ export function useBulkEditVariants() {
             );
             return res.data;
         },
-        onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ['variants', vars.productId] }),
+        onSuccess: (_d, vars) => invalidateVariants(qc, vars.productId),
     });
 }
 

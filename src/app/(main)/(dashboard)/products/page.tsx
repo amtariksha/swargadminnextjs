@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { useProducts, Product } from '@/hooks/useData';
+import { useCatalogB2bPrices, CATALOG_B2B_PRICES_KEY } from '@/hooks/useAccounting';
+import { B2bPriceCell } from '@/components/products/B2bPriceCell';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { QueryError } from '@/components/QueryError';
@@ -23,9 +25,12 @@ export default function ProductsPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [b2bOpen, setB2bOpen] = useState(false);
     const queryClient = useQueryClient();
+    const { data: b2bPrices = [] } = useCatalogB2bPrices();
+    const b2bByProduct = useMemo(() => new Map(b2bPrices.map((p) => [p.product_id, p])), [b2bPrices]);
     const onB2bImported = () => {
         refetch();
         queryClient.invalidateQueries({ queryKey: ['variants'] });
+        queryClient.invalidateQueries({ queryKey: CATALOG_B2B_PRICES_KEY });
     };
 
     const handleToggleActive = async (product: Product) => {
@@ -151,6 +156,10 @@ export default function ProductsPage() {
         },
         { key: 'price', header: 'Price', width: '80px', render: (item) => <span>₹{item.price}</span> },
         { key: 'mrp', header: 'MRP', width: '80px', render: (item) => <span className="text-slate-400">₹{item.mrp ?? '-'}</span> },
+        {
+            key: 'b2b_price', header: 'B2B', width: '140px',
+            render: (item) => <B2bPriceCell entry={b2bByProduct.get(Number(item.id))} fallback={item.b2b_price} />,
+        },
         { key: 'cat_title', header: 'Category', width: '130px', render: (item) => <span className="text-sm text-slate-400">{item.cat_title || '-'}</span> },
         { key: 'sub_cat_title', header: 'Subcategory', width: '130px', render: (item) => <span className="text-sm text-slate-400">{item.sub_cat_title || '-'}</span> },
         {

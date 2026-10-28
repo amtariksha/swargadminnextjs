@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { useAccountingCustomer, useCustomerPrices, ProductPriceOffer } from '@/hooks/useAccounting';
+import { useAccountingCustomer, useCustomerPrices, useCatalogB2bPrices, CATALOG_B2B_PRICES_KEY, ProductPriceOffer, CatalogB2bPrice } from '@/hooks/useAccounting';
+import { B2bPriceCell } from '@/components/products/B2bPriceCell';
 import { useProducts } from '@/hooks/useData';
 import { useQueryClient } from '@tanstack/react-query';
 import DataTable, { Column } from '@/components/DataTable';
@@ -20,6 +21,16 @@ const inputCls =
 
 const blankForm = { product_id: '', price: '', mrp: '', batch_start_date: '', batch_end_date: '' };
 
+/** " · B2B default …" under the product picker; a product with sizes is priced per size. */
+function b2bDefaultHint(entry: CatalogB2bPrice | undefined, productB2b: number | null | undefined): string {
+    if (entry && entry.sizes.length > 0) {
+        return ` · B2B default ${entry.sizes.map((s) =>
+            `${s.size} ${s.b2b_price != null ? formatINR(s.b2b_price) : '—'}`).join(', ')}`;
+    }
+    const price = entry ? entry.b2b_price : productB2b;
+    return price != null ? ` · B2B default ${formatINR(price)}` : '';
+}
+
 export default function CustomerPricesPage() {
     const params = useParams<{ id: string }>();
     const userId = Number(params.id);
@@ -28,6 +39,8 @@ export default function CustomerPricesPage() {
     const { data: customer } = useAccountingCustomer(userId);
     const { data: offers = [], isLoading } = useCustomerPrices(userId);
     const { data: products = [] } = useProducts();
+    const { data: b2bPrices = [] } = useCatalogB2bPrices();
+    const b2bByProduct = useMemo(() => new Map(b2bPrices.map((p) => [p.product_id, p])), [b2bPrices]);
 
     const [modalOpen, setModalOpen] = useState(false);
     // The bulk sheet spans every shop and the common tier, not just this customer.
@@ -94,8 +107,9 @@ export default function CustomerPricesPage() {
             render: (o) => o.product_mrp != null ? formatINR(o.product_mrp) : <span className="text-slate-600">—</span>,
         },
         {
-            key: 'product_b2b_price', header: 'B2B default', width: '120px',
-            render: (o) => o.product_b2b_price != null ? formatINR(o.product_b2b_price) : <span className="text-slate-600">—</span>,
+            key: 'product_b2b_price', header: 'B2B default', width: '140px',
+            render: (o) => <B2bPriceCell entry={b2bByProduct.get(Number(o.product_id))}
+                fallback={o.product_b2b_price != null ? Number(o.product_b2b_price) : null} />,
         },
         {
             key: 'price', header: 'Agreed price', width: '130px',
@@ -154,7 +168,7 @@ export default function CustomerPricesPage() {
             <DataTable data={offers} columns={columns} loading={isLoading} pageSize={50}
                 searchPlaceholder="Filter products..." emptyMessage="No agreed prices yet — add one." />
 
-            <BulkB2bPriceImportModal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} onDone={invalidate} />
+            <BulkB2bPriceImportModal isOpen={bulkOpen} onClose={() => setBulkOpen(false)} onDone={() => { invalidate(); queryClient.invalidateQueries({ queryKey: CATALOG_B2B_PRICES_KEY }); }} />
 
             <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Agreed B2B price" size="lg">
                 <form onSubmit={submit} className="space-y-4">
@@ -167,7 +181,7 @@ export default function CustomerPricesPage() {
                         {selectedProduct && (
                             <p className="text-xs text-slate-500 mt-1">
                                 MRP {selectedProduct.mrp != null ? formatINR(selectedProduct.mrp) : '—'}
-                                {selectedProduct.b2b_price != null ? ` · B2B default ${formatINR(selectedProduct.b2b_price)}` : ''}
+                                {b2bDefaultHint(b2bByProduct.get(Number(selectedProduct.id)), selectedProduct.b2b_price)}
                             </p>
                         )}
                     </div>
