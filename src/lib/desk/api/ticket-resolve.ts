@@ -49,7 +49,7 @@ interface Verdict {
 }
 
 /** The conditional statement of blueprint D5. Returns the resolved row, or null when it matched nothing. */
-async function resolveConditionally(
+export async function resolveConditionally(
     ctx: DeskContext, ticket: Ticket, body: ResolveBody, verdict: Verdict, duplicateId: string | null,
 ): Promise<Ticket | null> {
     const patch = {
@@ -79,7 +79,7 @@ async function onNoRowMatched(ctx: DeskContext, ticket: Ticket, body: ResolveBod
     throw new DeskApiError('new_customer_message', CONFLICT_MESSAGE, { ticket: toView(fresh, ctx), action: null });
 }
 
-async function writeFirstResolution(ctx: DeskContext, ticketId: string, resolved: Ticket): Promise<void> {
+export async function writeFirstResolution(ctx: DeskContext, ticketId: string, resolved: Ticket): Promise<void> {
     const { error } = await supabaseAdmin
         .from(TICKETS)
         .update({
@@ -91,7 +91,7 @@ async function writeFirstResolution(ctx: DeskContext, ticketId: string, resolved
     if (error) console.error('[desk-api] first resolution write failed');
 }
 
-async function afterResolve(
+export async function afterResolve(
     ctx: DeskContext, before: Ticket, resolved: Ticket, verdict: Verdict, duplicate: { id: string; ticket_no: number } | null,
 ): Promise<void> {
     await writeFirstResolution(ctx, before.id, resolved);

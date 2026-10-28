@@ -280,6 +280,7 @@ export interface ActionDataMap {
         billed_driver_id: number | null;
         driver_deduction_amount: number | null;
         new_wallet_balance: number | null;
+        user_id?: number; // Slice 2 · P4a (E11): always written by route 6; optional for rows before E11
     };
     wallet_credit: { user_id: number; description: string; payment_id: string };
     holiday_added: { user_id: number; from: IstDate; to: IstDate };

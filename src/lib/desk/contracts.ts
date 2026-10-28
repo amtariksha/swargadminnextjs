@@ -210,6 +210,7 @@ export const ticketActionBody = z.discriminatedUnion('action_type', [
             billed_driver_id: positiveInt.nullable(),
             driver_deduction_amount: moneySchema.nullable(),
             new_wallet_balance: z.number().nullable(),
+            user_id: positiveInt, // Slice 2 · P4a (E11): the customer whose debit was refunded
         }),
     }),
     z.strictObject({
