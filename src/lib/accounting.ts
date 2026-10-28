@@ -180,6 +180,15 @@ export function currentPeriod(): string {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+/** First and last day (YYYY-MM-DD, inclusive) of the month before `now`'s month. */
+export function previousMonthBounds(now: Date = new Date()): { from: string; to: string } {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    // Day 0 of this month is the last day of the previous one (handles 28–31 and Jan → Dec).
+    const last = new Date(now.getFullYear(), now.getMonth(), 0);
+    const ym = `${last.getFullYear()}-${pad(last.getMonth() + 1)}`;
+    return { from: `${ym}-01`, to: `${ym}-${pad(last.getDate())}` };
+}
+
 export function documentTypeLabel(t: number | string | null | undefined): string {
     return DOCUMENT_TYPE_LABELS[Number(t)] || '-';
 }

@@ -15,6 +15,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MapPin, Store } from 'lucide-react';
 import { toast } from 'sonner';
 import { GET, POST } from '@/lib/api';
+import { previousMonthBounds } from '@/lib/accounting';
 
 interface B2bStatus {
     is_b2b: number; // a shop (has its truck stop)
@@ -69,11 +70,10 @@ export function B2bShopPanel({ userId }: { userId: number }) {
         }
     };
 
+    // Last month, whole: the same period the 1st-of-month run bills (idempotent with
+    // it). A month still running can't be billed — the server refuses it.
     const generateBill = async () => {
-        const now = new Date();
-        const pad = (n: number) => String(n).padStart(2, '0');
-        const from = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
-        const to = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        const { from, to } = previousMonthBounds();
         setSaving(true);
         try {
             const r = await POST<{ invoice_number?: string }>('/admin/generate_monthly_bill', { user_id: userId, from, to });
@@ -163,7 +163,7 @@ export function B2bShopPanel({ userId }: { userId: number }) {
                     {cycle === 1 && (
                         <button type="button" onClick={generateBill} disabled={saving}
                             className="w-full px-4 py-2 text-sm rounded-xl bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 disabled:opacity-50">
-                            {saving ? 'Working…' : "Generate this month's bill"}
+                            {saving ? 'Working…' : "Generate last month's bill"}
                         </button>
                     )}
                 </div>

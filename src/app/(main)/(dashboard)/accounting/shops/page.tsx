@@ -63,6 +63,8 @@ const shopDisplayName = (row: ShopBillingRow) => row.shop_name || row.name;
 
 export default function ShopsBillingPage() {
     const [month, setMonth] = useState(currentPeriod());
+    // A month is billed once it has ended; the server refuses an open month.
+    const monthOpen = month >= currentPeriod();
     const [tab, setTab] = useState<'roster' | 'deviations'>('roster');
     const [pending, setPending] = useState<PendingAction | null>(null);
     const [deviationNotes, setDeviationNotes] = useState('');
@@ -240,7 +242,8 @@ export default function ShopsBillingPage() {
                     </span>
                 </div>
             ) : (
-                <button onClick={() => setPending({ kind: 'generate', row })} disabled={actionBusy}
+                <button onClick={() => setPending({ kind: 'generate', row })} disabled={actionBusy || monthOpen}
+                    title={monthOpen ? 'Bill this month once it has ended' : undefined}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-lg text-xs font-medium hover:bg-purple-500/30 disabled:opacity-50">
                     <FilePlus2 className="w-3.5 h-3.5" /> Generate
                 </button>
@@ -304,8 +307,8 @@ export default function ShopsBillingPage() {
                             </button>
                         </>
                     ) : (
-                        <button onClick={() => setPending({ kind: 'generate', row })} disabled={actionBusy}
-                            title={`Generate invoice for ${month}`}
+                        <button onClick={() => setPending({ kind: 'generate', row })} disabled={actionBusy || monthOpen}
+                            title={monthOpen ? 'Bill this month once it has ended' : `Generate invoice for ${month}`}
                             className="p-2 hover:bg-slate-800/50 rounded-lg disabled:opacity-50">
                             <FilePlus2 className="w-4 h-4 text-purple-400" />
                         </button>
