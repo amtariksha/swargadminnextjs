@@ -74,6 +74,13 @@ describe('shopBillLabel', () => {
     });
 });
 
+describe('shopBillLabel — weekly', () => {
+    it('a weekly shop waits for the statement day, then shows its week bill', () => {
+        expect(shopBillLabel(shop({ billing_cycle: 2, invoices: [] }), true).label).toBe('Weekly — billed on the statement day');
+        expect(shopBillLabel(shop({ billing_cycle: 2, invoices: [invoice()] }), true).label).toBe('Weekly bill made');
+    });
+});
+
 describe('summariseShopDay', () => {
     it('counts each invoice once and leaves cancelled ones out', () => {
         const shared = invoice({ id: 9, total_amount: 900 });
