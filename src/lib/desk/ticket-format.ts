@@ -6,7 +6,7 @@ import { IST_OFFSET, STATS_MAX_DAYS, TICKET_TYPES, TICK_STALE_SECS, type TicketT
 import { IST_OFFSET_MINUTES, isIstDate } from './business-hours';
 import type { Category, DeskHealth, TicketListItem, TicketView } from './types';
 
-export const DESK_TABS = ['mine', 'unassigned', 'all', 'wrap_up'] as const;
+export const DESK_TABS = ['all', 'mine', 'unassigned', 'wrap_up'] as const;
 export type DeskTab = (typeof DESK_TABS)[number];
 
 const MS_PER_MINUTE = 60_000;
