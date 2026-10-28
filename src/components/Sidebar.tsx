@@ -6,6 +6,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { BRANDING } from '@/config/tenant';
 import { useAuth } from '@/lib/auth';
 import { useFeatureFlag } from '@/hooks/useData';
+import { PULSE_PARENT_PERMISSION, PULSE_SECTION_KEYS } from '@/lib/pulsePermissions';
 import {
     Activity,
     LayoutDashboard,
@@ -90,6 +91,12 @@ interface NavItem {
  * permissionKey needed on a parent (filterNav keeps a group iff ≥1 child
  * survives the role filter); gating happens per-leaf.
  */
+/** A page that used to be covered only by a broad parent key and now has its
+ *  own. The parent stays in the list so roles that already hold it keep the
+ *  page; the own key lets a role get this one page alone. */
+const parentOr = (parentKey: string, ownKey: string): string[] => [parentKey, ownKey];
+const acct = (ownKey: string): string[] => parentOr('accounting', ownKey);
+
 const navItems: NavItem[] = [
     {
         name: 'Reports',
@@ -97,11 +104,12 @@ const navItems: NavItem[] = [
         children: [
             { name: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
             // Business Pulse (Phase 5) — CEO metrics over the v_pulse_* views.
-            // Gated by the 'business-pulse' permission (grant to the CEO role only).
-            { name: 'Business Pulse', href: '/business-pulse', icon: <Activity className="w-4 h-4" /> },
-            { name: 'Performance Report', href: '/performance-report', icon: <TrendingUp className="w-4 h-4" /> },
+            // 'business-pulse' shows every section; a 'pulse-*' key shows one
+            // (the page filters its sections the same way).
+            { name: 'Business Pulse', href: '/business-pulse', icon: <Activity className="w-4 h-4" />, anyPermissionKeys: [PULSE_PARENT_PERMISSION, ...PULSE_SECTION_KEYS] },
+            { name: 'Performance Report', href: '/performance-report', icon: <TrendingUp className="w-4 h-4" />, anyPermissionKeys: parentOr('delivery-report', 'performance-report') },
             { name: 'Delivery Report', href: '/delivery-report', icon: <BarChart3 className="w-4 h-4" /> },
-            { name: 'Recovery Report', href: '/recovery', icon: <IndianRupee className="w-4 h-4" /> },
+            { name: 'Recovery Report', href: '/recovery', icon: <IndianRupee className="w-4 h-4" />, anyPermissionKeys: parentOr('transactions', 'recovery') },
             { name: 'Refunds Report', href: '/refunds', icon: <RotateCcw className="w-4 h-4" />, permissionKey: 'refunds' },
             { name: 'Payroll Reports', href: '/payroll', icon: <Banknote className="w-4 h-4" />, permissionKey: 'payroll' },
         ],
@@ -111,9 +119,10 @@ const navItems: NavItem[] = [
         icon: <Truck className="w-5 h-5" />,
         children: [
             { name: 'Delivery List', href: '/delivery-list', icon: <ClipboardList className="w-4 h-4" /> },
-            // B2B shops' truck deliveries with their bills and Tally sync. Under
-            // /delivery-list so the delivery-list permission covers it.
-            { name: 'Shop Deliveries', href: '/delivery-list/shops', icon: <Store className="w-4 h-4" /> },
+            // B2B shops' truck deliveries with their bills and Tally sync. The
+            // delivery-list permission still covers it; 'delivery-shops' alone
+            // grants just this page.
+            { name: 'Shop Deliveries', href: '/delivery-list/shops', icon: <Store className="w-4 h-4" />, anyPermissionKeys: parentOr('delivery-list', 'delivery-shops') },
         ],
     },
     {
@@ -124,9 +133,9 @@ const navItems: NavItem[] = [
             // on-page filter dropdown (classified via has_app/day_orders).
             { name: 'Customers', href: '/users', icon: <Users className="w-4 h-4" /> },
             // GST customer profiles (B2B shops + B2C), moved here from Accounting.
-            // Still gated by `accounting`: leaves are permission-checked by their
-            // href segment, never by the group they sit in.
-            { name: 'B2B / B2C', href: '/accounting/customers', icon: <Store className="w-4 h-4" /> },
+            // Still reachable with `accounting`, or alone with its own key: leaves
+            // are permission-checked individually, never by the group they sit in.
+            { name: 'B2B / B2C', href: '/accounting/customers', icon: <Store className="w-4 h-4" />, anyPermissionKeys: acct('accounting-customers') },
             { name: 'Drivers', href: '/drivers', icon: <Truck className="w-4 h-4" /> },
             { name: 'Admin Users', href: '/admin-users', icon: <UserPlus className="w-4 h-4" /> },
             { name: 'Roles & Permissions', href: '/roles', icon: <ShieldCheck className="w-4 h-4" /> },
@@ -242,51 +251,53 @@ const navItems: NavItem[] = [
     },
     // Accounting (AI-Accountant: GST invoicing, ledgers, Tally). The parent is
     // a pure CONTAINER (no permissionKey) so inventory/production-only staff
-    // still reach their sections; gating happens per-leaf via the href segment
-    // (accounting / inventory / production).
+    // still reach their sections; gating happens per-leaf. Every accounting
+    // leaf shows for the broad `accounting` key OR its own `accounting-*` key,
+    // so a role can be given e.g. Bank Recon alone. Inventory / production
+    // leaves are gated by their href segment.
     {
         name: 'Accounting',
         icon: <Calculator className="w-5 h-5" />,
         children: [
-            { name: 'Chart of Accounts', href: '/accounting/accounts', icon: <BookText className="w-4 h-4" /> },
+            { name: 'Chart of Accounts', href: '/accounting/accounts', icon: <BookText className="w-4 h-4" />, anyPermissionKeys: acct('accounting-accounts') },
             {
                 name: 'Transactions',
                 icon: <FileText className="w-4 h-4" />,
                 children: [
-                    { name: 'Vouchers', href: '/accounting/vouchers', icon: <FileText className="w-4 h-4" /> },
-                    { name: 'Invoices', href: '/accounting/invoices', icon: <FileText className="w-4 h-4" /> },
-                    { name: 'Shops Billing', href: '/accounting/shops', icon: <Banknote className="w-4 h-4" /> },
-                    { name: 'Purchases / Bills', href: '/accounting/purchases', icon: <Receipt className="w-4 h-4" /> },
-                    { name: 'Reimbursements', href: '/accounting/reimbursements', icon: <Banknote className="w-4 h-4" /> },
-                    { name: 'HSN & Rates', href: '/accounting/hsn', icon: <Tags className="w-4 h-4" /> },
-                    { name: 'B2C Consolidation', href: '/accounting/b2c-consolidation', icon: <CalendarDays className="w-4 h-4" /> },
+                    { name: 'Vouchers', href: '/accounting/vouchers', icon: <FileText className="w-4 h-4" />, anyPermissionKeys: acct('accounting-vouchers') },
+                    { name: 'Invoices', href: '/accounting/invoices', icon: <FileText className="w-4 h-4" />, anyPermissionKeys: acct('accounting-invoices') },
+                    { name: 'Shops Billing', href: '/accounting/shops', icon: <Banknote className="w-4 h-4" />, anyPermissionKeys: acct('accounting-shops-billing') },
+                    { name: 'Purchases / Bills', href: '/accounting/purchases', icon: <Receipt className="w-4 h-4" />, anyPermissionKeys: acct('accounting-purchases') },
+                    { name: 'Reimbursements', href: '/accounting/reimbursements', icon: <Banknote className="w-4 h-4" />, anyPermissionKeys: acct('accounting-reimbursements') },
+                    { name: 'HSN & Rates', href: '/accounting/hsn', icon: <Tags className="w-4 h-4" />, anyPermissionKeys: acct('accounting-hsn') },
+                    { name: 'B2C Consolidation', href: '/accounting/b2c-consolidation', icon: <CalendarDays className="w-4 h-4" />, anyPermissionKeys: acct('accounting-b2c-consolidation') },
                 ],
             },
             {
                 name: 'Reports',
                 icon: <BarChart3 className="w-4 h-4" />,
                 children: [
-                    { name: 'Trial Balance', href: '/accounting/reports/trial-balance', icon: <Calculator className="w-4 h-4" /> },
-                    { name: 'Balance Sheet', href: '/accounting/reports/balance-sheet', icon: <BarChart3 className="w-4 h-4" /> },
-                    { name: 'Profit & Loss', href: '/accounting/reports/pnl', icon: <TrendingUp className="w-4 h-4" /> },
-                    { name: 'Day Book', href: '/accounting/reports/day-book', icon: <CalendarDays className="w-4 h-4" /> },
-                    { name: 'Sales Register', href: '/accounting/reports/sales-register', icon: <Receipt className="w-4 h-4" /> },
-                    { name: 'GST Returns', href: '/accounting/gst-returns', icon: <Receipt className="w-4 h-4" /> },
-                    { name: 'Stock & Valuation', href: '/accounting/stock', icon: <Tags className="w-4 h-4" /> },
-                    { name: 'Ledgers', href: '/accounting/ledgers', icon: <BookText className="w-4 h-4" /> },
-                    { name: 'Statements', href: '/accounting/statements', icon: <BookText className="w-4 h-4" /> },
+                    { name: 'Trial Balance', href: '/accounting/reports/trial-balance', icon: <Calculator className="w-4 h-4" />, anyPermissionKeys: acct('accounting-trial-balance') },
+                    { name: 'Balance Sheet', href: '/accounting/reports/balance-sheet', icon: <BarChart3 className="w-4 h-4" />, anyPermissionKeys: acct('accounting-balance-sheet') },
+                    { name: 'Profit & Loss', href: '/accounting/reports/pnl', icon: <TrendingUp className="w-4 h-4" />, anyPermissionKeys: acct('accounting-pnl') },
+                    { name: 'Day Book', href: '/accounting/reports/day-book', icon: <CalendarDays className="w-4 h-4" />, anyPermissionKeys: acct('accounting-day-book') },
+                    { name: 'Sales Register', href: '/accounting/reports/sales-register', icon: <Receipt className="w-4 h-4" />, anyPermissionKeys: acct('accounting-sales-register') },
+                    { name: 'GST Returns', href: '/accounting/gst-returns', icon: <Receipt className="w-4 h-4" />, anyPermissionKeys: acct('accounting-gst-returns') },
+                    { name: 'Stock & Valuation', href: '/accounting/stock', icon: <Tags className="w-4 h-4" />, anyPermissionKeys: acct('accounting-stock') },
+                    { name: 'Ledgers', href: '/accounting/ledgers', icon: <BookText className="w-4 h-4" />, anyPermissionKeys: acct('accounting-ledgers') },
+                    { name: 'Statements', href: '/accounting/statements', icon: <BookText className="w-4 h-4" />, anyPermissionKeys: acct('accounting-statements') },
                 ],
             },
             {
                 name: 'Settings',
                 icon: <Settings className="w-4 h-4" />,
                 children: [
-                    { name: 'Overview', href: '/accounting', icon: <Settings className="w-4 h-4" /> },
-                    { name: 'Tally', href: '/accounting/tally-settings', icon: <Receipt className="w-4 h-4" /> },
-                    { name: 'Tally Reconcile', href: '/accounting/reconcile', icon: <Calculator className="w-4 h-4" /> },
-                    { name: 'Opening Balances', href: '/accounting/opening-balances', icon: <BookText className="w-4 h-4" /> },
-                    { name: 'Bank Recon', href: '/accounting/bank-reconciliation', icon: <Banknote className="w-4 h-4" /> },
-                    { name: 'Reminders', href: '/accounting/reminders', icon: <Bell className="w-4 h-4" /> },
+                    { name: 'Overview', href: '/accounting', icon: <Settings className="w-4 h-4" />, anyPermissionKeys: acct('accounting-overview') },
+                    { name: 'Tally', href: '/accounting/tally-settings', icon: <Receipt className="w-4 h-4" />, anyPermissionKeys: acct('accounting-tally') },
+                    { name: 'Tally Reconcile', href: '/accounting/reconcile', icon: <Calculator className="w-4 h-4" />, anyPermissionKeys: acct('accounting-reconcile') },
+                    { name: 'Opening Balances', href: '/accounting/opening-balances', icon: <BookText className="w-4 h-4" />, anyPermissionKeys: acct('accounting-opening-balances') },
+                    { name: 'Bank Recon', href: '/accounting/bank-reconciliation', icon: <Banknote className="w-4 h-4" />, anyPermissionKeys: acct('accounting-bank-recon') },
+                    { name: 'Reminders', href: '/accounting/reminders', icon: <Bell className="w-4 h-4" />, anyPermissionKeys: acct('accounting-reminders') },
                 ],
             },
             // Inventory folded in (keeps its own `inventory` gate via /inventory/* hrefs),
@@ -301,7 +312,7 @@ const navItems: NavItem[] = [
                     { name: 'Vendor Payments', href: '/inventory/payments', icon: <Banknote className="w-4 h-4" /> },
                     { name: 'Vendor Ledger', href: '/inventory/ledger', icon: <BookText className="w-4 h-4" /> },
                     { name: 'Purchase Report', href: '/inventory/report', icon: <BarChart3 className="w-4 h-4" /> },
-                    { name: 'Dairy Records', href: '/inventory/dairy-records', icon: <Milk className="w-4 h-4" /> },
+                    { name: 'Dairy Records', href: '/inventory/dairy-records', icon: <Milk className="w-4 h-4" />, anyPermissionKeys: parentOr('inventory', 'inventory-dairy-records') },
                     { name: 'Cost Prices (Bulk)', href: '/inventory/cost-prices', icon: <Calculator className="w-4 h-4" /> },
                     {
                         name: 'Production',
@@ -339,9 +350,9 @@ const navItems: NavItem[] = [
             { name: 'Transaction Descriptions', href: '/settings/transaction-descriptions', icon: <Receipt className="w-4 h-4" /> },
             { name: 'Banners', href: '/banners', icon: <Image className="w-4 h-4" /> },
             { name: 'Testimonials', href: '/testimonials', icon: <MessageSquare className="w-4 h-4" /> },
-            { name: 'Pages', href: '/pages', icon: <FileText className="w-4 h-4" /> },
+            { name: 'Pages', href: '/pages', icon: <FileText className="w-4 h-4" />, anyPermissionKeys: parentOr('settings', 'pages') },
             { name: 'App Updates', href: '/app-updates', icon: <Smartphone className="w-4 h-4" />, permissionKey: 'app-updates' },
-            { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-4 h-4" /> },
+            { name: 'Delivery Locations', href: '/delivery-locations', icon: <Navigation className="w-4 h-4" />, anyPermissionKeys: parentOr('settings', 'delivery-locations') },
             { name: 'Drop Points', href: '/drop-points', icon: <MapPin className="w-4 h-4" />, permissionKey: 'drop-points' },
             { name: 'Pincodes', href: '/pincodes', icon: <MapPin className="w-4 h-4" /> },
             { name: 'Notification Images', href: '/notifications/images', icon: <Image className="w-4 h-4" />, permissionKey: 'notifications' },
@@ -358,11 +369,13 @@ const navItems: NavItem[] = [
         name: 'Archive',
         icon: <CalendarDays className="w-5 h-5" />,
         children: [
-            { name: 'Upcoming Orders', href: '/upcoming-orders', icon: <ShoppingCart className="w-4 h-4" /> },
-            { name: 'Upcoming Subs', href: '/upcoming-subs-orders', icon: <CalendarDays className="w-4 h-4" /> },
-            { name: 'Pre-Packing List', href: '/production-delivery?tab=prepacking', icon: <Package className="w-4 h-4" /> },
-            { name: 'User Holidays', href: '/holidays', icon: <Calendar className="w-4 h-4" /> },
-            { name: 'Calendar', href: '/calendar', icon: <Calendar className="w-4 h-4" /> },
+            { name: 'Upcoming Orders', href: '/upcoming-orders', icon: <ShoppingCart className="w-4 h-4" />, anyPermissionKeys: parentOr('orders', 'upcoming-orders') },
+            { name: 'Upcoming Subs', href: '/upcoming-subs-orders', icon: <CalendarDays className="w-4 h-4" />, anyPermissionKeys: parentOr('orders', 'upcoming-subs-orders') },
+            // The href carries a query string, so segment derivation can't find a
+            // key — gate it explicitly (it is a tab of the production-delivery page).
+            { name: 'Pre-Packing List', href: '/production-delivery?tab=prepacking', icon: <Package className="w-4 h-4" />, anyPermissionKeys: parentOr('production-delivery', 'pre-packing-list') },
+            { name: 'User Holidays', href: '/holidays', icon: <Calendar className="w-4 h-4" />, anyPermissionKeys: parentOr('orders', 'holidays') },
+            { name: 'Calendar', href: '/calendar', icon: <Calendar className="w-4 h-4" />, anyPermissionKeys: parentOr('orders', 'calendar') },
             { name: 'Low Wallet', href: '/notifications/low-wallet', icon: <Wallet className="w-4 h-4" /> },
             { name: 'Notification Log', href: '/notifications/log', icon: <Bell className="w-4 h-4" /> },
         ],
@@ -425,6 +438,25 @@ const KNOWN_PERMISSION_KEYS = new Set([
     // settings. The server decides (withDesk); these keys only filter the sidebar.
     'desk',
     'desk-manager',
+    // Pages that used to have no key at all (visible to every role, so they
+    // could not be assigned). Derived from the href's first segment.
+    'performance-report', 'recovery', 'pages', 'delivery-locations',
+    'upcoming-orders', 'upcoming-subs-orders', 'holidays', 'calendar',
+    'pre-packing-list',
+    // Per-page keys for pages that were only reachable through a broad parent
+    // key. Those leaves use anyPermissionKeys [parent, own] so roles holding
+    // the parent keep them.
+    'delivery-shops', 'inventory-dairy-records',
+    ...PULSE_SECTION_KEYS,
+    'accounting-overview', 'accounting-customers', 'accounting-accounts',
+    'accounting-vouchers', 'accounting-invoices', 'accounting-shops-billing',
+    'accounting-purchases', 'accounting-reimbursements', 'accounting-hsn',
+    'accounting-b2c-consolidation', 'accounting-trial-balance',
+    'accounting-balance-sheet', 'accounting-pnl', 'accounting-day-book',
+    'accounting-sales-register', 'accounting-gst-returns', 'accounting-stock',
+    'accounting-ledgers', 'accounting-statements', 'accounting-tally',
+    'accounting-reconcile', 'accounting-opening-balances',
+    'accounting-bank-recon', 'accounting-reminders',
 ]);
 
 const navItemPermission = (item: NavItem): string | undefined => {
