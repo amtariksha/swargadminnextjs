@@ -404,7 +404,11 @@ export interface DeskRights {
     via: DeskVia;
 }
 /** data of GET /api/support/whoami (backend). */
-export interface DeskWhoami extends DeskRights { user: DeskActor }
+export interface DeskWhoami extends DeskRights {
+    user: DeskActor;
+    /** Back-office staff (src/proxy.ts role gate). Absent from a backend older than the flag. */
+    staff?: boolean;
+}
 
 /** data of GET /api/desk/me. */
 export interface DeskMe extends DeskRights {

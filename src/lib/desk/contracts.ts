@@ -428,6 +428,7 @@ export const whoamiData = z.object({
     money: z.boolean(),
     inbox: z.boolean(),
     via: z.enum(DESK_VIA),
+    staff: z.boolean().optional(),
 });
 /** The backend envelope, as far as AD needs it. */
 export const backendEnvelope = <T extends z.ZodType>(data: T) =>
