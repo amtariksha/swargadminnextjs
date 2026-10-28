@@ -383,6 +383,10 @@ export interface TallyConfig {
     daily_post_hour?: number | null;
     /** GST rate ("5") → Tally sales ledger. */
     sales_ledger_by_rate?: Record<string, string>;
+    /** 1 = Sales vouchers go as item invoices (stock items). Migration 129. */
+    tally_item_invoices?: number;
+    /** Godown on item invoices; null = Main Location. */
+    tally_godown?: string | null;
     has_credentials: boolean;
 }
 

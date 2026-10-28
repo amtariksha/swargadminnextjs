@@ -17,8 +17,9 @@ import TallyLedgerMapping from '@/components/accounting/TallyLedgerMapping';
 import TallyMastersImport from '@/components/accounting/TallyMastersImport';
 import RazorpaySettlementSync from '@/components/accounting/RazorpaySettlementSync';
 import TallyDuplicateCheck from '@/components/accounting/TallyDuplicateCheck';
+import TallyProductMapping from '@/components/accounting/TallyProductMapping';
 import {
-    Power, RefreshCw, Building2, KeyRound, Server, Download, Camera, Wand2, AlertTriangle, Send, CalendarClock,
+    Power, RefreshCw, Building2, KeyRound, Server, Download, Camera, Wand2, AlertTriangle, Send, CalendarClock, Package,
 } from 'lucide-react';
 import { PUT, POST } from '@/lib/api';
 import { toast } from 'sonner';
@@ -33,6 +34,8 @@ const blankForm = {
     tally_posting_enabled: 0,
     tally_import_enabled: 0,
     auto_create_masters: 0,
+    tally_item_invoices: 0,
+    tally_godown: '',
     purchase_auto_post_confidence: '',
     bridge_credentials: '',
     posting_from_date: '',
@@ -84,6 +87,7 @@ export default function TallySettingsPage() {
                     { label: 'Settings', content: <SettingsTab cfg={cfg} isLoading={isLoading} refetch={refetch} /> },
                     { label: 'Masters from Tally', content: <TallyMastersImport /> },
                     { label: 'Ledger mapping', content: <TallyLedgerMapping /> },
+                    { label: 'Product mapping', content: <TallyProductMapping /> },
                     { label: 'Sync queue', content: <SyncQueueTab /> },
                     { label: 'Import from Tally', content: <ImportTab /> },
                 ]}
@@ -113,6 +117,8 @@ function SettingsTab({
                 tally_posting_enabled: Number(cfg.tally_posting_enabled ?? 0),
                 tally_import_enabled: Number(cfg.tally_import_enabled ?? 0),
                 auto_create_masters: Number(cfg.auto_create_masters ?? 0),
+                tally_item_invoices: Number(cfg.tally_item_invoices ?? 0),
+                tally_godown: cfg.tally_godown || '',
                 purchase_auto_post_confidence: cfg.purchase_auto_post_confidence != null ? String(cfg.purchase_auto_post_confidence) : '',
                 bridge_credentials: '',
                 posting_from_date: cfg.posting_from_date ? String(cfg.posting_from_date).slice(0, 10) : '',
@@ -148,6 +154,11 @@ function SettingsTab({
                 tally_posting_enabled: form.tally_posting_enabled ? 1 : 0,
                 tally_import_enabled: form.tally_import_enabled ? 1 : 0,
                 auto_create_masters: form.auto_create_masters ? 1 : 0,
+                // Item invoices + godown exist from migration 129; absent before it.
+                ...(cfg && 'tally_item_invoices' in cfg ? {
+                    tally_item_invoices: form.tally_item_invoices ? 1 : 0,
+                    tally_godown: form.tally_godown.trim() || null,
+                } : {}),
                 // Blank keeps the stored threshold (backend treats missing/blank as "no change").
                 purchase_auto_post_confidence: form.purchase_auto_post_confidence !== '' ? Number(form.purchase_auto_post_confidence) : null,
                 posting_from_date: form.posting_from_date || null,
@@ -169,6 +180,7 @@ function SettingsTab({
     const togglePosting = () => setForm((f) => ({ ...f, tally_posting_enabled: f.tally_posting_enabled ? 0 : 1 }));
     const toggleImport = () => setForm((f) => ({ ...f, tally_import_enabled: f.tally_import_enabled ? 0 : 1 }));
     const toggleAutoCreate = () => setForm((f) => ({ ...f, auto_create_masters: f.auto_create_masters ? 0 : 1 }));
+    const toggleItemInvoices = () => setForm((f) => ({ ...f, tally_item_invoices: f.tally_item_invoices ? 0 : 1 }));
 
     if (isLoading) return <div className="text-slate-400 text-sm py-8 text-center">Loading…</div>;
 
@@ -271,6 +283,39 @@ function SettingsTab({
                     {form.auto_create_masters ? 'On' : 'Off'}
                 </button>
             </div>
+
+            {/* Item invoices (migration 129) */}
+            {cfg && 'tally_item_invoices' in cfg && (
+                <div className="glass rounded-2xl p-5 space-y-3">
+                    <div className="flex items-center justify-between gap-6">
+                        <div>
+                            <div className="flex items-center gap-2 text-white font-semibold">
+                                <Package className="w-4 h-4 text-purple-400" /> Send bills as item invoices
+                            </div>
+                            <p className="text-sm text-slate-400 mt-1">
+                                Each bill line goes to Tally as its stock item — quantity, rate and HSN — like a bill made by hand
+                                in Tally. Map products first (Product mapping tab): a bill with an unmapped product waits in the
+                                Sync queue as failed, naming the product. Off = amounts only, as before.
+                            </p>
+                        </div>
+                        <button type="button" onClick={toggleItemInvoices}
+                            className={`shrink-0 px-4 py-2 rounded-xl font-medium border transition-colors ${
+                                form.tally_item_invoices
+                                    ? 'bg-green-500/20 text-green-400 border-green-500/30'
+                                    : 'bg-slate-800/50 text-slate-400 border-slate-700/50'
+                            }`}>
+                            {form.tally_item_invoices ? 'On' : 'Off'}
+                        </button>
+                    </div>
+                    <label className="flex items-center gap-3 text-sm text-slate-300">
+                        <span className="shrink-0">Godown</span>
+                        <input value={form.tally_godown} placeholder="Main Location"
+                            onChange={(e) => setForm({ ...form, tally_godown: e.target.value })}
+                            className={`${inputCls} !w-64`} aria-label="Tally godown" />
+                        <span className="text-xs text-slate-500">Blank = Main Location (Tally&rsquo;s default)</span>
+                    </label>
+                </div>
+            )}
 
             {/* OCR auto-post threshold */}
             <div className="glass rounded-2xl p-5 flex items-center justify-between gap-6">
