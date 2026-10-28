@@ -76,9 +76,8 @@ export function MatchBanner({ ticket, snapshot, viewingId, matchError, onPick, s
             {matchError ? (
                 <p className="text-xs text-slate-500">The match was not saved on the ticket: {describeDeskError(matchError).text}</p>
             ) : null}
-            {kind === 'candidates' || kind === 'none' ? (
-                <div className="flex flex-wrap gap-2 empty:hidden">{slots({ at: 'match' })}</div>
-            ) : null}
+            {/* Always mounted: an action drawer opened from here must outlive a refetch that changes the match kind. */}
+            <div className="flex flex-wrap gap-2 empty:hidden">{slots({ at: 'match' })}</div>
         </section>
     );
 }

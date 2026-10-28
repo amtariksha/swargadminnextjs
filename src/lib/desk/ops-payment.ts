@@ -15,6 +15,24 @@ export function isOrderAlreadyPaid(error: unknown): boolean {
     return asRecord(error)?.code === 'daytime_order_paid';
 }
 
+/** True unless the backend definitely refused (4xx): a timeout, a dropped connection or a 5xx may hide a call that landed. */
+export function isIndeterminateError(error: unknown): boolean {
+    const status = asRecord(error)?.status;
+    return !(typeof status === 'number' && status >= 400 && status < 500);
+}
+
+export interface PaymentDrawerFlags {
+    stage: 'payment' | 'recording' | 'failed'; strict: boolean; orderUnavailable: boolean; unrecordable: boolean;
+    busy: boolean; confirming: boolean;
+}
+
+/** May the payment drawer be closed (X, Escape, backdrop) right now? Never under a call or an open confirm. */
+export function paymentDrawerClosable(flags: PaymentDrawerFlags): boolean {
+    if (flags.busy || flags.confirming) return false;
+    if (flags.stage === 'failed') return true;
+    return flags.stage === 'payment' && (!flags.strict || flags.orderUnavailable || flags.unrecordable);
+}
+
 /** `res` is the whole body of `GET /daytime/orders/:id`. */
 export function readOrderPaymentState(res: unknown): OrderPaymentState | null {
     const data = asRecord(asRecord(res)?.data);
@@ -30,6 +48,7 @@ export function stepFromOrderState(state: OrderPaymentState): DayOrderStep | nul
     if (state.status === 'link_sent' && state.linkId !== null) return paymentStepFor({ kind: 'link_sent', paymentLinkId: state.linkId });
     if (state.status !== 'paid') return null;
     if (state.mode === 'upi') return paymentStepFor({ kind: 'marked_paid', mode: 'upi' });
-    if (state.linkId === null) return null;
+    // Only a link payment (or an unlabelled one) may be read as the link: any other mode with a stale link id is not it.
+    if (state.linkId === null || (state.mode !== null && state.mode !== 'link' && state.mode !== 'razorpay')) return null;
     return { payment_step: 'link_sent', payment_status: 'paid', payment_mode: 'link', payment_link_id: state.linkId };
 }

@@ -17,6 +17,7 @@ import {
     buildDayOrderBody, newCustomerPreset, planOpsResolution, presetCustomerFor, recordOnlyBody, resolveFragment,
     type DayOrderStep, type PresetCustomer, type PresetResult, type RecordFailure,
 } from '@/lib/desk/ops-actions';
+import { paymentDrawerClosable } from '@/lib/desk/ops-payment';
 import { useDeskCategories } from '@/lib/desk/ticket-hooks';
 import type { SnapshotDayOrder } from '@/lib/desk/types';
 import { ActionDrawer } from './ActionDrawer';
@@ -40,6 +41,8 @@ function PaymentDrawer({ ctx, seen, title, orderId, total, deliveryDate, newCust
     const [clientActionId] = useState(newClientActionId);
     const [stage, setStage] = useState<Stage>({ at: 'payment' });
     const [walletConfirm, setWalletConfirm] = useState(false);
+    const [panelBusy, setPanelBusy] = useState(false);
+    const [unrecordable, setUnrecordable] = useState(false);
     const needsOrder = total === null || deliveryDate === null;
     const order = useDaytimeOrder(needsOrder ? orderId : undefined);
     const categories = useDeskCategories();
@@ -48,7 +51,7 @@ function PaymentDrawer({ ctx, seen, title, orderId, total, deliveryDate, newCust
     const recorder = useRecordAndClose(ctx, onDone);
     const finalTotal = total ?? order.data?.total_amount ?? null;
     const finalDate = deliveryDate ?? order.data?.delivery_date ?? null;
-    const leaveWarning = strict || stage.at !== 'payment';
+    const leaveWarning = strict || stage.at !== 'payment' || panelBusy;
 
     useEffect(() => {
         if (!leaveWarning) return undefined;
@@ -70,14 +73,21 @@ function PaymentDrawer({ ctx, seen, title, orderId, total, deliveryDate, newCust
         }));
     };
     const failure = stage.at === 'failed' ? stage.failure : null;
-    const guard = useCloseGuard(failure, onDone);
     // A just-saved order can only be left before a step is taken, and only if its total can never be loaded (nothing to pay).
     const orderUnavailable = needsOrder && order.isError;
-    const closable = (stage.at === 'failed' || (stage.at === 'payment' && (!strict || orderUnavailable)))
-        && !guard.confirming && !walletConfirm;
+    const leavingSavedOrder = strict && stage.at === 'payment' && orderUnavailable;
+    const guard = useCloseGuard(failure, onDone, unrecordable || leavingSavedOrder);
+    const closable = paymentDrawerClosable({
+        stage: stage.at, strict, orderUnavailable, unrecordable, busy: panelBusy, confirming: guard.confirming || walletConfirm,
+    });
+    const closeMessage = unrecordable
+        ? `Order ${orderId} is paid in the backend, but how could not be read, so no payment step is on this ticket. Close anyway?`
+        : leavingSavedOrder
+            ? `Order ${orderId} is saved but its payment step was not taken and it is not on this ticket. Take the step later from the recent day orders. Close anyway?`
+            : `Order ${orderId} is saved and its payment step is done, but it is not on this ticket. The ticket stays open and the pane will list the order under recent actions. Close anyway?`;
 
     return (
-        <ActionDrawer title={title} open onClose={guard.requestClose} closable={closable}>
+        <ActionDrawer title={title} open onClose={guard.requestClose} closable={closable} suspended={guard.confirming || walletConfirm}>
             <div className="space-y-4">
                 {needsOrder && order.isPending ? <p className="text-sm text-slate-400">Loading the saved order…</p> : null}
                 {needsOrder && order.isError ? (
@@ -92,7 +102,8 @@ function PaymentDrawer({ ctx, seen, title, orderId, total, deliveryDate, newCust
                 {finalTotal !== null && finalDate !== null && !categories.isPending ? (
                     <>
                         <ResolveChoice plan={plan} current={ctx.category} value={choice} onChange={setChoice} disabled={stage.at !== 'payment'} />
-                        <DayOrderPaymentPanel orderId={orderId} total={finalTotal} onStep={onStep} onConfirming={setWalletConfirm} />
+                        <DayOrderPaymentPanel orderId={orderId} total={finalTotal} onStep={onStep} onConfirming={setWalletConfirm}
+                            onBusy={setPanelBusy} onUnrecordable={() => setUnrecordable(true)} />
                     </>
                 ) : null}
                 {stage.at === 'recording' ? <p className="text-sm text-slate-300">Recording on the ticket…</p> : null}
@@ -108,8 +119,7 @@ function PaymentDrawer({ ctx, seen, title, orderId, total, deliveryDate, newCust
                     </div>
                 ) : null}
             </div>
-            <CloseGuardDialog guard={guard} onDone={onDone}
-                message={`Order ${orderId} is saved and its payment step is done, but it is not on this ticket. The ticket stays open and the pane will list the order under recent actions. Close anyway?`} />
+            <CloseGuardDialog guard={guard} onDone={onDone} message={closeMessage} />
         </ActionDrawer>
     );
 }

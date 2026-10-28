@@ -10,6 +10,7 @@ import { newClientActionId } from '@/lib/desk/action-client';
 import type { DeskActionContext } from '@/lib/desk/action-context';
 import type { TicketActionBody } from '@/lib/desk/contracts';
 import { buildPaymentLinkBody, opsBackendErrorText, readPaymentLinkResult, type RecordFailure } from '@/lib/desk/ops-actions';
+import { isIndeterminateError } from '@/lib/desk/ops-payment';
 import type { SnapshotDayOrder } from '@/lib/desk/types';
 import { ActionDrawer } from './ActionDrawer';
 import { CloseGuardDialog, FailureNotice, useCloseGuard, useRecordAndClose } from './OpsRecord';
@@ -19,6 +20,7 @@ function SendDrawer({ ctx, dayOrder, onDone }: { ctx: DeskActionContext; dayOrde
     const [clientActionId] = useState(newClientActionId);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
+    const [uncertain, setUncertain] = useState(false);
     const [last, setLast] = useState<{ body: TicketActionBody; failure: RecordFailure } | null>(null);
     const recorder = useRecordAndClose(ctx, onDone);
     const guard = useCloseGuard(last?.failure ?? null, onDone);
@@ -36,10 +38,12 @@ function SendDrawer({ ctx, dayOrder, onDone }: { ctx: DeskActionContext; dayOrde
             try {
                 result = readPaymentLinkResult(await POST(`/daytime/orders/${dayOrder.id}/payment_link`));
             } catch (cause) {
+                // A dropped connection or a 5xx can hide a link that was created and sent: warn before a second one goes out.
+                if (isIndeterminateError(cause)) setUncertain(true);
                 setError(opsBackendErrorText(cause, 'Could not send the payment link.'));
                 return;
             }
-            if (result === null) { setError('The backend did not return a payment link.'); return; }
+            if (result === null) { setUncertain(true); setError('The backend did not return a payment link, so one may already exist.'); return; }
             if (!result.whatsappSent) {
                 const url = result.shortUrl;
                 toast.warning(`Payment link created, but WhatsApp was not sent (${result.whatsappNote ?? 'unknown reason'}). Copy it into the chat.`, {
@@ -59,20 +63,23 @@ function SendDrawer({ ctx, dayOrder, onDone }: { ctx: DeskActionContext; dayOrde
     };
 
     return (
-        <ActionDrawer title="Send payment link" open onClose={guard.requestClose} closable={!busy && !guard.confirming}>
+        <ActionDrawer title="Send payment link" open onClose={guard.requestClose} closable={!busy && !guard.confirming} suspended={guard.confirming}>
             <div className="space-y-3 text-sm text-slate-300">
                 <p>
                     Send a Razorpay payment link for ₹{dayOrder.total_amount} to the customer on WhatsApp?
                     {resend ? ' A link was already sent; this creates a new one.' : ''}
                 </p>
                 {error ? <p className="text-red-400">{error}</p> : null}
+                {uncertain ? (
+                    <p className="text-xs text-amber-300">A link may already have been sent to the customer. Check the chat before sending another.</p>
+                ) : null}
                 {last !== null ? (
                     <FailureNotice failure={last.failure} onRetry={() => { void retry(last.body); }} onRecordOnly={() => { void retry(last.body); }} />
                 ) : (
                     <div className="flex gap-2">
                         <button type="button" disabled={busy} onClick={onDone} className="flex-1 rounded-xl bg-slate-800 px-3 py-2">Cancel</button>
                         <button type="button" disabled={busy} onClick={() => { void send(); }}
-                            className="flex-1 rounded-xl bg-green-600 px-3 py-2 text-white disabled:opacity-50">{busy ? 'Sending…' : 'Send'}</button>
+                            className="flex-1 rounded-xl bg-green-600 px-3 py-2 text-white disabled:opacity-50">{busy ? 'Sending…' : uncertain ? 'Send another anyway' : 'Send'}</button>
                     </div>
                 )}
             </div>

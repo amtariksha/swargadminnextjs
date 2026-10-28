@@ -63,7 +63,8 @@ export function CustomerPane({ detail, tab, categories, seen, onActionConflict, 
     const linkPatch = useTicketPatch(ticket.id);
 
     if (snapshotPhone(ticket.customer_phone) === null) return <PaneMessage text="This ticket has no phone number to look up." />;
-    if (query.isError) {
+    // A failed background refetch keeps the last good data on screen: unmounting here would drop every open drawer.
+    if (query.isError && query.data === undefined) {
         const code = query.error instanceof SnapshotError ? query.error.code : 'network';
         const { text, retry } = snapshotErrorText(code);
         const detail = code === 'bad_response' ? query.error.message : undefined;

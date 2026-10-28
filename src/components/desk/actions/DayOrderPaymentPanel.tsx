@@ -11,13 +11,17 @@ import { GET, POST } from '@/lib/api';
 import {
     opsBackendErrorText, paymentStepFor, readPaymentLinkResult, type DayOrderStep, type PaymentChoice,
 } from '@/lib/desk/ops-actions';
-import { isOrderAlreadyPaid, readOrderPaymentState, stepFromOrderState } from '@/lib/desk/ops-payment';
+import { isIndeterminateError, isOrderAlreadyPaid, readOrderPaymentState, stepFromOrderState } from '@/lib/desk/ops-payment';
 import type { MarkPaidMode } from '@/lib/desk/constants';
 
 interface Props {
     orderId: number; total: number; onStep: (step: DayOrderStep) => void;
     /** The wallet confirm is open: the drawer must not also close on Escape. */
     onConfirming: (open: boolean) => void;
+    /** A backend payment call is in flight: the drawer must not close under it. */
+    onBusy: (busy: boolean) => void;
+    /** The order is paid in the backend but how could not be read: there is no step to record, the exec may leave. */
+    onUnrecordable: () => void;
 }
 
 const BUTTON = 'w-full rounded-xl bg-slate-800 px-3 py-2 text-sm text-slate-100 hover:bg-slate-700 disabled:opacity-50';
@@ -29,14 +33,17 @@ function takenText(step: DayOrderStep): string {
     return 'Collect on delivery';
 }
 
-export function DayOrderPaymentPanel({ orderId, total, onStep, onConfirming }: Props) {
-    const [busy, setBusy] = useState(false);
+export function DayOrderPaymentPanel({ orderId, total, onStep, onConfirming, onBusy, onUnrecordable }: Props) {
+    const [busy, setBusyState] = useState(false);
     const [taken, setTaken] = useState<DayOrderStep | null>(null);
     const [error, setError] = useState('');
     const [mode, setMode] = useState<MarkPaidMode>('cash');
     const [note, setNote] = useState('');
     const [confirmWallet, setConfirmWallet] = useState(false);
-    const locked = busy || taken !== null;
+    const [alreadyPaid, setAlreadyPaid] = useState(false);
+    const [uncertain, setUncertain] = useState(false);
+    const locked = busy || taken !== null || alreadyPaid;
+    const setBusy = (value: boolean) => { setBusyState(value); onBusy(value); };
 
     const finishStep = (step: DayOrderStep) => {
         setTaken(step);
@@ -46,17 +53,34 @@ export function DayOrderPaymentPanel({ orderId, total, onStep, onConfirming }: P
     const askWallet = (open: boolean) => { setConfirmWallet(open); onConfirming(open); };
 
     // After a lost response or a repeated click the backend may already hold the step: record what it really holds.
-    const reconcile = async (): Promise<boolean> => {
+    const reconcile = async (message: string): Promise<boolean> => {
         try {
             const state = readOrderPaymentState(await GET(`/daytime/orders/${orderId}`));
             const step = state === null ? null : stepFromOrderState(state);
             if (step === null) return false;
-            toast.info('This order already had its payment step done. It is recorded as the backend shows it.');
+            toast.info(message);
             finishStep(step);
             return true;
         } catch {
             return false;
         }
+    };
+    /** True when the failure was settled here: recorded from the real state, or the order is paid and nothing can be recorded. */
+    const settle = async (cause: unknown, isLink: boolean): Promise<boolean> => {
+        const paid = isOrderAlreadyPaid(cause);
+        if (!paid && !isIndeterminateError(cause)) return false;
+        const message = paid ? 'This order was already paid. It is recorded as the backend shows it.'
+            : isLink ? 'The payment link had been created. It is recorded as the backend shows it.'
+                : 'The payment had gone through. It is recorded as the backend shows it.';
+        if (await reconcile(message)) return true;
+        if (paid) {
+            setAlreadyPaid(true);
+            onUnrecordable();
+            setError('This order is already paid in the backend, but how it was paid could not be read. No payment step is recorded; you can close this.');
+            return true;
+        }
+        if (isLink) setUncertain(true);
+        return false;
     };
 
     const sendLink = async () => {
@@ -65,7 +89,10 @@ export function DayOrderPaymentPanel({ orderId, total, onStep, onConfirming }: P
         try {
             const result = readPaymentLinkResult(await POST(`/daytime/orders/${orderId}/payment_link`));
             if (result === null) {
-                if (!(await reconcile())) setError('The backend did not return a payment link. Check the order before trying again: a link may exist.');
+                if (!(await reconcile('The payment link had been created. It is recorded as the backend shows it.'))) {
+                    setUncertain(true);
+                    setError('The backend did not return a payment link, so one may already exist.');
+                }
                 return;
             }
             if (result.whatsappSent) toast.success('Payment link sent on WhatsApp');
@@ -77,7 +104,7 @@ export function DayOrderPaymentPanel({ orderId, total, onStep, onConfirming }: P
             }
             finish({ kind: 'link_sent', paymentLinkId: result.paymentLinkId });
         } catch (cause) {
-            if (isOrderAlreadyPaid(cause) && await reconcile()) return;
+            if (await settle(cause, true)) return;
             setError(opsBackendErrorText(cause, 'Could not complete the payment step.'));
         } finally {
             setBusy(false);
@@ -92,7 +119,7 @@ export function DayOrderPaymentPanel({ orderId, total, onStep, onConfirming }: P
             await POST(`/daytime/orders/${orderId}/mark_paid`, { payment_mode: mode, ...(note.trim() ? { note: note.trim() } : {}) });
             finish({ kind: 'marked_paid', mode });
         } catch (cause) {
-            if (isOrderAlreadyPaid(cause) && await reconcile()) return;
+            if (await settle(cause, false)) return;
             setError(opsBackendErrorText(cause, 'Could not complete the payment step.'));
         } finally {
             setBusy(false);
@@ -103,8 +130,13 @@ export function DayOrderPaymentPanel({ orderId, total, onStep, onConfirming }: P
         <div className="space-y-3 text-sm text-slate-300">
             <p className="font-medium text-white">Order {orderId} · Total ₹{total.toFixed(2)}</p>
             <button type="button" className={BUTTON} disabled={locked || total <= 0} onClick={() => { void sendLink(); }}>
-                Send payment link
+                {uncertain ? 'Send another link anyway' : 'Send payment link'}
             </button>
+            {uncertain ? (
+                <p className="text-xs text-amber-300">
+                    A link for this order may already exist, and the customer may already have it. Check the chat before sending another.
+                </p>
+            ) : null}
             <div className="space-y-2 rounded-xl border border-slate-800 p-3">
                 <select className={selectClassName} value={mode} disabled={locked} onChange={(event) => setMode(event.target.value as MarkPaidMode)}>
                     {(Object.keys(MODE_LABEL) as MarkPaidMode[]).map((key) => <option key={key} value={key}>{MODE_LABEL[key]}</option>)}

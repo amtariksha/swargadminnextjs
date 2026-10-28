@@ -15,12 +15,14 @@ export interface ActionDrawerProps {
     onClose: () => void;
     /** false between "day order saved" and its payment step (contract §2.3): no close button, Escape or backdrop. */
     closable: boolean;
+    /** A confirm is open over the drawer: `closable` is off, but say nothing about finishing a step. */
+    suspended?: boolean;
     children: ReactNode;
 }
 
 const subscribeNever = () => () => {};
 
-export function ActionDrawer({ title, open, onClose, closable, children }: ActionDrawerProps) {
+export function ActionDrawer({ title, open, onClose, closable, suspended = false, children }: ActionDrawerProps) {
     const isClient = useSyncExternalStore(subscribeNever, () => true, () => false);
 
     useEffect(() => {
@@ -55,7 +57,7 @@ export function ActionDrawer({ title, open, onClose, closable, children }: Actio
                         >
                             <X className="h-5 w-5" />
                         </button>
-                    ) : (
+                    ) : suspended ? null : (
                         <span className="text-xs text-amber-300">Finish this step to close</span>
                     )}
                 </div>

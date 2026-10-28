@@ -73,7 +73,7 @@ function Flow({ ctx, delivery, onDone }: { ctx: DeskActionContext; delivery: Sna
     };
 
     return (
-        <ActionDrawer title="Mark not delivered" open onClose={guard.requestClose} closable={!busy && !guard.confirming}>
+        <ActionDrawer title="Mark not delivered" open onClose={guard.requestClose} closable={!busy && !guard.confirming} suspended={guard.confirming}>
             <div className="space-y-3 text-sm text-slate-300">
                 <p>
                     {delivery.delivery_date} · {delivery.product_title}{delivery.qty_text ? ` (${delivery.qty_text})` : ''} × {delivery.qty}

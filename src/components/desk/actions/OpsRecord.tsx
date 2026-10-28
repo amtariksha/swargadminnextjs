@@ -80,9 +80,9 @@ export function useResolveChoice(initial: OpsResolveChoice): [OpsResolveChoice, 
  * Closing a drawer whose backend step is done but whose record failed (retryable) asks first; `confirming` must also
  * switch off the drawer's own Escape/backdrop close, or Escape closes both.
  */
-export function useCloseGuard(failure: RecordFailure | null, onDone: () => void) {
+export function useCloseGuard(failure: RecordFailure | null, onDone: () => void, alsoConfirm = false) {
     const [confirming, setConfirming] = useState(false);
-    const requestClose = () => (failure !== null && failure.kind !== 'final' ? setConfirming(true) : onDone());
+    const requestClose = () => (alsoConfirm || (failure !== null && failure.kind !== 'final') ? setConfirming(true) : onDone());
     return { confirming, requestClose, cancel: () => setConfirming(false) };
 }
 

@@ -74,7 +74,7 @@ function HolidayFlow({ ctx, userId, name, nowMs, onDone }: FlowProps) {
     };
 
     return (
-        <ActionDrawer title="Holiday" open onClose={guard.requestClose} closable={!busy && !guard.confirming}>
+        <ActionDrawer title="Holiday" open onClose={guard.requestClose} closable={!busy && !guard.confirming} suspended={guard.confirming}>
             <div className="space-y-3 text-sm text-slate-300">
                 <p>Pauses every subscription of {name ?? 'this customer'} ({ctx.snapshot.subscriptions.length} active).</p>
                 {existing.length > 0 ? (

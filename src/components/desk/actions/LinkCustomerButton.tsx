@@ -63,7 +63,7 @@ function LinkDrawer({ ctx, candidate, onDone }: { ctx: DeskActionContext; candid
     };
 
     return (
-        <ActionDrawer title="Link this WhatsApp number?" open onClose={guard.requestClose} closable={!busy && !guard.confirming}>
+        <ActionDrawer title="Link this WhatsApp number?" open onClose={guard.requestClose} closable={!busy && !guard.confirming} suspended={guard.confirming}>
             <div className="space-y-3 text-sm text-slate-300">
                 <p>
                     Future messages from {phone} will be matched to {label(candidate)}. The number is added to that
