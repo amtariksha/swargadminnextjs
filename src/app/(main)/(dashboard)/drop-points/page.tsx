@@ -143,6 +143,21 @@ export default function DropPointsPage() {
         },
         { key: 'id', header: 'ID', width: '60px' },
         { key: 'title', header: 'Title', width: '220px' },
+        {
+            // 'shop' stops are made by "Mark as B2B shop" (People → B2B / B2C) and
+            // belong to that customer; 'stock' stops are last-mile hand-off points.
+            key: 'kind',
+            header: 'Type',
+            width: '200px',
+            render: (item) => item.kind === 'shop' ? (
+                <span className="inline-flex items-center gap-2">
+                    <span className="text-xs px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300">B2B shop</span>
+                    <span className="text-slate-400 text-xs truncate">{item.shop_customer_name ?? `#${item.b2b_user_id}`}</span>
+                </span>
+            ) : (
+                <span className="text-xs px-2 py-0.5 rounded-md bg-slate-700/50 text-slate-400">Stock hand-off</span>
+            ),
+        },
         { key: 'route_order', header: 'Route Order', width: '110px' },
         {
             key: 'driver_count',
@@ -160,7 +175,8 @@ export default function DropPointsPage() {
             key: 'delete',
             header: '',
             width: '60px',
-            render: (item) => (
+            // A shop's stop goes with its shop status (Remove B2B shop), not from here.
+            render: (item) => item.kind === 'shop' ? null : (
                 <button
                     onClick={(e) => { e.stopPropagation(); handleDelete(item); }}
                     className="p-2 hover:bg-red-500/20 rounded-lg"
@@ -178,7 +194,10 @@ export default function DropPointsPage() {
                     <MapPin className="w-7 h-7 text-purple-400" />
                     <div>
                         <h1 className="text-2xl font-bold text-white">Drop Points</h1>
-                        <p className="text-slate-400">Truck-route drop points and photos</p>
+                        <p className="text-slate-400">
+                            Truck route: stock hand-off points and B2B shop stops. Route Order sets the truck&apos;s order.
+                            A shop&apos;s stop is made by Mark as B2B shop (People → B2B / B2C → Edit), not by Add New.
+                        </p>
                     </div>
                 </div>
                 <button
@@ -212,6 +231,17 @@ export default function DropPointsPage() {
                         </div>
 
                         <form onSubmit={handleSubmit} className="space-y-4">
+                            {editId == null && (
+                                <p className="text-xs text-slate-400 bg-slate-800/60 rounded-lg p-3">
+                                    This adds a stock hand-off point for last-mile drivers. For a B2B shop, use Mark as B2B
+                                    shop on the customer (People → B2B / B2C → Edit) — that makes its own stop.
+                                </p>
+                            )}
+                            {current?.kind === 'shop' && (
+                                <p className="text-xs text-purple-300 bg-purple-500/10 rounded-lg p-3">
+                                    B2B shop stop for {current.shop_customer_name ?? `customer #${current.b2b_user_id}`}. Set its Route Order to place it in the truck route.
+                                </p>
+                            )}
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-1">Title *</label>
                                 <input

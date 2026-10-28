@@ -123,6 +123,11 @@ export interface DropPoint {
     lng: number | null;
     route_order: number;
     notes: string | null;
+    // 'stock' = hand-off point for last-mile drivers; 'shop' = a B2B shop's own
+    // truck stop, made by "Mark as B2B shop" and linked to that customer.
+    kind?: 'stock' | 'shop';
+    b2b_user_id?: number | null;
+    shop_customer_name?: string | null;
     // Supply routing (migration 083): which warehouse feeds this stop and how
     // that warehouse is stocked (truck route vs factory/dairy pickup).
     warehouse_id?: number | null;

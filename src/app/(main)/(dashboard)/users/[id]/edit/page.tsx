@@ -1,17 +1,15 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useUser, useUpdateUser } from '@/hooks/useData';
-import { GET, POST } from '@/lib/api';
 import FormField, { inputClassName } from '@/components/FormField';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Store } from 'lucide-react';
 import { toast } from 'sonner';
-
-interface B2bStatus { is_b2b: number; billing_cycle: number; drop_point_id: number | null; route_order: number | null; }
 
 const userSchema = z.object({
     name: z.string().min(1, 'Name is required'),
@@ -30,58 +28,6 @@ export default function EditUserPage() {
     const { register, handleSubmit, reset, formState: { errors } } = useForm<UserFormData>({
         resolver: zodResolver(userSchema),
     });
-
-    // B2B shop status (customer_type + its 1:1 'shop' drop point).
-    const [b2b, setB2b] = useState<B2bStatus | null>(null);
-    const [b2bSaving, setB2bSaving] = useState(false);
-
-    useEffect(() => {
-        let active = true;
-        GET<B2bStatus>(`/admin/customer_b2b_status/${id}`)
-            .then((r) => { if (active && r.data) setB2b(r.data); })
-            .catch(() => { });
-        return () => { active = false; };
-    }, [id]);
-
-    const saveB2b = async (is_b2b: number, billing_cycle: number, okMsg: string) => {
-        setB2bSaving(true);
-        try {
-            const saved = await POST<{ driver_links_removed?: number }>('/admin/set_b2b_shop', { user_id: Number(id), is_b2b, billing_cycle });
-            const r = await GET<B2bStatus>(`/admin/customer_b2b_status/${id}`);
-            if (r.data) setB2b(r.data);
-            // Marking a shop also takes its orders off any last-mile driver.
-            const unlinked = saved.data?.driver_links_removed ?? 0;
-            toast.success(unlinked > 0
-                ? `${okMsg} — removed the driver from ${unlinked} order${unlinked === 1 ? '' : 's'}`
-                : okMsg);
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to update B2B status');
-        } finally {
-            setB2bSaving(false);
-        }
-    };
-
-    const toggleB2b = () => {
-        if (!b2b) return;
-        const next = b2b.is_b2b === 1 ? 0 : 1;
-        saveB2b(next, b2b.billing_cycle, next === 1 ? 'Marked as B2B shop' : 'Removed B2B shop');
-    };
-
-    const generateBill = async () => {
-        const now = new Date();
-        const pad = (n: number) => String(n).padStart(2, '0');
-        const from = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
-        const to = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-        setB2bSaving(true);
-        try {
-            const r = await POST<{ invoice_number?: string }>('/admin/generate_monthly_bill', { user_id: Number(id), from, to });
-            toast.success(r.message || 'Bill generated');
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to generate bill');
-        } finally {
-            setB2bSaving(false);
-        }
-    };
 
     useEffect(() => {
         if (user) {
@@ -150,62 +96,12 @@ export default function EditUserPage() {
                 </div>
             </form>
 
-            <div className="glass rounded-xl p-6 max-w-lg space-y-4">
-                <div className="flex items-center justify-between gap-4">
-                    <div>
-                        <h2 className="text-white font-semibold">B2B Shop</h2>
-                        <p className="text-xs text-slate-500 mt-1">
-                            {b2b == null
-                                ? 'Loading…'
-                                : b2b.is_b2b === 1
-                                    ? `This customer is a B2B shop${b2b.drop_point_id ? ` · drop point #${b2b.drop_point_id}` : ''}. Orders route to the truck and bill by invoice (no wallet).`
-                                    : 'Mark as a B2B shop — orders route to the truck via a dedicated drop point and bill by invoice instead of wallet.'}
-                        </p>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={toggleB2b}
-                        disabled={b2b == null || b2bSaving}
-                        className={`shrink-0 px-4 py-2 text-sm rounded-xl disabled:opacity-50 ${b2b?.is_b2b === 1
-                            ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
-                            : 'bg-green-500/20 text-green-300 hover:bg-green-500/30'
-                            }`}
-                    >
-                        {b2bSaving ? 'Saving…' : b2b?.is_b2b === 1 ? 'Remove B2B' : 'Mark as B2B shop'}
-                    </button>
-                </div>
-
-                {b2b?.is_b2b === 1 && (
-                    <div className="border-t border-slate-800/50 pt-4 space-y-3">
-                        <div className="flex items-center justify-between gap-4">
-                            <div>
-                                <p className="text-sm text-white">Billing cycle</p>
-                                <p className="text-xs text-slate-500 mt-0.5">
-                                    {b2b.billing_cycle === 1
-                                        ? 'Monthly — one consolidated invoice per month (no per-delivery invoices).'
-                                        : 'Per delivery — each delivery is invoiced.'}
-                                </p>
-                            </div>
-                            <div className="flex gap-2 shrink-0">
-                                <button type="button" disabled={b2bSaving} onClick={() => saveB2b(1, 0, 'Set to per-delivery billing')}
-                                    className={`px-3 py-1.5 text-xs rounded-lg disabled:opacity-50 ${b2b.billing_cycle === 0 ? 'bg-purple-500/30 text-purple-200' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                                    Per delivery
-                                </button>
-                                <button type="button" disabled={b2bSaving} onClick={() => saveB2b(1, 1, 'Set to monthly billing')}
-                                    className={`px-3 py-1.5 text-xs rounded-lg disabled:opacity-50 ${b2b.billing_cycle === 1 ? 'bg-purple-500/30 text-purple-200' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}>
-                                    Monthly
-                                </button>
-                            </div>
-                        </div>
-                        {b2b.billing_cycle === 1 && (
-                            <button type="button" onClick={generateBill} disabled={b2bSaving}
-                                className="w-full px-4 py-2 text-sm rounded-xl bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 disabled:opacity-50">
-                                {b2bSaving ? 'Working…' : "Generate this month's bill"}
-                            </button>
-                        )}
-                    </div>
-                )}
-            </div>
+            {/* B2B shop setup lives with the GST profile: People → B2B / B2C → Edit. */}
+            <Link href="/accounting/customers"
+                className="glass rounded-xl p-4 max-w-lg flex items-center gap-3 text-sm text-slate-400 hover:text-white">
+                <Store className="w-4 h-4 text-purple-400" />
+                B2B shop and GST settings are under People → B2B / B2C (search, then Edit) →
+            </Link>
         </div>
     );
 }
