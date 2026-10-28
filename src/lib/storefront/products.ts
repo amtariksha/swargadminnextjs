@@ -10,6 +10,7 @@
 
 import { sfQuery, toInt, toFloat, toFlag, parseJsonb, type Row } from './db'
 import { buildAttributeMatrix, pickDefaultVariant, priceRange, resolveBackorder } from './variations'
+import { sizeSellingPrice, withLiveSalePrice } from '@/lib/variantPrice'
 
 const TS = (col: string) => `to_char(${col}, 'YYYY-MM-DD HH24:MI:SS')`
 const D = (col: string) => `to_char(${col}, 'YYYY-MM-DD')`
@@ -196,7 +197,8 @@ export async function loadVariantPayload(product: Row): Promise<Row | null> {
     )
   }
 
-  const variantRows = await sfQuery(
+  // A sale outside its dates is not charged, so the storefront must not show it.
+  const variantRows = (await sfQuery(
     `SELECT id, slug, sku, qty_text, regular_price, sale_price,
             ${TS('sale_starts_at')} AS sale_starts_at, ${TS('sale_ends_at')} AS sale_ends_at,
             stock_quantity, manage_stock, stock_status,
@@ -207,7 +209,7 @@ export async function loadVariantPayload(product: Row): Promise<Row | null> {
      WHERE product_id = $1 AND is_active = 1 AND archived_at IS NULL
      ORDER BY sort_order, id`,
     [productId],
-  )
+  )).map((v) => withLiveSalePrice(v))
 
   if (variantRows.length > 0) {
     const ids = variantRows.map((v) => toInt(v.id))
@@ -254,21 +256,25 @@ export async function enrichListWithVariations(products: Row[]): Promise<void> {
     .map((p) => toInt(p.id))
   if (variableIds.length === 0) return
 
+  // Range over what customers pay (sale price while open, else regular price);
+  // regular_price is the size's MRP.
   const priceRows = await sfQuery(
-    `SELECT product_id, MIN(regular_price) AS min_price, MAX(regular_price) AS max_price
+    `SELECT product_id, regular_price, sale_price,
+            ${TS('sale_starts_at')} AS sale_starts_at, ${TS('sale_ends_at')} AS sale_ends_at
      FROM app_db.variant
      WHERE product_id = ANY($1::bigint[])
-       AND is_active = 1 AND archived_at IS NULL
-       AND regular_price IS NOT NULL AND regular_price > 0
-     GROUP BY product_id`,
+       AND is_active = 1 AND archived_at IS NULL`,
     [variableIds],
   )
-  const priceByProduct = new Map<number | null, Row>()
+  const priceByProduct = new Map<number | null, { min: number; max: number }>()
   for (const r of priceRows) {
-    priceByProduct.set(toInt(r.product_id), {
-      min: r.min_price != null ? Number(r.min_price) : null,
-      max: r.max_price != null ? Number(r.max_price) : null,
-    })
+    const price = sizeSellingPrice(r)
+    if (price == null) continue
+    const pid = toInt(r.product_id)
+    const range = priceByProduct.get(pid)
+    priceByProduct.set(pid, range
+      ? { min: Math.min(range.min, price), max: Math.max(range.max, price) }
+      : { min: price, max: price })
   }
 
   const swatchRows = await sfQuery(
@@ -304,6 +310,7 @@ export async function enrichListWithVariations(products: Row[]): Promise<void> {
 
   const variantsForProducts = await sfQuery(
     `SELECT v.id AS variant_id, v.product_id, v.regular_price, v.sale_price,
+            ${TS('v.sale_starts_at')} AS sale_starts_at, ${TS('v.sale_ends_at')} AS sale_ends_at,
             v.stock_status, v.is_default, v.sort_order, vav.attribute_value_id
      FROM app_db.variant v
      JOIN app_db.variant_attribute_value vav ON vav.variant_id = v.id
@@ -337,7 +344,8 @@ export async function enrichListWithVariations(products: Row[]): Promise<void> {
     for (const s of swatches) {
       const candidates = perValue ? perValue.get(s.value_id as number | null) || [] : []
       const inStock = candidates.find((c) => c.stock_status === 'in_stock')
-      const chosen = inStock || candidates[0]
+      const picked = inStock || candidates[0]
+      const chosen = picked ? withLiveSalePrice(picked) : undefined
       if (chosen) {
         s.variant_id = toInt(chosen.variant_id)
         s.regular_price = chosen.regular_price != null ? Number(chosen.regular_price) : null

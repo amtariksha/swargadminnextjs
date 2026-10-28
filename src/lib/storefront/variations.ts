@@ -10,6 +10,7 @@
  */
 
 import type { Row } from './db'
+import { sizeSellingPrice } from '@/lib/variantPrice'
 
 const num = (v: unknown): number => Number(v) || 0
 
@@ -159,7 +160,7 @@ export function pickDefaultVariant(variants: Row[]): Row | null {
   })[0]
 }
 
-/** Port of priceRange — regular_price over active, in-stock-ish variants. */
+/** Port of priceRange — what customers pay (sale while open, else regular) over active, in-stock-ish variants. */
 export function priceRange(variants: Row[]): { min: number | null; max: number | null } {
   if (!Array.isArray(variants) || variants.length === 0) return { min: null, max: null }
   let min: number | null = null
@@ -167,8 +168,8 @@ export function priceRange(variants: Row[]): { min: number | null; max: number |
   for (const v of variants) {
     if (!v || Number(v.is_active) !== 1 || v.archived_at != null) continue
     if (v.stock_status === 'out_of_stock') continue
-    const p = Number(v.regular_price)
-    if (!Number.isFinite(p) || p <= 0) continue
+    const p = sizeSellingPrice(v)
+    if (p == null) continue
     if (min == null || p < min) min = p
     if (max == null || p > max) max = p
   }

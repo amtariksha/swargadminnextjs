@@ -14,6 +14,7 @@ import type { Variant } from '@/lib/types/variations';
 import FormField, { inputClassName, selectClassName, dateInputClassName, numericInputClassName, shortSelectClassName, numericFieldMaxWidth, fieldNumber, fieldDate, fieldSelect, fieldText } from '@/components/FormField';
 import { ArrowLeft, Save, Search } from 'lucide-react';
 import { toast } from 'sonner';
+import { sizeSellingPrice } from '@/lib/variantPrice';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -199,18 +200,11 @@ export default function CreateOrderPage() {
     // Variations: when a variant is picked, its price overrides the
     // parent product price. Tax stays at the parent's value (the variant
     // schema has no per-variant tax in MVP) so the formula still applies.
-    const variantSalePriceLive =
-        selectedVariant?.sale_price &&
-        selectedVariant.sale_starts_at &&
-        selectedVariant.sale_ends_at
-            ? new Date() >= new Date(selectedVariant.sale_starts_at) &&
-              new Date() <= new Date(selectedVariant.sale_ends_at)
-            : false;
+    // A size costs its sale price while the sale is open (blank dates = always
+    // open), else its regular price — which is also its MRP.
     const variantUnitPrice =
         selectedVariant
-            ? (variantSalePriceLive
-                ? selectedVariant.sale_price
-                : selectedVariant.regular_price) ?? selectedProduct?.price ?? 0
+            ? sizeSellingPrice(selectedVariant) ?? selectedProduct?.price ?? 0
             : null;
     const effectivePrice = variantUnitPrice ?? selectedProduct?.price ?? 0;
     const effectiveMrp = selectedVariant?.regular_price ?? selectedProduct?.mrp ?? effectivePrice;
@@ -512,7 +506,7 @@ export default function CreateOrderPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                                 {activeVariants.map((v) => {
                                     const label = labelForVariant(v);
-                                    const price = v.sale_price ?? v.regular_price ?? selectedProduct.price;
+                                    const price = sizeSellingPrice(v) ?? selectedProduct.price;
                                     const oos = v.stock_status === 'out_of_stock';
                                     const lowStock =
                                         v.manage_stock === 1 &&
