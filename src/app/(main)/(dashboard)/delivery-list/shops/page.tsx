@@ -88,7 +88,7 @@ export default function ShopDeliveriesPage() {
                     </div>
                     <button type="button" onClick={() => setConfirmBill(true)}
                         disabled={!meta?.accounting_enabled || summary.unbilled === 0 || billShops.isPending}
-                        title={meta?.accounting_enabled ? 'Invoice delivered lines that have no bill yet' : 'Accounting is off'}
+                        title={meta?.accounting_enabled ? "One bill per shop for the day's delivered lines that have none yet" : 'Accounting is off'}
                         className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-xl text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed">
                         <FilePlus2 className="w-4 h-4" /> Generate missing bills
                     </button>
@@ -149,7 +149,7 @@ export default function ShopDeliveriesPage() {
             <ConfirmDialog
                 isOpen={confirmBill}
                 title="Generate missing bills"
-                message={`Make a GST invoice for each of the ${summary.unbilled} delivered line${summary.unbilled === 1 ? '' : 's'} on ${selectedDate} that has none. Lines already billed are left alone.`}
+                message={`Make one GST invoice per shop for the ${summary.unbilled} delivered line${summary.unbilled === 1 ? '' : 's'} on ${selectedDate} that no bill covers yet. Lines already billed are left alone. This also runs on its own every night at 22:30.`}
                 confirmText="Generate"
                 isLoading={billShops.isPending}
                 onConfirm={handleBill}
