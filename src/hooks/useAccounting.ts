@@ -155,6 +155,24 @@ export function useCustomerPrices(userId: number | null) {
     });
 }
 
+/** A product's common B2B price; a product with sizes is priced per size. */
+export interface CatalogB2bPrice {
+    product_id: number;
+    b2b_price: number | null;
+    sizes: { variant_id: number; size: string; b2b_price: number | null }[];
+}
+
+/** Invalidate after any save that changes a product's or a size's B2B price, or the list of sizes. */
+export const CATALOG_B2B_PRICES_KEY = ['accounting', 'catalog-b2b-prices'] as const;
+
+export function useCatalogB2bPrices() {
+    return useQuery({
+        queryKey: CATALOG_B2B_PRICES_KEY,
+        queryFn: async () =>
+            (await GET<CatalogB2bPrice[]>('/accounting/b2b-prices/catalog')).data || [],
+    });
+}
+
 // ── HSN management ────────────────────────────────────────────────────────────
 
 export interface HsnRate {

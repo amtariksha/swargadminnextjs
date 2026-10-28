@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { GET, POST, PUT, DELETE, PATCH } from '@/lib/api';
+import { CATALOG_B2B_PRICES_KEY } from '@/hooks/useAccounting';
 import { uploadViaPresign } from '@/lib/uploads';
 import { wfetch } from '@/lib/whatsapp/wfetch';
 import { CALL_TYPE_OPTIONS, callTypeLabel, type Option } from '@/lib/crm';
@@ -892,6 +893,7 @@ export function useCreateProduct() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: CATALOG_B2B_PRICES_KEY });
         },
     });
 }
@@ -904,6 +906,7 @@ export function useUpdateProduct() {
         },
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: CATALOG_B2B_PRICES_KEY });
             // The product page reads `id` as a string from useParams<{id:string}>,
             // so useProduct(id) caches under ['product', '157']. The mutation
             // payload coerces with Number(id) — invalidating ['product', 157]
@@ -933,6 +936,7 @@ export function useDeleteProduct() {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['products'] });
+            queryClient.invalidateQueries({ queryKey: CATALOG_B2B_PRICES_KEY });
         },
     });
 }
