@@ -234,7 +234,10 @@ function LineItemRow({ item, idx, products, onProductChange, onChange, onRemove 
 interface DaytimeOrderFormProps {
     orderId?: number;
     initial?: DaytimeOrder;
-    onSaved: (orderId: number) => void;
+    /** `extra.total` is the server-priced total of a newly created order (used by the Desk payment step). */
+    onSaved: (orderId: number, extra?: { total: number | null }) => void;
+    /** Desk: a fixed customer (snapshot match, or a new customer with the 10-digit canonical phone). Ignored with `initial`. */
+    presetCustomer?: CustomerValue;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -256,14 +259,15 @@ const DAY_ORDER_ENTRY_TYPES: ReadonlyArray<{ value: string; label: string }> = [
     { value: 'other', label: 'Other' },
 ];
 
-export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeOrderFormProps) {
+export default function DaytimeOrderForm({ orderId, initial, onSaved, presetCustomer }: DaytimeOrderFormProps) {
     const { data: products = [] } = useDaytimeProducts();
     const isEdit = orderId != null;
 
+    const lockedCustomer = initial ? null : presetCustomer ?? null;
     const [customer, setCustomer] = useState<CustomerValue | null>(
         initial
             ? { userId: initial.user_id, name: initial.customer_name, phone: initial.customer_phone, isNew: false }
-            : null,
+            : lockedCustomer,
     );
     const [deliveryDate, setDeliveryDate] = useState(initial?.delivery_date || todayLocal());
     const [desiredTime, setDesiredTime] = useState(initial?.desired_delivery_time || '');
@@ -388,9 +392,10 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
                 onSaved(orderId);
             } else {
                 const res = await POST<unknown>('/daytime/orders', payload);
-                const newId = (res as { id?: number }).id;
+                const created = res as { id?: number; total?: unknown };
+                const newId = created.id;
                 toast.success('Day-time order created');
-                if (newId) onSaved(newId);
+                if (newId) onSaved(newId, { total: typeof created.total === 'number' ? created.total : null });
             }
         } catch (error) {
             const msg = error instanceof ApiError ? error.userMessage
@@ -405,7 +410,16 @@ export default function DaytimeOrderForm({ orderId, initial, onSaved }: DaytimeO
         <form onSubmit={handleSubmit} className="glass rounded-xl p-6 space-y-6 max-w-5xl">
             <div className="flex flex-wrap gap-4">
                 <FormField label="Customer" required className={fieldText}>
-                    <CustomerPicker value={customer} onChange={setCustomer} />
+                    {lockedCustomer ? (
+                        <div className={`${inputClassName} flex items-center justify-between gap-2`}>
+                            <span className="truncate text-white">{lockedCustomer.name}</span>
+                            <span className="shrink-0 text-xs text-slate-400">
+                                {lockedCustomer.phone}{lockedCustomer.isNew ? ' · new customer' : ''}
+                            </span>
+                        </div>
+                    ) : (
+                        <CustomerPicker value={customer} onChange={setCustomer} />
+                    )}
                 </FormField>
                 <FormField label="Delivery Date" required className={fieldDate}>
                     <input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)}
