@@ -7,6 +7,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { CUSTOMER_TYPE_LABELS } from '@/lib/accounting';
 import DataTable, { Column } from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import { B2bShopPanel } from '@/components/accounting/B2bShopPanel';
 import { Edit, BookText, Search, Tag, ChevronDown } from 'lucide-react';
 import { PUT } from '@/lib/api';
 import { toast } from 'sonner';
@@ -117,11 +118,19 @@ export default function AccountingCustomersPage() {
         { key: 'name', header: 'Name' },
         { key: 'phone', header: 'Phone', width: '130px' },
         {
-            key: 'customer_type', header: 'Type', width: '80px',
+            key: 'customer_type', header: 'Type', width: '120px',
             render: (item) => (
-                isB2b(item)
-                    ? <span className="text-xs px-2 py-1 rounded-lg bg-indigo-500/20 text-indigo-300">B2B</span>
-                    : <span className="text-xs px-2 py-1 rounded-lg bg-slate-700/50 text-slate-400">{CUSTOMER_TYPE_LABELS[Number(item.customer_type ?? 0)]}</span>
+                <span className="inline-flex gap-1">
+                    {isB2b(item)
+                        ? <span className="text-xs px-2 py-1 rounded-lg bg-indigo-500/20 text-indigo-300">B2B</span>
+                        : <span className="text-xs px-2 py-1 rounded-lg bg-slate-700/50 text-slate-400">{CUSTOMER_TYPE_LABELS[Number(item.customer_type ?? 0)]}</span>}
+                    {item.is_shop && (
+                        <span className="text-xs px-2 py-1 rounded-lg bg-purple-500/20 text-purple-300"
+                            title={`B2B shop — truck stop #${item.shop_drop_point_id}, ${item.billing_cycle === 1 ? 'monthly' : 'per-delivery'} billing`}>
+                            Shop
+                        </span>
+                    )}
+                </span>
             ),
         },
         { key: 'gstin', header: 'GSTIN', render: (item) => item.gstin || <span className="text-slate-600">—</span> },
@@ -152,7 +161,7 @@ export default function AccountingCustomersPage() {
         <div className="space-y-6">
             <div>
                 <h1 className="text-2xl font-bold text-white">B2B / B2C</h1>
-                <p className="text-slate-400">GST profiles — grouped B2B / B2C; GSTIN, place of supply, credit terms</p>
+                <p className="text-slate-400">B2B shops and GST profiles — Edit a customer to mark it a B2B shop or set its GSTIN, place of supply and credit terms</p>
             </div>
 
             <form
@@ -191,74 +200,79 @@ export default function AccountingCustomersPage() {
                     emptyMessage={b2cOpened ? 'No B2C customers' : 'Loading…'} />
             </Section>
 
-            <Modal isOpen={!!editItem} onClose={() => setEditItem(null)} title={`GST profile — ${editItem?.name ?? ''}`} size="lg">
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">Customer type</label>
-                            <select value={form.customer_type}
-                                onChange={(e) => setForm({ ...form, customer_type: Number(e.target.value) })} className={inputCls}>
-                                <option value={0}>B2C</option>
-                                <option value={1}>B2B</option>
-                            </select>
+            <Modal isOpen={!!editItem} onClose={() => setEditItem(null)} title={`${editItem?.name ?? ''} — B2B shop & GST profile`} size="lg">
+                {/* Shop panel + GST form outgrow a short screen; the shared Modal doesn't scroll. */}
+                <div className="max-h-[75vh] overflow-y-auto pr-1">
+                    {editItem && <div className="mb-5"><B2bShopPanel userId={editItem.user_id} /></div>}
+                    <h3 className="text-white font-semibold mb-3">GST profile</h3>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Customer type</label>
+                                <select value={form.customer_type}
+                                    onChange={(e) => setForm({ ...form, customer_type: Number(e.target.value) })} className={inputCls}>
+                                    <option value={0}>B2C</option>
+                                    <option value={1}>B2B</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Credit terms (days)</label>
+                                <input type="number" value={form.credit_terms_days}
+                                    onChange={(e) => setForm({ ...form, credit_terms_days: e.target.value })} className={inputCls} />
+                            </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">Credit terms (days)</label>
-                            <input type="number" value={form.credit_terms_days}
-                                onChange={(e) => setForm({ ...form, credit_terms_days: e.target.value })} className={inputCls} />
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Legal name</label>
+                            <input type="text" value={form.legal_name}
+                                onChange={(e) => setForm({ ...form, legal_name: e.target.value })} className={inputCls} />
                         </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Legal name</label>
-                        <input type="text" value={form.legal_name}
-                            onChange={(e) => setForm({ ...form, legal_name: e.target.value })} className={inputCls} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">GSTIN (sets B2B)</label>
-                            <input type="text" value={form.gstin} maxLength={15} placeholder="29ABCDE1234F1Z5"
-                                onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })} className={inputCls} />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">PAN</label>
-                            <input type="text" value={form.pan} maxLength={10}
-                                onChange={(e) => setForm({ ...form, pan: e.target.value.toUpperCase() })} className={inputCls} />
-                        </div>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Place of supply (state code)</label>
-                        <input type="text" value={form.place_of_supply_state_code} maxLength={2} placeholder="29"
-                            onChange={(e) => setForm({ ...form, place_of_supply_state_code: e.target.value })} className={inputCls} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">Billing address</label>
-                            <textarea value={form.billing_address} rows={2}
-                                onChange={(e) => setForm({ ...form, billing_address: e.target.value })} className={inputCls} />
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">GSTIN (sets B2B)</label>
+                                <input type="text" value={form.gstin} maxLength={15} placeholder="29ABCDE1234F1Z5"
+                                    onChange={(e) => setForm({ ...form, gstin: e.target.value.toUpperCase() })} className={inputCls} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">PAN</label>
+                                <input type="text" value={form.pan} maxLength={10}
+                                    onChange={(e) => setForm({ ...form, pan: e.target.value.toUpperCase() })} className={inputCls} />
+                            </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">Shipping address</label>
-                            <textarea value={form.shipping_address} rows={2}
-                                onChange={(e) => setForm({ ...form, shipping_address: e.target.value })} className={inputCls} />
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Place of supply (state code)</label>
+                            <input type="text" value={form.place_of_supply_state_code} maxLength={2} placeholder="29"
+                                onChange={(e) => setForm({ ...form, place_of_supply_state_code: e.target.value })} className={inputCls} />
                         </div>
-                    </div>
-                    {editItem && (form.customer_type === 1 || editItem.gstin) && (
-                        <div className="pt-1">
-                            <Link href={`/accounting/customers/${editItem.user_id}/prices`}
-                                className="text-sm text-amber-400 hover:text-amber-300 inline-flex items-center gap-1.5">
-                                <Tag className="w-4 h-4" /> Manage B2B price overrides →
-                            </Link>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Billing address</label>
+                                <textarea value={form.billing_address} rows={2}
+                                    onChange={(e) => setForm({ ...form, billing_address: e.target.value })} className={inputCls} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Shipping address</label>
+                                <textarea value={form.shipping_address} rows={2}
+                                    onChange={(e) => setForm({ ...form, shipping_address: e.target.value })} className={inputCls} />
+                            </div>
                         </div>
-                    )}
-                    <div className="flex gap-3 pt-2 justify-end">
-                        <button type="button" onClick={() => setEditItem(null)}
-                            className="px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl text-sm">Cancel</button>
-                        <button type="submit" disabled={isSubmitting}
-                            className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50 text-sm">
-                            {isSubmitting ? 'Saving...' : 'Save'}
-                        </button>
-                    </div>
-                </form>
+                        {editItem && (form.customer_type === 1 || editItem.gstin || editItem.is_shop) && (
+                            <div className="pt-1">
+                                <Link href={`/accounting/customers/${editItem.user_id}/prices`}
+                                    className="text-sm text-amber-400 hover:text-amber-300 inline-flex items-center gap-1.5">
+                                    <Tag className="w-4 h-4" /> Manage B2B price overrides →
+                                </Link>
+                            </div>
+                        )}
+                        <div className="flex gap-3 pt-2 justify-end">
+                            <button type="button" onClick={() => setEditItem(null)}
+                                className="px-4 py-2.5 bg-slate-800/50 border border-slate-700/50 text-slate-300 rounded-xl text-sm">Cancel</button>
+                            <button type="submit" disabled={isSubmitting}
+                                className="px-6 py-2.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium disabled:opacity-50 text-sm">
+                                {isSubmitting ? 'Saving...' : 'Save'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </Modal>
         </div>
     );

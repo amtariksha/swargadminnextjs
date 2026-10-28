@@ -111,6 +111,9 @@ const navItems: NavItem[] = [
         icon: <Truck className="w-5 h-5" />,
         children: [
             { name: 'Delivery List', href: '/delivery-list', icon: <ClipboardList className="w-4 h-4" /> },
+            // B2B shops' truck deliveries with their bills and Tally sync. Under
+            // /delivery-list so the delivery-list permission covers it.
+            { name: 'Shop Deliveries', href: '/delivery-list/shops', icon: <Store className="w-4 h-4" /> },
         ],
     },
     {

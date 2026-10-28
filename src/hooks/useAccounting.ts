@@ -91,6 +91,12 @@ export interface AccountingCustomer {
     // these the modal opens blank and the next save wipes the stored addresses.
     billing_address?: string | null;
     shipping_address?: string | null;
+    // B2B shop = the customer's own truck stop (a 'shop' drop point), which is
+    // not the GST type above: any GSTIN holder is customer_type 1.
+    is_shop?: boolean;
+    billing_cycle?: number;
+    shop_drop_point_id?: number | null;
+    shop_route_order?: number | null;
 }
 
 export interface CustomerGstProfile {

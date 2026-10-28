@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback, useEffect, type ReactNode } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { format, addDays } from 'date-fns';
 import { useQuery } from '@tanstack/react-query';
@@ -128,21 +129,8 @@ function PasscodeDialog({ title, selectedDate, onConfirm, onCancel, strictToday 
 // driver-facing /production-delivery page can render the same view.)
 
 // ====== Main Page ======
-type TabId = 'orders' | 'routewise' | 'packing' | 'dairy' | 'drop-points' | 'shops';
-
-// B2B "Shops" tab — one stop per B2B shop (customer) with per-product lines.
-interface ShopStop {
-    b2b_user_id: number;
-    drop_point_id: number | null;
-    title: string;
-    customer_name: string;
-    customer_phone: string | null;
-    route_order: number | null;
-    truck_driver_name: string | null;
-    moved_to_day: boolean; // handed to a day driver (live b2b_shop day order)
-    status: number; // 1 = pending, 3 = all lines resolved
-    products: Array<{ pre_delivery_id: number; order_id: number; product_title: string; qty_text: string | null; delivered_qty: number; reason: string | null; status: number }>;
-}
+// B2B shops have their own page: Deliveries → Shop Deliveries (/delivery-list/shops).
+type TabId = 'orders' | 'routewise' | 'packing' | 'dairy' | 'drop-points';
 
 interface DropPointStop {
     drop_point_id: number;
@@ -254,9 +242,6 @@ export default function DeliveryListPage() {
     // Feature 10 — the row pending confirmation for "send to day-time network".
     const [dayNetItem, setDayNetItem] = useState<DeliveryItem | null>(null);
     const [dayNetSubmitting, setDayNetSubmitting] = useState(false);
-    // B2B "send shop to day pool" (mirrors the customer day-net flow, per shop).
-    const [shopDayItem, setShopDayItem] = useState<ShopStop | null>(null);
-    const [shopDaySubmitting, setShopDaySubmitting] = useState(false);
     // Drop Points tab: which drop points are expanded to their per-driver boxes.
     const [expandedDrops, setExpandedDrops] = useState<Set<number>>(new Set());
     const toggleDropExpand = (id: number) => setExpandedDrops((prev) => {
@@ -287,21 +272,11 @@ export default function DeliveryListPage() {
         },
     });
 
-    // B2B shops delivery list — backs the "Shops" tab. One stop per B2B shop
-    // (customer), each product line with delivered qty / not-delivered + reason.
-    const { data: shopStops = [], isLoading: isLoadingShops, refetch: refetchShops } = useQuery<ShopStop[]>({
-        queryKey: ['shop-delivery-list', selectedDate],
-        queryFn: async () => {
-            const response = await GET<ShopStop[]>(`/get_shop_delivery_list/${selectedDate}`);
-            return response.data || [];
-        },
-    });
-
     // dedupeDeliveryItems keeps one row per pre_delivery_id, preferring the
     // one with driver info — see src/lib/deliveryHelpers.ts.
     const uniqueItems = useMemo(() => dedupeDeliveryItems(rawItems), [rawItems]);
 
-    // B2B shops are TRUCK-delivered (Shops tab), so they stay OFF the customer-
+    // B2B shops are TRUCK-delivered (Shop Deliveries page), so they stay OFF the customer-
     // orders + milk-route (routewise / dairy) views. The PACKING list, however,
     // must total B2B + B2C so production packs everything — so packing keeps
     // using `uniqueItems` while these three views use the B2C-only subset.
@@ -310,7 +285,7 @@ export default function DeliveryListPage() {
         [uniqueItems],
     );
 
-    // Tab 1: filtered orders (B2C only — B2B shops live on the Shops tab)
+    // Tab 1: filtered orders (B2C only — B2B shops live on the Shop Deliveries page)
     const deliveryItems = useMemo(() => {
         let result = b2cItems;
         if (selectedDriver) result = result.filter(item => item.order_assign_user === selectedDriver || item.delivery_boy_id === selectedDriver);
@@ -432,29 +407,6 @@ export default function DeliveryListPage() {
             }
         } finally {
             setDayNetSubmitting(false);
-        }
-    };
-
-    // B2B sibling of handleSendToDayNetwork — hand a whole shop's undelivered
-    // truck lines to the day pool. One billable day order per shop (no wallet,
-    // GST invoice on day delivery). Truck rows stay read-only.
-    const handleSendShopToDay = async (shop: ShopStop) => {
-        setShopDaySubmitting(true);
-        try {
-            const r = await POST<{ lines?: number }>('/daytime/from_shop', { user_id: shop.b2b_user_id, date: selectedDate });
-            toast.success(r.message || `${shop.title} sent to the day-time network`);
-            setShopDayItem(null);
-            refetchShops();
-        } catch (error) {
-            if (error instanceof ApiError && (error.code === 'already_in_day_pool' || error.status === 409)) {
-                toast.info(`${shop.title} is already in the day-time pool`);
-                setShopDayItem(null);
-                refetchShops();
-            } else {
-                toast.error(error instanceof Error ? error.message : 'Could not send shop to day network');
-            }
-        } finally {
-            setShopDaySubmitting(false);
         }
     };
 
@@ -753,7 +705,6 @@ export default function DeliveryListPage() {
         { id: 'packing', label: 'Packing List', icon: <Package className="w-4 h-4" />, count: packingProducts.reduce((s, p) => s + p.qty, 0) },
         { id: 'dairy', label: 'Dairy Pickup', icon: <Store className="w-4 h-4" />, count: dairyGroups.reduce((s, g) => s + g.totalQty, 0) },
         { id: 'drop-points', label: 'Drop Points', icon: <MapPin className="w-4 h-4" />, count: dropPointStops.reduce((s, p) => s + p.total_qty, 0) },
-        { id: 'shops', label: 'Shops', icon: <Store className="w-4 h-4" />, count: shopStops.length },
     ];
 
     return (
@@ -852,6 +803,10 @@ export default function DeliveryListPage() {
                         </span>
                     </button>
                 ))}
+                <Link href="/delivery-list/shops" title="B2B shops on the truck, with their bills and Tally sync"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap text-slate-400 hover:text-white hover:bg-slate-800/50">
+                    <Store className="w-4 h-4" /> Shops →
+                </Link>
             </div>
 
             {/* Tab Content */}
@@ -1107,79 +1062,6 @@ export default function DeliveryListPage() {
                 </div>
             )}
 
-            {activeTab === 'shops' && (
-                <div className="space-y-4">
-                    <div className="flex items-center gap-4 text-sm text-slate-400">
-                        <span><strong className="text-white">{shopStops.length}</strong> shops</span>
-                        <span><strong className="text-green-400">{shopStops.filter(s => s.status === 3).length}</strong> done</span>
-                    </div>
-                    {isLoadingShops ? (
-                        <p className="text-slate-400 text-sm">Loading shops…</p>
-                    ) : shopStops.length === 0 ? (
-                        <div className="glass rounded-xl p-8 text-center text-slate-400 text-sm">
-                            No B2B shop deliveries for {selectedDate}. Mark customers as B2B shops, then
-                            generate the delivery list.
-                        </div>
-                    ) : (
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            {shopStops.map((shop) => {
-                                const done = shop.status === 3;
-                                const hasNotDelivered = shop.products.some((p) => p.status === 2);
-                                return (
-                                    <div key={shop.b2b_user_id} className="glass rounded-xl p-5 space-y-3">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div>
-                                                <div className="flex items-center gap-2">
-                                                    {shop.route_order != null && <span className="text-xs font-mono text-slate-500">#{shop.route_order}</span>}
-                                                    <h2 className="text-white font-semibold">{shop.title}</h2>
-                                                </div>
-                                                <p className="text-xs text-slate-500 mt-0.5">
-                                                    {shop.customer_name}{shop.customer_phone ? ` · ${shop.customer_phone}` : ''}
-                                                    {shop.truck_driver_name ? <span className="text-slate-400"> · driver: {shop.truck_driver_name}</span> : null}
-                                                </p>
-                                            </div>
-                                            {shop.moved_to_day ? (
-                                                <span className="flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-lg shrink-0 bg-emerald-500/15 text-emerald-300"
-                                                    title="Handed to a day driver — billed by invoice on day delivery">
-                                                    <Sun className="w-3 h-3" /> In Day Pool
-                                                </span>
-                                            ) : (
-                                                <span className={`text-xs font-medium px-2 py-1 rounded-lg shrink-0 ${done ? 'bg-green-500/20 text-green-400' : 'bg-amber-500/20 text-amber-300'}`}>
-                                                    {done ? 'Done' : 'Pending'}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className="border-t border-slate-800/50 pt-2 space-y-1">
-                                            {shop.products.map((p) => {
-                                                const notDel = p.status === 2;
-                                                return (
-                                                    <div key={p.pre_delivery_id} className="flex items-center justify-between text-sm">
-                                                        <span className="text-slate-300">
-                                                            {p.product_title}
-                                                            {notDel && p.reason ? <span className="text-red-400 text-xs"> · {p.reason}</span> : null}
-                                                        </span>
-                                                        <span className={`font-mono ${notDel ? 'text-red-400' : 'text-slate-400'}`}>
-                                                            {notDel ? 'Not delivered' : `${p.delivered_qty}${p.qty_text ? ` × ${p.qty_text}` : ''}`}
-                                                        </span>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                        {!shop.moved_to_day && hasNotDelivered && (
-                                            <button onClick={() => setShopDayItem(shop)}
-                                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 text-xs font-medium"
-                                                title="Hand this shop's undelivered lines to a day driver — billed by invoice (no wallet)">
-                                                <Sun className="w-3 h-3" /> Send to day pool
-                                            </button>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    )}
-                </div>
-            )}
-
             {/* Dialogs */}
             {showRouteInsights && selectedDriver !== '' && (
                 <RouteInsightsModal
@@ -1213,19 +1095,6 @@ export default function DeliveryListPage() {
                 isLoading={dayNetSubmitting}
                 onConfirm={() => { if (dayNetItem) handleSendToDayNetwork(dayNetItem); }}
                 onCancel={() => setDayNetItem(null)}
-            />
-
-            {/* B2B — confirm before handing a shop's undelivered lines to the day pool */}
-            <ConfirmDialog
-                isOpen={shopDayItem !== null}
-                title="Send shop to day-time network"
-                message={shopDayItem
-                    ? `Hand ${shopDayItem.title}'s undelivered lines to the day-time pool? A day driver can claim and deliver them, billed by GST invoice (no wallet). The shop leaves the truck list; its truck records stay unchanged.`
-                    : ''}
-                confirmText="Send to Day Net"
-                isLoading={shopDaySubmitting}
-                onConfirm={() => { if (shopDayItem) handleSendShopToDay(shopDayItem); }}
-                onCancel={() => setShopDayItem(null)}
             />
 
             {/* Edit Qty Modal */}
