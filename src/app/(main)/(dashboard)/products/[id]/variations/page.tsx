@@ -253,8 +253,8 @@ export default function ProductVariationsPage() {
                                 </th>
                                 <th className="px-3 py-2 text-left font-medium">Combination</th>
                                 <th className="px-3 py-2 text-left font-medium">SKU</th>
-                                <th className="px-3 py-2 text-left font-medium">Regular price</th>
-                                <th className="px-3 py-2 text-left font-medium">Sale price</th>
+                                <th className="px-3 py-2 text-left font-medium" title="Charged when there is no sale price; shown struck through when there is.">MRP</th>
+                                <th className="px-3 py-2 text-left font-medium" title="What customers pay while the sale is on. Blank = they pay the MRP.">Sale price</th>
                                 <th className="px-3 py-2 text-left font-medium" title="What shops pay for this size. Blank = they pay the retail price.">B2B price</th>
                                 <th className="px-3 py-2 text-left font-medium">Stock</th>
                                 <th className="px-3 py-2 text-left font-medium">Status</th>
@@ -297,7 +297,7 @@ export default function ProductVariationsPage() {
                                 <tr className="text-xs uppercase text-slate-500 border-b border-slate-800/50">
                                     <th className="px-3 py-2 text-left font-medium">Combination</th>
                                     <th className="px-3 py-2 text-left font-medium">SKU</th>
-                                    <th className="px-3 py-2 text-left font-medium">Regular price</th>
+                                    <th className="px-3 py-2 text-left font-medium">MRP</th>
                                     <th className="px-3 py-2 text-left font-medium">Archived at</th>
                                 </tr>
                             </thead>
@@ -819,7 +819,7 @@ function BulkEditModal({
                 <p className="text-slate-400 text-xs">Leave a field blank to skip it. Fields set here overwrite the variant's existing value.</p>
                 <div className="grid grid-cols-2 gap-3">
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">Regular price</label>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">MRP</label>
                         <input type="number" step="0.01" min={0}
                             value={form.regular_price}
                             onChange={(e) => setForm({ ...form, regular_price: e.target.value })}
